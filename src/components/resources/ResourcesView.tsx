@@ -97,6 +97,7 @@ interface ResourcesViewProps {
   classCode?: string;
   onBack: () => void;
   onUploadClick?: () => void;
+  onUploadSuccess?: () => void;
 }
 
 const API_URL = 'http://localhost:5000';
@@ -106,7 +107,8 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
   className,
   classCode,
   onBack,
-  onUploadClick
+  onUploadClick,
+  onUploadSuccess
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -403,6 +405,10 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
         return newCounts;
       });
 
+      if (onUploadSuccess) {
+        onUploadSuccess(); 
+      }
+      
       setShowUploadModal(false);
 
     } catch (error: any) {

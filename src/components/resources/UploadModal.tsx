@@ -12,7 +12,8 @@ import {
   File,
   CheckCircle,
   AlertCircle,
-  Folder
+  Folder,
+  Loader2
 } from 'lucide-react';
 
 interface Course {
