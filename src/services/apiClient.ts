@@ -2,6 +2,15 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export const parseErrorMessage = (error: any): string => {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
@@ -27,7 +36,6 @@ export async function fetchData<T = any>(endpoint: string, options: RequestInit 
       ...options,
       headers: { ...defaultHeaders, ...options.headers },
     });
-
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
       throw { response: { data: errorBody }, message: `HTTP error! status: ${response.status}` };

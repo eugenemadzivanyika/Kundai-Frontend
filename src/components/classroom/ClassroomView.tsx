@@ -1,12 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { studentService, developmentService } from '../../services/api';
-import { Student } from '../../types';
+import { Student, DevelopmentPlan } from '../../types';
 import StudentChat from './StudentChat';
 import DevelopmentAttributesView from './DevelopmentAttributesView';
 import ResultsView from './ResultsView';
+import { useAuth } from '../../context/AuthContext'; // Import this to get course context
 
-type StudentWithPlan = Student & { planName?: string };
+type StudentWithPlan = Student & { 
+  activePlan?: DevelopmentPlan;
+  planStatus?: string;
+};
 
 const ClassroomView: React.FC = () => {
   const [activeTab, setActiveTab] = useState('status');
@@ -18,31 +22,42 @@ const ClassroomView: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { selectedCourse } = useAuth(); // Access the current course context
 
   const fetchStudents = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await studentService.getStudents();
+      
+      // BUG FIX: Pass the course ID to the service so the backend filters correctly
+      const courseId = selectedCourse?.id || selectedCourse?.code;
+      
+      const data = await studentService.getStudents(courseId);
+      console.log("📡 [ClassroomView] Raw students from API:", data);
 
-      if (activeTab === 'development') {
-        const studentsWithPlans = await Promise.all(
-          data.map(async (student) => {
-            try {
-              const plans = await developmentService.getAllPlansForStudent(student._id);
-              return {
-                ...student,
-                planName: plans.length > 0 ? plans[0].plan.name : undefined,
-              };
-            } catch {
-              return { ...student, planName: undefined };
+      const studentsWithPlans = await Promise.all(
+        data.map(async (student: any) => {
+          try {
+            const plans = await developmentService.getAllPlansForStudent(student._id);
+            const activePlan = plans.find(p => p.status === 'Active') || plans[0];
+            
+            // Check nesting here
+            if (!student.user && !student.firstName) {
+              console.warn(`⚠️ [ClassroomView] Student ${student.id} missing name data!`, student);
             }
-          })
-        );
-        setStudents(studentsWithPlans);
+
+            return {
+              ...student,
+              activePlan: activePlan,
+              planStatus: activePlan?.status || 'No Plan'
+            };
+          } catch {
+            return { ...student, planStatus: 'No Plan' };
+          }
+        })
+      );
+      console.log("🛠️ [ClassroomView] Enriched development students:", studentsWithPlans);
+      if (studentsWithPlans.length > 0 && !selectedStudent) {
         setSelectedStudent(studentsWithPlans[0]);
-      } else {
-        setStudents(data);
-        setSelectedStudent(data[0]);
       }
 
       setError(null);
@@ -51,11 +66,22 @@ const ClassroomView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, [selectedCourse, selectedStudent]);
 
   useEffect(() => {
     fetchStudents();
-  }, [fetchStudents, activeTab]);
+  }, [selectedCourse, activeTab]); 
+
+  // Helper to extract name safely from nested user object
+  const getStudentName = (student: any) => {
+    if (student?.user?.firstName) {
+      return `${student.user.firstName} ${student.user.lastName}`;
+    }
+    if (student?.firstName) {
+      return `${student.firstName} ${student.lastName}`;
+    }
+    return "Unknown Student";
+  };
 
   const handleStudentClick = (student: StudentWithPlan) => {
     setSelectedStudent(student);
@@ -86,19 +112,19 @@ const ClassroomView: React.FC = () => {
 
   const handlePlanClick = (e: React.MouseEvent, studentId: string) => {
     e.stopPropagation();
-    console.log('[DEBUG] handlePlanClick - studentId:', studentId);
     navigate(`/development/${studentId}`);
   };
 
   if (loading) {
-    return <div className="p-4">Loading students...</div>;
+    return <div className="p-4 flex justify-center items-center h-64 font-bold">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500 mr-2"></div>
+      Loading Class Data...
+    </div>;
   }
 
   if (error) {
-    return <div className="p-4 text-red-500">Error: {error}</div>;
+    return <div className="p-4 text-red-500 font-bold border border-red-200 rounded">Error: {error}</div>;
   }
-
-  // DevelopmentView is now opened via route /development/:studentId
 
   return (
     <div className="space-y-2 relative px-4 transition-all duration-500 ease-in-out">
@@ -106,13 +132,13 @@ const ClassroomView: React.FC = () => {
         <div className="relative bg-white rounded-lg shadow p-4">
           <button
             onClick={() => setShowChat(false)}
-            className="absolute top-2 left-2 text-sm text-gray-500 hover:text-blue-500"
+            className="absolute top-2 left-2 text-sm text-gray-500 hover:text-blue-500 z-10"
           >
-            ← Back
+            ← Back to Classroom
           </button>
           <StudentChat
             studentId={selectedStudent.id}
-            studentName={`${selectedStudent.firstName} ${selectedStudent.lastName}`}
+            studentName={getStudentName(selectedStudent)}
           />
         </div>
       ) : (
@@ -122,8 +148,10 @@ const ClassroomView: React.FC = () => {
               {['status', 'results', 'development'].map((tab) => (
                 <button
                   key={tab}
-                  className={`flex-1 py-1 font-medium text-center transition-colors duration-300 ${
-                    activeTab === tab ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'
+                  className={`flex-1 py-2 font-bold text-center transition-colors duration-300 border-b-2 ${
+                    activeTab === tab 
+                      ? 'bg-blue-50 text-blue-600 border-blue-600' 
+                      : 'text-gray-500 border-transparent hover:bg-gray-50'
                   }`}
                   onClick={() => handleTabChange(tab)}
                 >
@@ -134,7 +162,7 @@ const ClassroomView: React.FC = () => {
           </div>
 
           {(activeTab === 'results' || activeTab === 'development') ? (
-            <div className="flex gap-6 transition-all duration-500 ease-in-out">
+            <div className="flex gap-4 transition-all duration-500 ease-in-out">
               <div
                 className={`transition-all duration-500 ${
                   (activeTab === 'results' && selectedForResults) || (activeTab === 'development' && selectedForDevelopment)
@@ -142,62 +170,72 @@ const ClassroomView: React.FC = () => {
                     : 'w-full'
                 } bg-white rounded-lg shadow p-2`}
               >
-                <div className="overflow-y-auto max-h-[400px]">
+                <div className="overflow-y-auto max-h-[500px]">
                   <table className="w-full">
-                    <thead className="sticky top-0 bg-gray-50 z-10">
+                    <thead className="sticky top-0 bg-gray-100 z-10">
                       <tr>
-                        <th className="px-4 py-1.5 border-b text-left">Reg Number</th>
-                        <th className="px-4 py-1.5 border-b text-left">Full Name</th>
+                        <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Reg Number</th>
+                        <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Full Name</th>
                         {activeTab === 'results' ? (
                           <>
-                            <th className="px-4 py-1.5 border-b text-left">Attendance</th>
-                            <th className="px-4 py-1.5 border-b text-left">Assessments</th>
+                            <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">OVR</th>
+                            <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Engagement</th>
                           </>
                         ) : (
                           <>
-                            <th className="px-4 py-1.5 border-b text-left">Overall</th>
-                            <th className="px-4 py-1.5 border-b text-left">Plan</th>
+                            <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Overall</th>
+                            <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Plan</th>
                           </>
                         )}
-                        <th className="px-4 py-1.5 border-b text-left">Performance</th>
+                        <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Performance</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {students.map((student, index) => (
+                    <tbody className="divide-y divide-gray-100">
+                      {students.map((student) => (
                         <tr
                           key={student._id}
-                          className={`transition-colors duration-300 ${
+                          className={`transition-colors duration-200 ${
                             selectedStudent?._id === student._id
-                              ? 'bg-blue-300'
-                              : index % 2 === 0
-                              ? 'bg-white'
-                              : 'bg-gray-50'
-                          } hover:bg-blue-200 cursor-pointer`}
+                              ? 'bg-blue-100 border-l-4 border-blue-600'
+                              : 'bg-white hover:bg-gray-50'
+                          } cursor-pointer`}
                           onClick={() => handleViewStudent(student)}
                         >
-                          <td className="px-4 py-1.5 border-b text-sm">{student.id}</td>
-                          <td className="px-4 py-1.5 border-b text-sm">
-                            {student.firstName} {student.lastName}
+                          <td className="px-4 py-3 text-sm font-mono">{student.id}</td>
+                          <td className="px-4 py-3 text-sm font-semibold">
+                            {getStudentName(student)}
                           </td>
                           {activeTab === 'results' ? (
                             <>
-                              <td className="px-4 py-1.5 border-b text-sm">{student.engagement}</td>
-                              <td className="px-4 py-1.5 border-b text-sm">5</td>
+                              <td className="px-4 py-3 text-sm font-bold text-blue-600">{student.overall}%</td>
+                              <td className="px-4 py-3 text-sm">{student.engagement}</td>
                             </>
                           ) : (
                             <>
-                              <td className="px-4 py-1.5 border-b text-sm">{student.overall}</td>
-                              <td className="px-4 py-1.5 border-b text-sm">
-                                <button
-                                  className="text-blue-600 underline hover:text-blue-800"
+                              <td className="px-4 py-3 text-sm font-bold text-blue-600">{student.overall}%</td>
+                              <td className="px-4 py-3 text-sm">
+                                <span 
+                                  className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                    student.planStatus === 'Active' ? 'bg-green-100 text-green-700' :
+                                    student.planStatus === 'Under Review' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}
                                   onClick={(e) => handlePlanClick(e, student._id)}
                                 >
-                                  {student.planName || 'View Plan'}
-                                </button>
+                                  {student.planStatus}
+                                </span>
                               </td>
                             </>
                           )}
-                          <td className="px-4 py-1.5 border-b text-sm">{student.performance}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`font-bold ${
+                              student.performance === 'Excellent' ? 'text-green-600' :
+                              student.performance === 'Good' ? 'text-blue-600' :
+                              'text-amber-600'
+                            }`}>
+                              {student.performance || 'N/A'}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -205,11 +243,12 @@ const ClassroomView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Side panes for detailed viewing */}
               {activeTab === 'results' && selectedForResults && selectedStudent && (
-                <div className="w-1/2 bg-white rounded-lg shadow p-4 relative">
+                <div className="w-1/2 bg-white rounded-lg shadow-xl p-4 relative animate-in slide-in-from-right duration-300">
                   <button
                     onClick={handleClosePane}
-                    className="absolute top-2 right-2 text-sm text-gray-500 hover:text-red-500"
+                    className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors z-10"
                   >
                     ✕
                   </button>
@@ -218,10 +257,10 @@ const ClassroomView: React.FC = () => {
               )}
 
               {activeTab === 'development' && selectedForDevelopment && selectedStudent && (
-                <div className="w-1/2 bg-white rounded-lg shadow p-4 relative">
+                <div className="w-1/2 bg-white rounded-lg shadow-xl p-4 relative animate-in slide-in-from-right duration-300">
                   <button
                     onClick={handleClosePane}
-                    className="absolute top-2 right-2 text-sm text-gray-500 hover:text-red-500"
+                    className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors z-10"
                   >
                     ✕
                   </button>
@@ -230,46 +269,49 @@ const ClassroomView: React.FC = () => {
               )}
             </div>
           ) : (
+            /* Main Status Tab View */
             <div className="bg-white rounded-lg shadow p-2">
-              <div className="overflow-y-auto max-h-[400px]">
+              <div className="overflow-y-auto max-h-[500px]">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="px-4 py-1.5 border-b text-left">Reg Number</th>
-                      <th className="px-4 py-1.5 border-b text-left">Full Name</th>
-                    <th className="px-4 py-1.5 border-b text-left">Overall</th>
-                    <th className="px-4 py-1.5 border-b text-left">Strength</th>
-                    <th className="px-4 py-1.5 border-b text-left">Performance</th>
-                    <th className="px-4 py-1.5 border-b text-left"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((student, index) => (
-                    <tr
-                      key={student.id}
-                      className={`${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                      } hover:bg-blue-50 transition-colors duration-300`}
-                    >
-                      <td className="px-4 py-1.5 border-b text-sm">{student.id}</td>
-                      <td className="px-4 py-1.5 border-b text-sm">
-                        {student.firstName} {student.lastName}
-                      </td>
-                      <td className="px-4 py-1.5 border-b text-sm">{student.overall}</td>
-                      <td className="px-4 py-1.5 border-b text-sm">{student.strength}</td>
-                      <td className="px-4 py-1.5 border-b text-sm">{student.performance}</td>
-                      <td className="px-4 py-1.5 border-b text-sm">
-                        <button
-                          className="text-blue-500 hover:text-blue-700"
-                          onClick={() => handleStudentClick(student)}
-                        >
-                          Chat
-                        </button>
-                      </td>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Reg Number</th>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Full Name</th>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Overall</th>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Strength</th>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Performance</th>
+                      <th className="px-4 py-2 border-b text-left text-xs font-black uppercase text-gray-600">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {students.map((student) => (
+                      <tr
+                        key={student._id || student.id}
+                        className="hover:bg-blue-50 transition-colors duration-200"
+                      >
+                        <td className="px-4 py-3 text-sm font-mono">{student.id}</td>
+                        <td className="px-4 py-3 text-sm font-semibold">
+                          {getStudentName(student)}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-blue-600">{student.overall}%</td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium border border-blue-100">
+                            {student.strength || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-green-600">{student.performance || 'N/A'}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <button
+                            className="bg-slate-900 text-white px-4 py-1 rounded-full text-xs font-bold hover:bg-slate-700 transition-colors"
+                            onClick={() => handleStudentClick(student)}
+                          >
+                            Chat
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

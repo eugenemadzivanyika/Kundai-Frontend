@@ -35,7 +35,6 @@ useEffect(() => {
 
       // Only auto-select if nothing is selected yet
       if (sanitizedCourses.length > 0 && !selectedCourse) {
-        console.log(`[Header] Initializing AuthContext with: ${sanitizedCourses[0].id}`);
         setSelectedCourse(sanitizedCourses[0]);
       }
     } catch (err) { 

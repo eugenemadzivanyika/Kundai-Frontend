@@ -1,3 +1,4 @@
+// export default App;
 import { useState, useEffect } from 'react'; 
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -16,6 +17,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminCourses from './pages/AdminCourses';
 import AdminStudents from './pages/AdminStudents';
 import AdminResources from './pages/AdminResources';
+import AIResourceViewer from './components/classroom/AIResourceViewer';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -37,9 +39,15 @@ function App() {
     }
   }, [isAuthenticated, location.pathname, navigate]);
 
+  // Helper to determine if the route should render the Student Dashboard
+  const renderStudentDashboard = () => (
+    isAuthenticated ? <StudentDashboard /> : <Navigate to="/login" replace />
+  );
+
   return (
     <AuthProvider>
       <Routes>
+        {/* --- Authentication Logic --- */}
         <Route
           path="/login"
           element={
@@ -47,19 +55,9 @@ function App() {
               (() => {
                 const userStr = localStorage.getItem('user');
                 const user = userStr ? JSON.parse(userStr) : null;
-                const isAdmin = user?.role === 'admin';
-                const isTeacher = user?.role === 'teacher';
-                const isStudent = user?.role === 'student';
-                if (isAdmin) {
-                  return <Navigate to="/admin" replace />;
-                }
-                if (isTeacher) {
-                  return <Navigate to="/dashboard" replace />;
-                }
-                if (isStudent) {
-                  return <Navigate to="/student/dashboard" replace />;
-                }
-                // Default to main dashboard for users without a linked student profile
+                if (user?.role === 'admin') return <Navigate to="/admin" replace />;
+                if (user?.role === 'teacher') return <Navigate to="/dashboard" replace />;
+                if (user?.role === 'student') return <Navigate to="/student/home" replace />;
                 return <Navigate to="/dashboard" replace />;
               })()
             ) : (
@@ -67,38 +65,35 @@ function App() {
                 setIsAuthenticated(true);
                 const userStr = localStorage.getItem('user');
                 const user = userStr ? JSON.parse(userStr) : null;
-                const isAdmin = user?.role === 'admin';
-                const isTeacher = user?.role === 'teacher';
-                const isStudent = user?.role === 'student' && !!user?.studentId;
-                if (isAdmin) {
-                  navigate('/admin', { replace: true });
-                  return;
-                }
-                if (isTeacher) {
-                  navigate('/dashboard', { replace: true });
-                  return;
-                }
-                if (isStudent) {
-                  navigate('/student/dashboard', { replace: true });
-                  return;
-                }
-                navigate('/dashboard', { replace: true });
+                const isStudent = user?.role === 'student';
+                if (user?.role === 'admin') navigate('/admin', { replace: true });
+                else if (user?.role === 'teacher') navigate('/dashboard', { replace: true });
+                else if (isStudent) navigate('/student/home', { replace: true });
+                else navigate('/dashboard', { replace: true });
               }} />
             )
           }
         />
 
-        <Route
-          path="/student/dashboard"
-          element={
-            isAuthenticated ? (
-              <StudentDashboard />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+        {/* --- Student Portal Routes --- */}
+        {/* Redirect base /student to home */}
+        <Route path="/student" element={<Navigate to="/student/home" replace />} />
+        <Route path="/student/dashboard" element={<Navigate to="/student/home" replace />} />
+        
+        {/* All student sub-paths point to StudentDashboard */}
+        <Route path="/student/home" element={renderStudentDashboard()} />
+        <Route path="/student/my-plans" element={renderStudentDashboard()} />
+        <Route path="/student/my-subjects" element={renderStudentDashboard()} />
+        <Route path="/student/assessments" element={renderStudentDashboard()} />
+        <Route path="/student/my-report" element={renderStudentDashboard()} />
+        <Route path="/student/ai-coach" element={renderStudentDashboard()} />
+        <Route path="/student/peer-study" element={renderStudentDashboard()} />
+        <Route path="/student/profile" element={renderStudentDashboard()} />
+        <Route path="/student/stats" element={renderStudentDashboard()} />
+        <Route path="/student/mastery" element={renderStudentDashboard()} />
 
+
+        {/* --- Teacher / Main Portal Layout --- */}
         {isAuthenticated && (
           <Route
             path="/"
@@ -116,9 +111,11 @@ function App() {
             <Route path="admin/courses" element={<AdminCourses />} />
             <Route path="admin/students" element={<AdminStudents />} />
             <Route path="admin/resources" element={<AdminResources />} />
+            <Route path="/ai-content/:resourceId" element={<AIResourceViewer />} />
           </Route>
         )}
 
+        {/* --- Catch All --- */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AuthProvider>

@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { DevelopmentPlan, Student, Plan, Skill, Subskill, SkillColor } from '../../types';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Student } from '../../types';
 import { studentService, developmentService } from '../../services/api';
 import { useToast } from "@/components/ui/use-toast";
-import CreateDevelopmentPlanModal from '../resources/CreateDevelopmentPlanModal';
+import { 
+  User, 
+  CheckCircle2, 
+  Clock, 
+  Target, 
+  ChevronRight, 
+  Rocket, 
+  Layout, 
+  FileText 
+} from 'lucide-react';
 
 interface DevelopmentViewProps {
   studentId?: string;
@@ -12,19 +21,26 @@ interface DevelopmentViewProps {
 const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStudentId }) => {
   const { studentId: paramStudentId } = useParams<{ studentId: string }>();
   const initialStudentId = propStudentId || paramStudentId || '';
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [allStudents, setAllStudents] = useState<Student[]>([]);
-  const [allStudentDevelopmentPlans, setAllStudentDevelopmentPlans] = useState<DevelopmentPlan[]>([]);
-  const [currentDisplayPlan, setCurrentDisplayPlan] = useState<DevelopmentPlan | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [allStudentDevelopmentPlans, setAllStudentDevelopmentPlans] = useState<any[]>([]);
+  const [currentDisplayPlan, setCurrentDisplayPlan] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCreatePlanModalOpen, setIsCreatePlanModalOpen] = useState(false);
-  const [expandedSkill, setExpandedSkill] = useState<{
-    skillIndex: number | null;
-    subskillIndex: number | null;
-  }>({ skillIndex: null, subskillIndex: null });
-  const { toast } = useToast();
+
+  // Surgical Helper for nested user names
+  const getNames = (s: any) => {
+    return {
+      first: s?.user?.firstName || s?.firstName || 'Student',
+      last: s?.user?.lastName || s?.lastName || '',
+      full: s?.user 
+        ? `${s.user.firstName} ${s.user.lastName}` 
+        : (s?.firstName ? `${s.firstName} ${s.lastName}` : 'Unknown Student')
+    };
+  };
 
   useEffect(() => {
     const fetchAllStudents = async () => {
@@ -32,8 +48,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
         const studentsData = await studentService.getStudents();
         setAllStudents(studentsData);
       } catch (err: any) {
-        console.error('Failed to fetch all students:', err);
-        setError('Failed to load student list.');
+        console.error('Failed to fetch students list:', err);
       }
     };
     fetchAllStudents();
@@ -41,414 +56,258 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!initialStudentId) return;
       setLoading(true);
       setError(null);
       try {
-        const studentData = await studentService.getStudent(initialStudentId);
-        setSelectedStudent(studentData);
+        const [studentData, plansData] = await Promise.all([
+          studentService.getStudent(initialStudentId),
+          developmentService.getAllPlansForStudent(initialStudentId)
+        ]);
 
-        const plansData = await developmentService.getAllPlansForStudent(initialStudentId);
+        setSelectedStudent(studentData);
         setAllStudentDevelopmentPlans(plansData);
 
-        const activePlan = plansData.find(plan => plan.status === 'Active');
+        // Prioritize Active plan, otherwise show the latest generated one
+        const activePlan = plansData.find((p: any) => p.status === 'Active');
         setCurrentDisplayPlan(activePlan || plansData[0] || null);
       } catch (err: any) {
-        console.error('Error fetching student or development plans:', err);
-        setError(err.message || 'Failed to load student development data.');
+        console.error('Surgical Sync Error:', err);
+        setError('Failed to synchronize student digital twin.');
       } finally {
         setLoading(false);
       }
     };
 
-    if (initialStudentId) {
-      fetchData();
-    }
+    fetchData();
   }, [initialStudentId]);
 
-  const handleStudentSelect = async (newStudentId: string) => {
-    setLoading(true);
-    setError(null);
+  const handleActivatePlan = async (e: React.MouseEvent, planId: string) => {
+    e.stopPropagation();
     try {
-      const studentData = await studentService.getStudent(newStudentId);
-      setSelectedStudent(studentData);
+      await developmentService.activatePlan(planId);
+      
+      // Local state update for instant UI feedback
+      setAllStudentDevelopmentPlans(prev => 
+        prev.map(p => p._id === planId ? { ...p, status: 'Active' } : p)
+      );
+      
+      if (currentDisplayPlan?._id === planId) {
+        setCurrentDisplayPlan({ ...currentDisplayPlan, status: 'Active' });
+      }
 
-      const plansData = await developmentService.getAllPlansForStudent(newStudentId);
-      setAllStudentDevelopmentPlans(plansData);
-
-      const activePlan = plansData.find(plan => plan.status === 'Active');
-      setCurrentDisplayPlan(activePlan || plansData[0] || null);
-    } catch (err: any) {
-      console.error('Error fetching student or development plans on select:', err);
-      setError(err.message || 'Failed to load data for selected student.');
-    } finally {
-      setLoading(false);
+      toast({
+        title: "Remediation Deployed",
+        description: "The plan is now active. Missions are visible to the student.",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Deployment Failed",
+        description: "Could not activate the surgical intervention.",
+      });
     }
   };
 
-  const handlePlanSelect = (planToDisplay: DevelopmentPlan) => {
-    setCurrentDisplayPlan(planToDisplay);
+  const handlePlanSelect = (plan: any) => {
+    setCurrentDisplayPlan(plan);
   };
 
-  const handleCreatePlan = () => {
-    if (!selectedStudent) {
-      toast.error('No student selected');
-      return;
-    }
-    setIsCreatePlanModalOpen(true);
+  const handleStudentSelect = (id: string) => {
+    navigate(`/development/${id}`);
   };
 
-  const handlePlanCreated = async (studentId: string, newPlan: DevelopmentPlan['plan']) => {
-    try {
-      const updatedPlans = await developmentService.getAllPlansForStudent(studentId);
-      setAllStudentDevelopmentPlans(updatedPlans);
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center h-[80vh] gap-4">
+      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <p className="font-black uppercase tracking-widest text-slate-400 text-xs">Synchronizing Digital Twin</p>
+    </div>
+  );
 
-      const newPlanItem = updatedPlans.find((p: DevelopmentPlan) => p.plan._id === newPlan._id);
-      setCurrentDisplayPlan(newPlanItem || updatedPlans[0]);
-      toast.success('Development plan created successfully');
-    } catch (error) {
-      console.error('Error handling new plan:', error);
-      toast.error('Failed to load the new plan');
-    }
-  };
+  if (error) return <div className="p-10 text-red-500 font-bold text-center">{error}</div>;
+  if (!selectedStudent) return <div className="p-10 text-center text-slate-400 font-bold uppercase">Student not found</div>;
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-full text-sm">Loading development data...</div>;
-  }
-
-  if (error) {
-    return <div className="flex justify-center items-center h-full text-red-600 text-sm">Error: {error}</div>;
-  }
-
-  if (!selectedStudent || !currentDisplayPlan) {
-    return <div className="flex justify-center items-center h-full text-sm">No student or development plan found.</div>;
-  }
-
-  const fullName = `${selectedStudent.firstName} ${selectedStudent.lastName}`;
-
-  const getCurrentSkills = (): { mainSkills: Skill[] } => {
-    if (currentDisplayPlan?.plan?.skills) {
-      return {
-        mainSkills: currentDisplayPlan.plan.skills.map(skill => {
-          const progress = currentDisplayPlan.skillProgress?.find(p => p.skill === skill.name);
-          return {
-            ...skill,
-            score: progress?.currentScore || skill.score,
-            subskills: skill.subskills.map(sub => ({
-              ...sub,
-              color: (sub.score > 70 ? 'cyan' : 'yellow') as SkillColor,
-            })),
-          };
-        }),
-      };
-    }
-    return { mainSkills: [] };
-  };
-
-  const currentSkills = getCurrentSkills();
+  const names = getNames(selectedStudent);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[60vh] p-0">
-      {/* Modal */}
-      {selectedStudent && (
-        <CreateDevelopmentPlanModal
-          isOpen={isCreatePlanModalOpen}
-          onOpenChange={setIsCreatePlanModalOpen}
-          onPlanCreated={handlePlanCreated}
-          students={[selectedStudent]}
-          courseId={selectedStudent.courses?.[0] || ''}
-        />
-      )}
-
-      {/* Left Sidebar */}
-      <div className="lg:col-span-2 col-span-12 bg-gray-50 rounded-lg shadow p-2 flex flex-col overflow-hidden">
-        <div className="bg-white rounded-lg p-2 mb-2">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-700 text-white text-sm font-bold rounded-full flex items-center justify-center mx-auto mb-1">
-            {selectedStudent.firstName[0]}{selectedStudent.lastName[0]}
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[88vh] p-6 bg-slate-50 overflow-hidden">
+      
+      {/* SIDEBAR: Student Context & Growth Areas */}
+      <div className="lg:col-span-3 flex flex-col gap-6 overflow-hidden h-full">
+        
+        {/* Profile Card */}
+        <div className="bg-slate-900 text-white rounded-[2rem] p-6 shadow-2xl shrink-0 border border-white/5">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg border border-white/20">
+              {names.first[0]}
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-black uppercase tracking-tight text-xs truncate leading-tight">{names.full}</h2>
+              <p className="text-[10px] text-slate-500 font-mono mt-1">{selectedStudent.id}</p>
+            </div>
           </div>
-          <div className="text-right mb-1">
-            <div className="text-gray-600 text-[9px]">OVR</div>
-            <div className="text-lg font-bold">{selectedStudent.overall}</div>
-          </div>
-          <div className="text-center">
-            <h2 className="text-[10px] font-bold mb-0.5">{fullName}</h2>
-            <p className="text-gray-600 text-[9px]">Plan | {currentDisplayPlan.plan.name}</p>
+          <div className="flex justify-between items-end border-t border-white/10 pt-4">
+            <div>
+              <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Mastery Score</p>
+              <p className="text-4xl font-black text-blue-400 leading-none">{selectedStudent.overall || 0}%</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Level</p>
+              <p className="text-xl font-bold leading-none">Form {selectedStudent.form}</p>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg p-2 flex-1 overflow-y-auto">
-          <h3 className="font-bold text-center mb-1.5 text-[10px]">Growth Area</h3>
-          <div className="space-y-1">
-            {allStudentDevelopmentPlans.map((planItem) => (
-              <button
-                key={planItem._id}
-                onClick={() => handlePlanSelect(planItem)}
-                className={`w-full p-1.5 rounded-lg text-[10px] font-medium transition-all duration-300 flex justify-between items-center
-                  ${planItem._id === currentDisplayPlan._id
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}
-                `}
-              >
-                <span>{planItem.plan.name}</span>
-                {planItem.status === 'Active' && (
-                  <span className="text-[9px] bg-green-200 text-green-700 px-1 py-0.5 rounded-full">Active</span>
+        {/* Plan Selection List */}
+        <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest px-1">Detected Deficiencies</h3>
+          <div className="space-y-3 overflow-y-auto pr-1 custom-scrollbar">
+            {allStudentDevelopmentPlans.map((plan) => (
+              <div key={plan._id} className="space-y-2">
+                <button
+                  onClick={() => handlePlanSelect(plan)}
+                  className={`w-full text-left p-4 rounded-2xl transition-all border ${
+                    currentDisplayPlan?._id === plan._id
+                      ? 'bg-blue-600 border-blue-700 text-white shadow-xl shadow-blue-200 scale-[1.02]'
+                      : 'bg-white border-slate-100 text-slate-600 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-black uppercase truncate pr-2">{plan.title}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className={`text-[8px] font-bold uppercase ${currentDisplayPlan?._id === plan._id ? 'text-blue-100' : 'text-slate-400'}`}>
+                      {plan.status}
+                    </span>
+                    <span className="text-[10px] font-black">{plan.progress}%</span>
+                  </div>
+                  <div className="w-full h-1 bg-black/10 rounded-full overflow-hidden mt-2">
+                    <div className="h-full bg-current" style={{ width: `${plan.progress}%` }} />
+                  </div>
+                </button>
+
+                {plan.status !== 'Active' && plan.status !== 'Mastered' && currentDisplayPlan?._id === plan._id && (
+                  <button
+                    onClick={(e) => handleActivatePlan(e, plan._id)}
+                    className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95"
+                  >
+                    <Rocket className="w-3 h-3" /> Deploy Remediation
+                  </button>
                 )}
-              </button>
+              </div>
             ))}
           </div>
-          <button
-            className="w-full mt-2 bg-blue-900 text-white py-1 px-2 rounded-lg hover:bg-blue-800 transition-colors text-[10px]"
-            onClick={handleCreatePlan}
-          >
-            Custom Plan
-          </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="lg:col-span-7 col-span-12 bg-gray-50 rounded-lg shadow p-2 overflow-y-auto">
-        <div className="mb-2">
-          <h1 className="text-sm font-bold mb-1">{currentDisplayPlan.plan.name}</h1>
-          <div className="flex flex-wrap gap-2 mb-1">
-            <div>
-              <span className="text-gray-600 text-[9px]">Progress</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <div className="w-24 bg-gray-200 rounded-full h-1">
-                  <div
-                    className="bg-green-500 h-1 rounded-full transition-all duration-500"
-                    style={{ width: `${currentDisplayPlan.currentProgress}%` }}
-                  ></div>
-                </div>
-                <span className="text-[9px] font-medium">{currentDisplayPlan.currentProgress}%</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <div className="bg-blue-100 text-blue-900 p-1 rounded text-center">
-                <div className="text-[8px]">ETA</div>
-                <div className="text-[10px] font-semibold">{currentDisplayPlan.plan.eta} Days</div>
-              </div>
-              <div className="bg-green-100 text-green-900 p-1 rounded text-center">
-                <div className="text-[8px]">Performance</div>
-                <div className="text-[10px] font-semibold">{currentDisplayPlan.plan.performance}</div>
-              </div>
-            </div>
+      {/* MAIN CONTENT: The Mission Board */}
+      <div className="lg:col-span-9 flex flex-col gap-6 overflow-hidden h-full">
+        {!currentDisplayPlan ? (
+          <div className="bg-white rounded-[2.5rem] border-4 border-dashed border-slate-200 h-full flex flex-col justify-center items-center p-20 text-center">
+            <Layout className="w-20 h-20 text-slate-200 mb-6" />
+            <h2 className="text-xl font-black text-slate-400 uppercase tracking-tighter">Ready for Selection</h2>
+            <p className="text-slate-400 text-sm max-w-xs mt-2 font-medium">Select a deficiencies area from the sidebar to initialize the AI-generated remediation path.</p>
           </div>
-          <p className="text-gray-600 text-[9px]">{currentDisplayPlan.plan.description}</p>
-        </div>
-
-        <div className={`grid gap-1.5 ${currentSkills.mainSkills.length <= 3 ? 'grid-cols-3' : 'grid-cols-5'}`}>
-          {currentSkills.mainSkills.map((skill, skillIndex) => (
-            <div 
-              key={skillIndex} 
-              className={`bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-md ${
-                expandedSkill.skillIndex === skillIndex ? 'ring-1 ring-blue-500' : ''
-              }`}
-              onClick={() => {
-                setExpandedSkill(prev => ({
-                  skillIndex: prev.skillIndex === skillIndex ? null : skillIndex,
-                  subskillIndex: null
-                }));
-              }}
-            >
-              {/* Main Skill Card */}
-              <div className="p-1 text-center cursor-pointer">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="text-sm font-bold text-gray-800">{skill.score}</div>
-                    <div className="text-gray-600 text-[8px] font-medium">{skill.name}</div>
+        ) : (
+          <>
+            {/* Header / Meta */}
+            <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-200 shrink-0">
+              <div className="flex justify-between items-start mb-8">
+                <div className="max-w-2xl">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200">
+                      Surgical Intervention
+                    </span>
+                    <span className="text-slate-300 text-xs">|</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                      <Target className="w-3 h-3" /> {currentDisplayPlan.skillCategory}
+                    </span>
                   </div>
-                  <div className={`text-[8px] transform transition-transform duration-300 ${
-                    expandedSkill.skillIndex === skillIndex ? 'rotate-180' : ''
-                  }`}>
-                    ▼
+                  <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none mb-4 uppercase">{currentDisplayPlan.title}</h1>
+                  <div className="flex items-center gap-4 text-slate-500 bg-slate-50 w-fit px-4 py-2 rounded-xl border border-slate-100">
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    <span className="text-xs font-bold uppercase tracking-tighter">Generated {new Date(currentDisplayPlan.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Surgical Progress</p>
+                  <div className="flex items-center justify-end gap-4">
+                    <div className="w-48 h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200 p-1 shadow-inner">
+                      <div className="h-full bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${currentDisplayPlan.progress}%` }} />
+                    </div>
+                    <span className="text-3xl font-black text-slate-900 leading-none">{currentDisplayPlan.progress}%</span>
                   </div>
                 </div>
               </div>
-              
-              {/* Subskills Container */}
-              <div 
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  expandedSkill.skillIndex === skillIndex ? 'max-h-[300px]' : 'max-h-0'
-                }`}
-              >
-                <div className="px-1 pb-1 space-y-0.5">
-                  {skill.subskills.map((subskill, subIndex) => (
+              <div className="bg-blue-50/50 rounded-2xl p-4 border-l-4 border-blue-500 flex gap-4 items-start">
+                 <div className="bg-white p-2 rounded-lg shadow-sm border border-blue-100"><FileText className="text-blue-500 w-4 h-4" /></div>
+                 <div>
+                    <p className="text-[10px] font-black text-blue-400 uppercase mb-1 tracking-widest">Teacher Diagnostic</p>
+                    <p className="text-sm text-slate-700 font-medium leading-relaxed italic">"{currentDisplayPlan.teacherNotes}"</p>
+                 </div>
+              </div>
+            </div>
+
+            {/* Path Missions */}
+            <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar pb-10">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] whitespace-nowrap">Learning Path Path</h3>
+                  <div className="h-[2px] w-full bg-slate-100 rounded-full" />
+                </div>
+                
+                {currentDisplayPlan.missions?.map((mission: any, idx: number) => {
+                  const isCompleted = mission.status === 'Completed';
+                  return (
                     <div 
-                      key={subIndex} 
-                      className={`p-0.5 rounded text-xs transition-all duration-200 cursor-pointer ${
-                        expandedSkill.subskillIndex === subIndex 
-                          ? 'bg-blue-50 border border-blue-100' 
-                          : 'bg-gray-50 hover:bg-gray-100'
+                      key={mission._id} 
+                      className={`bg-white rounded-3xl p-6 border transition-all cursor-pointer group flex items-center gap-6 ${
+                        isCompleted 
+                          ? 'border-emerald-100 bg-emerald-50/30' 
+                          : 'border-slate-200 hover:border-blue-400 hover:shadow-xl hover:shadow-blue-900/5'
                       }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedSkill(prev => ({
-                          skillIndex,
-                          subskillIndex: prev.subskillIndex === subIndex ? null : subIndex
-                        }));
+                      onClick={() => {
+                        if (mission.resourceLink) {
+                          const id = mission.resourceLink.split('/').pop();
+                          navigate(`/ai-content/${id}`);
+                        }
                       }}
                     >
-                      <div className="flex justify-between items-center">
-                        <span className="text-[8px] font-medium text-gray-700 truncate pr-1">{subskill.name}</span>
-                        <div className="flex-shrink-0 flex items-center gap-0.5">
-                          <span className="text-[8px] font-bold text-gray-900">{subskill.score}</span>
-                          <span className={`text-[7px] ${
-                            expandedSkill.subskillIndex === subIndex ? 'rotate-180' : ''
-                          }`}>▼</span>
-                        </div>
+                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-xl shrink-0 shadow-sm transition-colors ${
+                        isCompleted 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white'
+                      }`}>
+                        {isCompleted ? <CheckCircle2 className="w-8 h-8" /> : idx + 1}
                       </div>
                       
-                      {/* Progress Bar */}
-                      <div className="w-full bg-gray-200 rounded-full h-0.5 overflow-hidden mt-0.5">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ease-out ${
-                            subskill.color === 'yellow' ? 'bg-yellow-400' : 'bg-cyan-500'
-                          }`}
-                          style={{ width: `${subskill.score}%` }}
-                        />
-                      </div>
-                      
-                      {/* Expanded Details */}
-                      <div 
-                        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                          expandedSkill.subskillIndex === subIndex 
-                            ? 'max-h-48 mt-1 opacity-100' 
-                            : 'max-h-0 opacity-0'
-                        }`}
-                      >
-                        <div className="pt-0.5 border-t border-gray-100 mt-0.5">
-                          <div className="grid grid-cols-2 gap-0.5 text-[7px] text-gray-500">
-                            <div className="truncate">Target:</div>
-                            <div className="text-right font-medium">100</div>
-                            
-                            <div className="truncate">Updated:</div>
-                            <div className="text-right font-medium">Today</div>
-                            
-                            <div className="truncate">Status:</div>
-                            <div className="text-right font-medium">
-                              {subskill.score > 70 ? 'Excellent' : subskill.score > 40 ? 'Good' : 'Needs Work'}
-                            </div>
-                          </div>
-                          <button 
-                            className="mt-0.5 w-full py-0.5 text-[7px] font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View Details →
-                          </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                           <h4 className={`font-black uppercase text-xs tracking-tight ${isCompleted ? 'text-emerald-700' : 'text-slate-800'}`}>
+                              {mission.task}
+                           </h4>
+                           {isCompleted && <span className="text-[8px] bg-emerald-200 text-emerald-700 font-bold px-1.5 py-0.5 rounded uppercase">Mastered</span>}
                         </div>
+                        <p className={`text-xs font-medium line-clamp-1 ${isCompleted ? 'text-emerald-600/70' : 'text-slate-500'}`}>
+                          {mission.objective}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4 shrink-0">
+                        <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl ${
+                          isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {mission.status}
+                        </span>
+                        <ChevronRight className={`w-6 h-6 transition-all ${isCompleted ? 'text-emerald-400' : 'text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1'}`} />
                       </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
-          ))}
-        </div>
-
-        {currentDisplayPlan.plan.steps?.length > 0 && (
-          <div className="mt-2">
-            <h2 className="text-xs font-bold mb-1">Plan Steps</h2>
-            <ol className="list-decimal list-inside space-y-0.5">
-              {currentDisplayPlan.plan.steps
-                .slice()
-                .sort((a, b) => (a.order || 0) - (b.order || 0))
-                .map((step, idx) => (
-                  <li key={idx} className="text-gray-700 text-[9px]">
-                    <span className="font-semibold">
-                      Step {step.order || idx + 1}: {step.title || step.name || `Step ${idx + 1}`}
-                    </span>
-                    <span className="ml-1 px-1 py-0.5 rounded bg-gray-200 text-[8px] text-gray-700 inline-block w-fit">
-                      {step.type ? step.type.charAt(0).toUpperCase() + step.type.slice(1) : ''}
-                    </span>
-                  </li>
-                ))}
-            </ol>
-          </div>
+          </>
         )}
-      </div>
-
-      {/* Right Sidebar */}
-      <div className="lg:col-span-3 col-span-12 bg-gray-50 rounded-lg shadow p-2 overflow-y-auto">
-        <h3 className="text-[10px] font-semibold text-gray-800 mb-1.5 px-1">Students</h3>
-        <div className="space-y-1">
-          {allStudents.map((s) => {
-            const studentPlan = allStudentDevelopmentPlans.find(plan => plan.student === s._id);
-            
-            return (
-              <div
-                key={s._id}
-                onClick={() => handleStudentSelect(s._id)}
-                className={`cursor-pointer bg-white rounded p-1 shadow-sm transition-all duration-300 border 
-                  ${s._id === selectedStudent?._id
-                    ? 'border-cyan-500 ring-1 ring-cyan-300'
-                    : 'hover:shadow-md hover:border-gray-300'}
-                `}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <div className="text-[9px] font-semibold truncate">{s.firstName} {s.lastName}</div>
-                      {s.performance === 'Excellent' && (
-                        <span className="inline-flex items-center px-0.5 py-0.5 rounded-full text-[7px] font-medium bg-green-100 text-green-800">
-                          {s.performance}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="mt-0.5 flex items-center text-[8px] text-gray-600">
-                      <span className="inline-flex items-center">
-                        <span className="w-1 h-1 rounded-full bg-blue-500 mr-0.5"></span>
-                        OVR: {s.overall || 'N/A'}
-                      </span>
-                      {s.attendance !== undefined && (
-                        <span className="ml-1 inline-flex items-center">
-                          <span className="w-1 h-1 rounded-full bg-green-500 mr-0.5"></span>
-                          {s.attendance}%
-                        </span>
-                      )}
-                    </div>
-                    
-                    {studentPlan && (
-                      <div className="mt-0.5">
-                        <div className="flex justify-between text-[7px] text-gray-500 mb-0.5">
-                          <span>Current Plan:</span>
-                          <span className="font-medium">
-                            {studentPlan.plan.performance || 'Standard'}
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-0.5 overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500 rounded-full" 
-                            style={{ width: `${studentPlan.plan.progress || 0}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[7px] text-gray-500 mt-0.5">
-                          <span>Progress</span>
-                          <span>{studentPlan.plan.progress || 0}%</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="mt-0.5 flex items-center justify-between text-[7px] text-gray-500">
-                      <span>Engagement: {s.engagement}</span>
-                      {s.assessments !== undefined && (
-                        <span className="inline-flex items-center">
-                          <span className="w-1 h-1 rounded-full bg-blue-500 mr-0.5"></span>
-                          {s.assessments} assessments
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="ml-1 flex-shrink-0">
-                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-medium text-[8px]">
-                      {s.firstName?.[0]}{s.lastName?.[0]}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
