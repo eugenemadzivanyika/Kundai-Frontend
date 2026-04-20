@@ -3,6 +3,7 @@ export * from './apiClient';
 export * from './authService';
 export * from './studentService';
 export * from './courseService';
+export * from './calendarService';
 export * from './adminService';
 export * from './developmentService';
 export * from './assessmentService';

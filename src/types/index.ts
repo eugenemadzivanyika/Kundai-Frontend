@@ -13,7 +13,7 @@ export type SubmissionType = 'file' | 'text' | 'url';
 export type SubmissionStatus = 'submitted' | 'grading' | 'graded' | 'reviewed';
 export type NotificationType = 'assignment_graded' | 'assignment_submitted' | 'plan_assigned' | 'message_received';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
-
+export type Subject = Course;
 // User Interface - Represents a user in the system (student, teacher, admin)
 export interface User {
   _id: string; // MongoDB's default ID

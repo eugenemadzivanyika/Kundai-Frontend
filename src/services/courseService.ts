@@ -21,6 +21,15 @@ export const courseService = {
     return fetchData<Course[]>('/courses/teaching');
   },
 
+  // Alias for subjects (legacy naming in some UIs)
+  getSubjects: async (): Promise<Course[]> => {
+    return fetchData<Course[]>('/courses');
+  },
+
+  getSubjectById: async (id: string): Promise<Course> => {
+    return fetchData<Course>(`/courses/${id}`);
+  },
+
   createCourse: async (courseData: { code: string; name: string; description: string }): Promise<Course> => {
     return fetchData<Course>('/courses', {
       method: 'POST',

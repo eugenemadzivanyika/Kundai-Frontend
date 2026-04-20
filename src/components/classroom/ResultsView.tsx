@@ -1,72 +1,25 @@
 import React, { useEffect, useState } from 'react';
-// Assuming Student, Assessment, and the new StudentAssessmentResult types are defined in '../../types'
-import { Student, StudentAssessmentResult } from '../../types';
-import { User } from 'lucide-react';
-// Correctly import the service function
-import { assessmentService } from '../../services/api'; // Adjust path if your api.ts is elsewhere
+import { Student } from '../../types';
+import { User, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { assessmentService } from '../../services/api';
 
 interface ResultsViewProps {
   student: Student;
 }
 
 const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
-  // Now, results will be an array of StudentAssessmentResult
-  const [results, setResults] = useState<StudentAssessmentResult[] | null>(null);
+  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // You might want to calculate overall stats dynamically in the frontend
-  // or have your backend return them. For now, I'll show how to calculate
-  // a simple overall from the fetched results.
-  const [overallStats, setOverallStats] = useState({
-    expected: 0,
-    actual: 0,
-    grade: 'N/A'
-  });
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        // Call the new service function
-        const fetchedAssessmentsAndResults = await assessmentService.getStudentAssessmentsAndResults(student.id);
-        setResults(fetchedAssessmentsAndResults);
-
-        // Calculate overall stats if results are available
-        if (fetchedAssessmentsAndResults.length > 0) {
-          let totalWeightedExpected = 0;
-          let totalWeightedActual = 0;
-          let totalWeight = 0;
-
-          fetchedAssessmentsAndResults.forEach(item => {
-            const assessmentMaxScore = item.assessment.maxScore;
-            const assessmentWeight = item.assessment.weight; // Assuming weight is 0-100 as per your model
-
-            // Convert marks to be out of 100 for consistent calculation
-            const expectedPercentage = (item.result.expectedMark / assessmentMaxScore) * 100;
-            const actualPercentage = (item.result.actualMark / assessmentMaxScore) * 100;
-
-            totalWeightedExpected += expectedPercentage * assessmentWeight;
-            totalWeightedActual += actualPercentage * assessmentWeight;
-            totalWeight += assessmentWeight;
-          });
-
-          const overallExpected = totalWeight > 0 ? totalWeightedExpected / totalWeight : 0;
-          const overallActual = totalWeight > 0 ? totalWeightedActual / totalWeight : 0;
-
-          let overallGrade = 'F';
-          if (overallActual >= 75) overallGrade = 'A';
-          else if (overallActual >= 65) overallGrade = 'B';
-          else if (overallActual >= 50) overallGrade = 'C';
-          else if (overallActual >= 45) overallGrade = 'D';
-          else if (overallActual >= 35) overallGrade = 'E';
-
-          setOverallStats({
-            expected: parseFloat(overallExpected.toFixed(2)),
-            actual: parseFloat(overallActual.toFixed(2)),
-            grade: overallGrade
-          });
-        }
-
+        setLoading(true);
+        // Using the newly added service method
+        const data = await assessmentService.getStudentAssessmentsAndResults(student.id);
+        setResults(data);
+        setError(null);
       } catch (err) {
         console.error('Failed to fetch results:', err);
         setError('Failed to load results');
@@ -75,90 +28,74 @@ const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
       }
     };
 
-    fetchResults();
+    if (student.id) fetchResults();
   }, [student.id]);
 
-  if (loading) {
-    // Reduced padding
-    return <div className="p-4 text-sm">Loading results...</div>;
-  }
-
-  if (error || !results || results.length === 0) {
-    // Reduced padding and font
-    return <div className="p-4 text-sm text-red-500">{error || 'No results found for this student.'}</div>;
-  }
+  if (loading) return <div className="p-4 text-sm animate-pulse text-slate-500 italic">Syncing historical data...</div>;
+  if (error) return <div className="p-4 text-sm text-red-500 font-bold">{error}</div>;
 
   return (
-    // 1. Set max height and enable scrolling for the main container
-    <div className="bg-white rounded-lg shadow-lg p-2 max-h-[400px] overflow-y-auto">
-      <div className="flex items-center mb-4 sticky top-0 bg-white z-10 p-2 border-b">
-        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center mr-3">
-          <User className="w-5 h-5 text-white" />
+    <div className="bg-white rounded-lg shadow-xl p-0 flex flex-col h-full overflow-hidden border border-slate-200">
+      {/* Surgical Header */}
+      <div className="flex items-center p-4 sticky top-0 bg-slate-900 text-white z-10 shadow-md">
+        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3 shadow-inner">
+          <User className="w-6 h-6 text-white" />
         </div>
         <div>
-          {/* 3. Reduced font sizes */}
-          <h2 className="text-lg font-bold">{student.firstName}</h2>
-          <p className="text-base">{student.lastName}</p>
+          <h2 className="text-sm font-black uppercase tracking-tight leading-none">{student.firstName}</h2>
+          <p className="text-xs text-slate-400 mt-1 uppercase font-bold">Assessment Timeline</p>
         </div>
-        <div className="ml-auto">
-          {/* Reduced font sizes */}
-          <span className="text-xl font-bold">{student.overall}</span>
-          <span className="text-sm ml-2">OVR</span>
+        <div className="ml-auto text-right">
+          <div className="text-2xl font-black leading-none text-blue-400">{student.overall}%</div>
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Average</div>
         </div>
       </div>
 
-      <div className="bg-gray-100 rounded-lg p-1"> {/* Reduced inner padding */}
-        <table className="w-full text-sm"> {/* 3. Apply text-sm to the entire table */}
+      <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+        <table className="w-full text-xs">
           <thead>
-            <tr className="text-left">
-              {/* 4. Reduced cell padding to py-1.5 */}
-              <th className="py-1.5 px-2">Assessment</th>
-              <th className="py-1.5 px-2">Expected Mark</th>
-              <th className="py-1.5 px-2">Actual Mark</th>
-              <th className="py-1.5 px-2">Grade</th>
+            <tr className="text-slate-400 uppercase text-[10px] font-black tracking-widest border-b border-slate-100">
+              <th className="py-3 px-2 text-left">Assessment</th>
+              <th className="py-3 px-2 text-center">Score</th>
+              <th className="py-3 px-2 text-center">Status</th>
             </tr>
           </thead>
-          <tbody>
-            {results.map((item, index) => {
-              // Now `item` has both `assessment` and `result` properties
-              const difference = item.result.actualMark - item.result.expectedMark;
-              return (
-                <tr key={item.assessment._id || index} className="border-t border-gray-200">
-                  {/* 4. Reduced cell padding to py-1.5 */}
-                  <td className="py-1.5 px-2">{item.assessment.name}</td>
-                  <td className="py-1.5 px-2">{item.result.expectedMark}</td>
-                  <td className="py-1.5 px-2">
-                    <div className="flex items-center">
-                      {item.result.actualMark}
-                      <span
-                        className={`ml-1 ${difference > 0 ? 'text-green-500' : 'text-red-500'}`}
-                      >
-                        {/* Reduced spacing */}
-                        {difference > 0 ? '↑' : '↓'}
-                        {Math.abs(difference)}
-                      </span>
-                    </div>
+          <tbody className="divide-y divide-slate-50">
+            {results.length > 0 ? (
+              results.map((item, index) => (
+                <tr key={index} className="hover:bg-slate-50 transition-colors">
+                  <td className="py-3 px-2">
+                    <div className="font-bold text-slate-700">{item.assessmentName}</div>
+                    <div className="text-[10px] text-slate-400 uppercase">{item.assessmentType}</div>
                   </td>
-                  <td className="py-1.5 px-2">{item.result.grade}</td>
+                  <td className="py-3 px-2 text-center">
+                    {item.status === 'graded' ? (
+                      <div className="flex flex-col items-center">
+                        <span className="font-black text-slate-900">{item.actualMark} / {item.maxScore}</span>
+                        <span className={`text-[10px] font-bold ${item.actualMark >= (item.maxScore * 0.5) ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {Math.round((item.actualMark / item.maxScore) * 100)}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 italic">Not available</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-2 text-center">
+                    <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase border ${
+                      item.status === 'graded' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                      item.status === 'submitted' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                      'bg-slate-50 text-slate-400 border-slate-100'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </td>
                 </tr>
-              );
-            })}
-            {/* Overall row - now based on calculated overallStats */}
-            <tr className="border-t border-gray-200 font-bold">
-              {/* 4. Reduced cell padding to py-1.5 */}
-              <td className="py-1.5 px-2">Overall</td>
-              <td className="py-1.5 px-2">{overallStats.expected}</td>
-              <td className="py-1.5 px-2">
-                <div className="flex items-center">
-                  {overallStats.actual}
-                  <span className={`ml-1 ${overallStats.actual >= overallStats.expected ? 'text-green-500' : 'text-red-500'}`}>
-                    {overallStats.actual >= overallStats.expected ? '↑' : '↓'}
-                    {Math.abs(overallStats.actual - overallStats.expected).toFixed(2)}
-                  </span>
-                </div>
-              </td>
-              <td className="py-1.5 px-2">{overallStats.grade}</td>
-            </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="py-10 text-center text-slate-400 italic">No historical data found.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

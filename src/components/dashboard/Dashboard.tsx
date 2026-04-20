@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   courseService, 
   studentService, 
-  assessmentService
+  assessmentService,
+  developmentService
 } from '../../services/api';
 import CalendarWidget from '../calendar/CalendarWidget';
 import EventModal from '../calendar/EventModal';
@@ -46,8 +47,6 @@ const Dashboard: React.FC = () => {
         if (!selectedCourse) return;
         const courseIdentifier = selectedCourse.code || selectedCourse.id;
 
-        console.log(`[Dashboard] Fetching data for: ${courseIdentifier}`);
-        
         try {
           setLoading(true);
 
@@ -77,35 +76,49 @@ const Dashboard: React.FC = () => {
         }
 
         // Digital Twin Logic
-        // Digital Twin Logic
 const devProfiles = await Promise.all(
   rawStudents.map(async (student: any) => {
-    // 1. CALL THE API
-    const attributes = await courseService.getStudentAttributes(student.id, selectedCourse.id);
-    
-    // 2. THE BIG DEBUG LOG
-    console.log(`--- [DEBUG] ATTRIBUTES FOR ${student.user?.firstName || student.id} ---`);
-    console.log('Count:', attributes?.length);
-    console.log('Raw Data Sample:', attributes?.[0]); // See the first of the 260
-    console.log('Course ID used in query:', selectedCourse.id);
+    try {
+      // 1. Fetch Enriched Development Data (includes unitMasteries) and Plans in parallel
+      const [devData, plans] = await Promise.all([
+        studentService.getStudentDevelopment(student._id), // student._id is the MongoDB ID
+        developmentService.getAllPlansForStudent(student.id) // student.id is the Reg Number
+      ]);
 
-    return {
-      studentId: student.id,
-      firstName: student.user?.firstName || "Student",
-      lastName: student.user?.lastName || student.id,
-      form: student.form || 1,
-      overall: student.overall || 0,
-      potentialOverall: 90, 
-      attributes: Array.isArray(attributes) && attributes.length > 0
-        ? attributes.map((a: any) => ({
-            name: a.attribute?.name || 'Unit',
-            value: Math.round((a.currentMastery || 0) * 100),
-          }))
-        : [
-            { name: "Syllabus Check", value: 0 },
-            { name: "Introduction", value: 0 }
-          ]
-    };
+      const activePlanObj = plans.find((p: any) => p.status === 'Active');
+
+      return {
+        studentId: student.id,
+        firstName: student.user?.firstName || "Student",
+        lastName: student.user?.lastName || student.id,
+        form: student.form || 1,
+        overall: devData.overallMastery || student.overall || 0, // Use freshly calculated overall
+        potentialOverall: 90, 
+        plans: plans, 
+        activePlan: activePlanObj ? activePlanObj.title : 'None',
+        // SURGICAL FIX: Map the aggregated unitMasteries instead of flat attributes
+        attributes: devData.unitMasteries && devData.unitMasteries.length > 0
+          ? devData.unitMasteries.map((um: any) => ({
+              name: um.unit,
+              value: um.mastery,
+            }))
+          : [
+              { name: "Syllabus Check", value: 0 },
+              { name: "Introduction", value: 0 }
+            ]
+      };
+    } catch (err) {
+      console.error(`Error processing Digital Twin for ${student.id}:`, err);
+      // Fallback object so one failure doesn't break the whole dashboard
+      return {
+        studentId: student.id,
+        firstName: student.user?.firstName || "Student",
+        lastName: student.user?.lastName || student.id,
+        form: student.form || 1,
+        overall: student.overall || 0,
+        attributes: [{ name: "Sync Error", value: 0 }]
+      };
+    }
   })
 );
 
