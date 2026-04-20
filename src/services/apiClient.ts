@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
 
 export class ApiError extends Error {
   status: number;
@@ -47,3 +48,28 @@ export async function fetchData<T = any>(endpoint: string, options: RequestInit 
 }
 
 export { API_URL };
+
+
+/**
+ * Like fetchData but targets the Python AI service instead of the Node API.
+ * Includes the JWT token so the AI service can optionally validate requests.
+ */
+export async function fetchAiData<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem('token');
+  const defaultHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) defaultHeaders['Authorization'] = `Bearer ${token}`;
+
+  try {
+    const response = await fetch(`${AI_SERVICE_URL}${endpoint}`, {
+      ...options,
+      headers: { ...defaultHeaders, ...options.headers },
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw { response: { data: errorBody }, message: `HTTP error! status: ${response.status}` };
+    }
+    return response.json();
+  } catch (error) {
+    throw new Error(parseErrorMessage(error));
+  }
+}

@@ -17,15 +17,22 @@ import {
   Target,
   X,
 } from 'lucide-react';
-import { Question, Subject } from '../../types';
-import { aiService } from '../../services/aiService';
-import {
-  curriculumService,
-  // CurriculumTopicWithResources as CurriculumTopicApi,
-  // CurriculumTopicResource,
-} from '../../services/curriculumService';
-import { studentService, StudentSubjectOverview } from '../../services/studentService';
+import { CourseAttribute, StudentAttribute, Subject } from '../../types';
+import { courseService } from '../../services/courseService';
+import { fetchAiData } from '../../services/apiClient';
 import StudentPracticeRunner, { buildMockPracticeQuestions, PracticeQuestion, PracticeRunSummary } from './StudentPracticeRunner';
+
+// ─── Local placeholder types for removed external services ───────────────────
+// These kept only so the AI-challenge code compiles; the real data now comes
+// from courseService (CourseAttribute + StudentAttribute).
+type Question = { text?: string; type?: string; options?: unknown[]; correctAnswer?: unknown };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type CurriculumTopicApi = never;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type CurriculumTopicResource = {
+  id: string; type?: string; mimeType?: string; contentType?: string;
+  name?: string; originalName?: string; status?: string;
+};
 
 type PracticeStatus = 'not-started' | 'in-progress' | 'mastered';
 type ResourceType = 'video' | 'notes' | 'article';
@@ -222,78 +229,94 @@ const getResourceTypeFromItem = (
   return 'article';
 };
 
-const mapSubjectOverviewToUnits = (
-  subjectName: string,
-  overview: StudentSubjectOverview,
-  topicsWithResources: CurriculumTopicApi[]
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA MAPPER
+//
+// Maps your real backend data to the CurriculumUnit[] shape the view uses.
+//
+// CourseAttribute schema:
+//   { _id, attribute_id, name, parent_unit, level, description,
+//     prerequisites, total_mastery_points, tags }
+//
+// StudentAttribute schema:
+//   { _id, student, course, attribute, currentMastery }
+//   where `attribute` is populated as a CourseAttribute document.
+//
+// Strategy:
+//   - Group CourseAttributes by `parent_unit` → each group = one CurriculumUnit
+//   - Each attribute within a unit = one CurriculumTopic
+//   - Mastery comes from the matching StudentAttribute.currentMastery (0–1 → ×100)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const mapAttributesToUnits = (
+  courseAttributes: CourseAttribute[],
+  studentAttributes: StudentAttribute[],
 ): CurriculumUnit[] => {
-  const resourcesByTopicId = new Map<string, CurriculumTopicResource[]>();
-  topicsWithResources.forEach((topic) => {
-    resourcesByTopicId.set(topic.id, topic.resources || []);
+  // Build a mastery lookup: attributeId → mastery percent (0–100)
+  const masteryByAttributeId = new Map<string, number>();
+  studentAttributes.forEach((sa) => {
+    const attrId = (sa.attribute as any)?._id?.toString()
+      || (sa.attribute as any)?.toString()
+      || '';
+    if (attrId) {
+      masteryByAttributeId.set(attrId, Math.round((sa.currentMastery || 0) * 100));
+    }
   });
 
-  return (overview.units || []).map((unit) => {
-    const mappedTopics: CurriculumTopic[] = (unit.topics || []).map((topic) => {
-      const topicResources = resourcesByTopicId.get(topic.topicId) || [];
-      const practiceResources = topicResources.filter((resource) => normalizeText(resource.contentType) === 'practice');
-      const assessmentResources = topicResources.filter((resource) => normalizeText(resource.contentType) === 'assessment_material');
-      const learnTopicResources = topicResources.filter((resource) => {
-        const normalized = normalizeText(resource.contentType);
-        return normalized !== 'practice' && normalized !== 'assessment_material';
-      });
+  // Group attributes by parent_unit
+  const unitMap = new Map<string, CourseAttribute[]>();
+  courseAttributes.forEach((attr) => {
+    const unitName = attr.parent_unit || 'General';
+    if (!unitMap.has(unitName)) unitMap.set(unitName, []);
+    unitMap.get(unitName)!.push(attr);
+  });
 
-      const learnResources: CurriculumResource[] = learnTopicResources.slice(0, 4).map((resource) => ({
-        id: resource.id,
-        title: resource.name || resource.originalName || 'Learning resource',
-        type: getResourceTypeFromItem(resource),
-      }));
+  let unitIndex = 0;
+  const units: CurriculumUnit[] = [];
 
-      const practiceMaterials: CurriculumResource[] = practiceResources.slice(0, 4).map((resource) => ({
-        id: resource.id,
-        title: resource.name || resource.originalName || 'Practice material',
-        type: 'notes',
-      }));
+  unitMap.forEach((attrs, unitName) => {
+    unitIndex += 1;
+    const unitMastery = attrs.length > 0
+      ? Math.round(attrs.reduce((sum, a) => {
+          const m = masteryByAttributeId.get(a._id?.toString() || '') ?? 0;
+          return sum + m;
+        }, 0) / attrs.length)
+      : 0;
 
-      const assessments: CurriculumAssessment[] = assessmentResources.slice(0, 4).map((resource) => ({
-        id: resource.id,
-        title: resource.name || resource.originalName || 'Assessment',
-        status: normalizeText(resource.status) || 'published',
-      }));
-
-      const practiceCount = Math.max(1, Math.min(12, Number(topic.questionCount || 0)));
-      const practiceItems: CurriculumPractice[] = [
-        {
-          id: `practice-${topic.topicId}`,
-          title: `AI guided practice: ${topic.name}`,
-          status: 'not-started',
-          target: `Complete ${practiceCount} question${practiceCount === 1 ? '' : 's'}`,
-        },
-      ];
+    const topics: CurriculumTopic[] = attrs.map((attr) => {
+      const topicMastery = masteryByAttributeId.get(attr._id?.toString() || '') ?? 0;
 
       return {
-        id: topic.topicId,
-        title: topic.name,
-        masteryPercent: Math.max(0, Math.min(100, Math.round(topic.masteryPercent || 0))),
-        learn: learnResources,
-        practice: practiceItems,
-        practiceMaterials,
-        assessments,
+        id: attr._id?.toString() || attr.attribute_id,
+        title: attr.name || attr.attribute_id,
+        masteryPercent: topicMastery,
+        learn: attr.description
+          ? [{ id: `learn-${attr.attribute_id}`, title: attr.description, type: 'notes' as ResourceType }]
+          : [],
+        practice: [
+          {
+            id: `practice-${attr.attribute_id}`,
+            title: `Practice: ${attr.name || attr.attribute_id}`,
+            status: topicMastery >= 80 ? 'mastered' : topicMastery > 0 ? 'in-progress' : 'not-started',
+            target: 'Complete practice questions',
+          },
+        ],
+        practiceMaterials: [],
+        assessments: [],
       };
     });
 
-    const topicCount = Number(unit.topicCount || mappedTopics.length || 0);
-    const questionCount = Number(unit.questionCount || 0);
-    const summary = `Covers ${topicCount} topic${topicCount === 1 ? '' : 's'} with ${questionCount} published question${questionCount === 1 ? '' : 's'}.`;
-
-    return {
-      id: unit.unitId,
-      code: unit.code || `Unit ${unit.unitNumber}`,
-      title: unit.title || `${subjectName} unit ${unit.unitNumber}`,
-      summary,
-      masteryPercent: Math.max(0, Math.min(100, Math.round(unit.masteryPercent || 0))),
-      topics: mappedTopics,
-    };
+    units.push({
+      id: `unit-${unitIndex}`,
+      code: `Unit ${unitIndex}`,
+      title: unitName,
+      summary: `${attrs.length} attribute${attrs.length === 1 ? '' : 's'} · ${attrs.filter(a => (masteryByAttributeId.get(a._id?.toString() || '') ?? 0) >= 80).length} mastered`,
+      masteryPercent: unitMastery,
+      topics,
+    });
   });
+
+  return units;
 };
 
 const buildUnitChallengeQuestions = (unit: CurriculumUnit, targetCount = DEFAULT_UNIT_CHALLENGE_COUNT): PracticeQuestion[] => {
@@ -541,33 +564,35 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
       setCurriculumError(null);
 
       try {
-        const [overview, topics] = await Promise.all([
-          studentService.getSubjectOverview(studentId, activeSubject.id).catch(() => null),
-          curriculumService.listTopicsWithResources(activeSubject.id).catch(() => []),
+        // Fetch syllabus attributes and student mastery in parallel
+        const [courseAttrs, studentAttrs] = await Promise.all([
+          courseService.getCourseAttributes(activeSubject.id).catch(() => [] as CourseAttribute[]),
+          courseService.getStudentAttributes(studentId, activeSubject.id).catch(() => [] as StudentAttribute[]),
         ]);
 
-        if (!overview) {
-          setSubjectOverview(null);
-          setBackendUnits([]);
-          setCurriculumError('Unable to load subject overview from backend right now.');
-          return;
-        }
-
-        const mappedUnits = mapSubjectOverviewToUnits(activeSubject.name, overview, topics);
-        setSubjectOverview(overview);
+        const mappedUnits = mapAttributesToUnits(courseAttrs, studentAttrs);
+        // Stash the raw attributes on the subject object for the challenge generator
+        if (activeSubject) (activeSubject as any)._courseAttributes = courseAttrs;
         setBackendUnits(mappedUnits);
 
+        // Build a minimal subjectOverview-compatible object so the rest of
+        // the component (challenge eligibility, etc.) keeps working.
+        setSubjectOverview({
+          challengeEligibility: {
+            eligible: mappedUnits.length > 0,
+            reason: mappedUnits.length === 0 ? 'No syllabus attributes published yet.' : null,
+          },
+        } as any);
+
         if (mappedUnits.length === 0) {
-          setCurriculumError('No teacher-published curriculum found yet.');
-        } else if (!overview.challengeEligibility?.eligible) {
-          setCurriculumError(overview.challengeEligibility.reason || null);
+          setCurriculumError('No syllabus attributes have been published for this subject yet.');
         } else {
           setCurriculumError(null);
         }
       } catch (loadError: any) {
         setBackendUnits([]);
         setSubjectOverview(null);
-        setCurriculumError(loadError?.message || 'Unable to load curriculum from backend right now.');
+        setCurriculumError(loadError?.message || 'Unable to load curriculum. Please try again.');
       } finally {
         setIsCurriculumLoading(false);
       }
@@ -663,55 +688,80 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     });
   };
 
+  // ── Challenge question generation ─────────────────────────────────────────
+  // Calls /devPlan-content-gen/unit-challenge on the Python AI service.
+  // Falls back to local mock questions if the service is unavailable.
+
+  const fetchAiChallengeQuestions = async (
+    attributesForUnit: CourseAttribute[],
+    unitTitle: string,
+    count: number,
+    difficulty: ChallengeDifficulty,
+  ): Promise<{ questions: PracticeQuestion[]; fromAi: boolean }> => {
+    try {
+      const data = await fetchAiData<{ questions?: Array<{
+        id?: string;
+        prompt?: string;
+        options?: string[];
+        correctOptionIndex?: number;
+        explanation?: string;
+      }> }>('/devPlan-content-gen/unit-challenge', {
+        method: 'POST',
+        body: JSON.stringify({
+          attributes:   attributesForUnit,
+          unit_title:   unitTitle,
+          subject_name: activeSubject?.name || unitTitle,
+          count,
+          difficulty,
+        }),
+      });
+
+      const rawQuestions = data?.questions || [];
+      if (rawQuestions.length === 0) throw new Error('No questions returned');
+
+      const mapped: PracticeQuestion[] = rawQuestions.map((q, i) => ({
+        id:                   q.id || `ai-${i + 1}`,
+        type:                 'single' as const,
+        prompt:               q.prompt || `Question ${i + 1}`,
+        options:              q.options || [],
+        correctOptionIndexes: [q.correctOptionIndex ?? 0],
+      }));
+
+      return { questions: mapped, fromAi: true };
+    } catch {
+      return { questions: [], fromAi: false };
+    }
+  };
+
   const generateUnitChallengeWithAi = async () => {
     if (!activeSubject || !selectedUnit) return;
-
     const currentConfig = selectedUnitChallengeConfig;
     updateUnitChallengeConfig((current) => ({ ...current, isGenerating: true, error: null }));
 
-    try {
-      const subjectAttributes = await aiService.getSubjectAttributes(activeSubject.id).catch(() => []);
-      const selectedAttributes = subjectAttributes.slice(0, 4).map((attribute) => ({
-        id: attribute.id,
-        name: attribute.name,
-        description: attribute.description,
-      }));
+    // Gather the CourseAttribute objects that back this unit's topics
+    const unitAttributeIds = new Set(selectedUnit.topics.map((t) => t.id));
+    const unitAttributes = (activeSubject as any)._courseAttributes?.filter(
+      (a: CourseAttribute) => unitAttributeIds.has((a as any)._id?.toString())
+    ) || [];
 
-      const generatedQuestions = await aiService.generateQuestions({
-        subjectId: activeSubject.id,
-        attributes: selectedAttributes.length > 0
-          ? selectedAttributes
-          : [{ id: selectedUnit.id, name: selectedUnit.title, description: selectedUnit.summary }],
-        questionCount: currentConfig.questionCount,
-        questionTypes: ['multiple_choice'],
-        difficulty: currentConfig.difficulty,
-        context: `Generate a unit challenge for ${activeSubject.name}. Unit: ${selectedUnit.code}: ${selectedUnit.title}. ${currentConfig.prompt}`.trim(),
-        tags: [activeSubject.name, selectedUnit.title, 'unit challenge'],
-      });
+    const { questions: aiQuestions, fromAi } = await fetchAiChallengeQuestions(
+      unitAttributes,
+      selectedUnit.title,
+      currentConfig.questionCount,
+      currentConfig.difficulty,
+    );
 
-      const practiceQuestions = mapAiQuestionsToPractice(
-        generatedQuestions,
-        `${selectedUnit.title} unit challenge`,
-        currentConfig.questionCount
-      );
+    const finalQuestions = aiQuestions.length > 0
+      ? aiQuestions
+      : buildUnitChallengeQuestions(selectedUnit, currentConfig.questionCount);
 
-      updateUnitChallengeConfig((current) => ({
-        ...current,
-        questions: practiceQuestions,
-        isGenerating: false,
-        generatedWithAi: true,
-        error: null,
-      }));
-    } catch (error) {
-      const fallbackQuestions = buildUnitChallengeQuestions(selectedUnit, currentConfig.questionCount);
-      updateUnitChallengeConfig((current) => ({
-        ...current,
-        questions: fallbackQuestions,
-        isGenerating: false,
-        generatedWithAi: false,
-        error: 'AI generation is unavailable right now. A local draft challenge has been prepared.',
-      }));
-    }
+    updateUnitChallengeConfig((current) => ({
+      ...current,
+      questions: finalQuestions,
+      isGenerating: false,
+      generatedWithAi: fromAi && aiQuestions.length > 0,
+      error: !fromAi ? 'AI generation unavailable — using practice questions instead.' : null,
+    }));
   };
 
   const generateSubjectChallengeWithAi = async () => {
@@ -723,53 +773,34 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
       }));
       return;
     }
-
     const currentConfig = selectedSubjectChallengeConfig;
     updateSubjectChallengeConfig((current) => ({ ...current, isGenerating: true, error: null }));
 
-    try {
-      const subjectAttributes = await aiService.getSubjectAttributes(activeSubject.id).catch(() => []);
-      const selectedAttributes = subjectAttributes.slice(0, 6).map((attribute) => ({
-        id: attribute.id,
-        name: attribute.name,
-        description: attribute.description,
-      }));
+    // For the subject challenge we pull questions from each unit and combine
+    const allUnitQuestions: PracticeQuestion[] = [];
+    const perUnit = Math.ceil(currentConfig.questionCount / Math.max(units.length, 1));
 
-      const generatedQuestions = await aiService.generateQuestions({
-        subjectId: activeSubject.id,
-        attributes: selectedAttributes.length > 0
-          ? selectedAttributes
-          : [{ id: activeSubject.id, name: activeSubject.name, description: `${activeSubject.name} challenge` }],
-        questionCount: currentConfig.questionCount,
-        questionTypes: ['multiple_choice'],
-        difficulty: currentConfig.difficulty,
-        context: `Generate a subject challenge for ${activeSubject.name}. Include all major units and topic coverage. ${currentConfig.prompt}`.trim(),
-        tags: [activeSubject.name, 'subject challenge'],
-      });
-
-      const practiceQuestions = mapAiQuestionsToPractice(
-        generatedQuestions,
-        `${activeSubject.name} subject challenge`,
-        currentConfig.questionCount
+    for (const unit of units) {
+      const { questions: aiQuestions } = await fetchAiChallengeQuestions(
+        [],
+        unit.title,
+        perUnit,
+        currentConfig.difficulty,
       );
-
-      updateSubjectChallengeConfig((current) => ({
-        ...current,
-        questions: practiceQuestions,
-        isGenerating: false,
-        generatedWithAi: true,
-        error: null,
-      }));
-    } catch (error) {
-      const fallbackQuestions = buildSubjectChallengeQuestions(units, currentConfig.questionCount);
-      updateSubjectChallengeConfig((current) => ({
-        ...current,
-        questions: fallbackQuestions,
-        isGenerating: false,
-        generatedWithAi: false,
-        error: 'AI generation is unavailable right now. A local draft challenge has been prepared.',
-      }));
+      allUnitQuestions.push(...aiQuestions);
     }
+
+    const finalQuestions = allUnitQuestions.length > 0
+      ? allUnitQuestions.slice(0, currentConfig.questionCount)
+      : buildSubjectChallengeQuestions(units, currentConfig.questionCount);
+
+    updateSubjectChallengeConfig((current) => ({
+      ...current,
+      questions: finalQuestions,
+      isGenerating: false,
+      generatedWithAi: allUnitQuestions.length > 0,
+      error: allUnitQuestions.length === 0 ? 'AI generation unavailable — using practice questions instead.' : null,
+    }));
   };
 
   const openSubjectOverview = () => {
