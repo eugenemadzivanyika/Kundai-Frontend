@@ -551,8 +551,10 @@ const realPlanBySubjectId = useMemo(() => {
           developmentService.getStudentStreak(student.id).catch(() => null),
         ]);
         if (cancelled) return;
-        setHomeNotifications((notifications || []).slice(0, 5));
-        setHomeUnreadNotificationCount(Number(unreadCount || 0));
+        const notifArray = Array.isArray(notifications) ? notifications : (notifications?.notifications || []);
+        setHomeNotifications(notifArray.slice(0, 5));
+        const unreadNum = typeof unreadCount === 'number' ? unreadCount : (unreadCount?.count ?? 0);
+        setHomeUnreadNotificationCount(Number(unreadNum));
         setHomeUpcomingEvents((upcomingEvents || []).slice(0, 6));
         setHomeSubjectEvents((subjectEvents || []).slice(0, 6));
         setHomeMasterySignals(masterySignals);
@@ -716,10 +718,10 @@ const realPlanBySubjectId = useMemo(() => {
     { key: 'plan',        label: 'My Plans',     icon: BookOpen },
     { key: 'subjects',    label: 'My Subjects',  icon: BookOpen },
     { key: 'assessments', label: 'Assessments',  icon: FileText },
-    // { key: 'results',     label: 'My Report',    icon: BarChart2 },
+    { key: 'results',     label: 'My Report',    icon: BarChart2 },
     // { key: 'stats',       label: 'Statistics',   icon: TrendingUp },
     // { key: 'mastery',     label: 'Mastery Gaps', icon: Brain },
-    { key: 'messages',    label: 'Messages',     icon: MessageCircle },
+    // { key: 'messages',    label: 'Messages',     icon: MessageCircle },
     // { key: 'peer-study',  label: 'Peer Study',   icon: Users },
     // { key: 'tutor',       label: 'AI Coach',     icon: Brain },
   ];

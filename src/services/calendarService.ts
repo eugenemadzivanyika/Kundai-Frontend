@@ -2,21 +2,35 @@ import { CalendarEvent, EventFormData } from '../types/calendar';
 import { fetchData } from './api';
 
 export const calendarService = {
-  // Get all events for the current user
-  getEvents: async (startDate?: Date, endDate?: Date): Promise<CalendarEvent[]> => {
+  // Get all events for the current user, optionally filtered by date range.
+  // studentId is accepted for call-site compatibility but ignored — the backend
+  // filters by the authenticated user from the JWT token.
+  getEvents: async (startDate?: Date, endDate?: Date, _studentId?: string): Promise<CalendarEvent[]> => {
     const params = new URLSearchParams();
     if (startDate) params.append('start', startDate.toISOString());
     if (endDate) params.append('end', endDate.toISOString());
-    
     const queryString = params.toString();
-    const endpoint = queryString ? `/calendar/events?${queryString}` : '/calendar/events';
-    
-    return fetchData<CalendarEvent[]>(endpoint);
+    return fetchData<CalendarEvent[]>(queryString ? `/calendar/events?${queryString}` : '/calendar/events');
   },
 
   // Get events for a specific course
   getCourseEvents: async (courseId: string): Promise<CalendarEvent[]> => {
     return fetchData<CalendarEvent[]>(`/calendar/events/course/${courseId}`);
+  },
+
+  /**
+   * Get calendar events filtered to a specific subject (course).
+   * Used by the home panel to show subject-specific upcoming deadlines.
+   * studentId is accepted for call-site compatibility but the backend
+   * filters by the authenticated user from the JWT token.
+   */
+  getSubjectEvents: async (subjectId: string, _studentId?: string): Promise<CalendarEvent[]> => {
+    return fetchData<CalendarEvent[]>(`/calendar/events/course/${subjectId}`);
+  },
+
+  // Get upcoming events. studentId accepted for compatibility, ignored server-side.
+  getUpcomingEvents: async (limit = 10, _studentId?: string): Promise<CalendarEvent[]> => {
+    return fetchData<CalendarEvent[]>(`/calendar/events/upcoming?limit=${limit}`);
   },
 
   // Create a new event
@@ -40,11 +54,6 @@ export const calendarService = {
     return fetchData<{ message: string }>(`/calendar/events/${id}`, {
       method: 'DELETE',
     });
-  },
-
-  // Get upcoming events (next 7 days)
-  getUpcomingEvents: async (limit = 10): Promise<CalendarEvent[]> => {
-    return fetchData<CalendarEvent[]>(`/calendar/events/upcoming?limit=${limit}`);
   },
 
   // Bulk create events (for importing schedules)
