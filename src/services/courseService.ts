@@ -51,12 +51,12 @@ export const courseService = {
       method: 'DELETE',
     });
   },
-    // Syllabus Attributes
-  getCourseAttributes: (courseId: string) => 
+  // Syllabus attributes for a course (the published curriculum)
+  getCourseAttributes: (courseId: string) =>
     fetchData<CourseAttribute[]>(`/courses/attributes/course/${courseId}`),
 
-// src/services/api.ts (developmentService)
-  getStudentAttributes: (studentId: string, courseId: string) => 
-    fetchData<StudentAttribute[]>(`/courses/attributes/student/${studentId}/course/${courseId}`)
+  // Student mastery records for a specific course
+  // Route: GET /api/courses/attributes/student/:studentId/course/:courseIdorCode
+  getStudentAttributes: (studentId: string, courseId: string) =>
+    fetchData<StudentAttribute[]>(`/courses/attributes/student/${studentId}/course/${courseId}`),
 };
-
