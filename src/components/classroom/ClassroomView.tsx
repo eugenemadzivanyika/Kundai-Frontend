@@ -56,6 +56,7 @@ const ClassroomView: React.FC = () => {
         })
       );
       console.log("🛠️ [ClassroomView] Enriched development students:", studentsWithPlans);
+      setStudents(studentsWithPlans);
       if (studentsWithPlans.length > 0 && !selectedStudent) {
         setSelectedStudent(studentsWithPlans[0]);
       }
@@ -66,7 +67,7 @@ const ClassroomView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedCourse, selectedStudent]);
+  }, [selectedCourse]);
 
   useEffect(() => {
     fetchStudents();

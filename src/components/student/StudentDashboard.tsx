@@ -1165,11 +1165,13 @@ const realPlanBySubjectId = useMemo(() => {
     switch (activeView) {
       case 'plan':
         return activePlan ? (
-          <StudentPlanView 
-            plan={activePlan} 
-            initialStepIndex={planEntryStepIndex ?? undefined} 
-            onOpenMission={handleOpenMission}
-            />
+        <StudentPlanView 
+          plan={activePlan} 
+          studentId={student.id}
+          selectedSubjectId={selectedSubjectId}
+          initialStepIndex={planEntryStepIndex ?? undefined} 
+          onOpenMission={handleOpenMission}
+        />
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
             <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" />

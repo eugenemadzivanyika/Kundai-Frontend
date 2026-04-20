@@ -1,7 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Brain, Loader2, Mic, Send, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  Brain,
+  Loader2,
+  Paperclip,
+  Send,
+  Sparkles,
+  Target,
+  X,
+  Zap,
+} from 'lucide-react';
 import { DevelopmentPlan, Subject } from '../../types';
 import { aiTutorService, AiTutorMessage, AiTutorSession } from '../../services/aiTutorService';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type StudentTutorProps = {
   studentId: string;
@@ -14,11 +26,145 @@ type StudentTutorProps = {
 
 type CoachMode = 'socratic' | 'hint';
 
-type WorkspaceCheckpoint = {
-  id: string;
-  note: string;
-  createdAt: string;
+type AttachedImage = {
+  file: File;
+  previewUrl: string;
+  base64: string;
 };
+
+const SHORTCUT_CHIPS = [
+  { label: 'Give me a hint',         kind: 'hint'      as const },
+  { label: 'Challenge my reasoning',  kind: 'challenge' as const },
+  { label: 'Practice question',       kind: 'practice'  as const },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+
+// ─── Subcomponents ────────────────────────────────────────────────────────────
+
+const MessageBubble: React.FC<{ message: AiTutorMessage }> = ({ message }) => {
+  const isStudent = message.senderRole === 'student';
+  const isSystem  = message.senderRole === 'system';
+
+  return (
+    <div style={{ display: 'flex', justifyContent: isStudent ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
+      {!isStudent && (
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: 'var(--color-background-info)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <Sparkles style={{ width: 13, height: 13, color: 'var(--color-text-info)' }} />
+        </div>
+      )}
+
+      <div style={{ maxWidth: '82%' }}>
+        {!isStudent && !isSystem && (
+          <p style={{
+            fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em',
+            color: 'var(--color-text-tertiary)', margin: '0 0 3px',
+            display: 'flex', alignItems: 'center', gap: 3,
+          }}>
+            <Sparkles style={{ width: 10, height: 10 }} /> Tutor guidance
+          </p>
+        )}
+
+        {/* Image attachment */}
+        {message.imageUrl && (
+          <div style={{
+            borderRadius: isStudent ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
+            overflow: 'hidden',
+            border: '0.5px solid var(--color-border-tertiary)',
+            marginBottom: message.content ? 4 : 0,
+            maxWidth: 220,
+          }}>
+            <img src={message.imageUrl} alt="Student working" style={{ width: '100%', display: 'block' }} />
+            <div style={{
+              fontSize: 11, color: 'var(--color-text-secondary)',
+              padding: '5px 9px', background: 'var(--color-background-secondary)',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <Paperclip style={{ width: 11, height: 11 }} />
+              Photo of working
+            </div>
+          </div>
+        )}
+
+        {/* Text content */}
+        {(message.content || message.transcript) && (
+          <div style={{
+            padding: '9px 13px',
+            borderRadius: isStudent ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
+            fontSize: 14, lineHeight: 1.65,
+            background: isStudent
+              ? 'var(--color-background-info)'
+              : isSystem
+                ? 'var(--color-background-warning)'
+                : 'var(--color-background-primary)',
+            color: isStudent
+              ? 'var(--color-text-info)'
+              : isSystem
+                ? 'var(--color-text-warning)'
+                : 'var(--color-text-primary)',
+            border: isStudent
+              ? 'none'
+              : `0.5px solid ${isSystem ? 'var(--color-border-warning)' : 'var(--color-border-tertiary)'}`,
+          }}>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+              {message.content || message.transcript}
+            </p>
+            <p style={{
+              margin: '4px 0 0', fontSize: 11,
+              color: isStudent ? 'var(--color-text-info)' : 'var(--color-text-tertiary)',
+              opacity: 0.75,
+            }}>
+              {new Date(message.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TypingIndicator: React.FC = () => (
+  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+    <div style={{
+      width: 28, height: 28, borderRadius: '50%',
+      background: 'var(--color-background-info)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      <Sparkles style={{ width: 13, height: 13, color: 'var(--color-text-info)' }} />
+    </div>
+    <div style={{
+      padding: '10px 14px',
+      borderRadius: '14px 14px 14px 3px',
+      border: '0.5px solid var(--color-border-tertiary)',
+      background: 'var(--color-background-primary)',
+      display: 'flex', gap: 4, alignItems: 'center',
+    }}>
+      {[0, 0.15, 0.3].map((delay, i) => (
+        <span key={i} style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: 'var(--color-border-secondary)',
+          display: 'inline-block',
+          animation: 'tutorBounce 0.9s infinite',
+          animationDelay: `${delay}s`,
+        }} />
+      ))}
+    </div>
+  </div>
+);
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 const StudentTutor: React.FC<StudentTutorProps> = ({
   studentId,
@@ -28,40 +174,33 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
   prefillMessage,
   onPrefillApplied,
 }) => {
-  const [session, setSession] = useState<AiTutorSession | null>(null);
-  const [messages, setMessages] = useState<AiTutorMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
-  const [coachMode, setCoachMode] = useState<CoachMode>('socratic');
-  const [messageText, setMessageText] = useState('');
-  const [transcriptText, setTranscriptText] = useState('');
-  const [selectedStepTitle, setSelectedStepTitle] = useState<string>('');
-  const [taskGoal, setTaskGoal] = useState('');
-  const [reasoningCanvas, setReasoningCanvas] = useState('');
-  const [workspaceCheckpoints, setWorkspaceCheckpoints] = useState<WorkspaceCheckpoint[]>([]);
+  const [session,           setSession]           = useState<AiTutorSession | null>(null);
+  const [messages,          setMessages]          = useState<AiTutorMessage[]>([]);
+  const [loading,           setLoading]           = useState(false);
+  const [sending,           setSending]           = useState(false);
+  const [error,             setError]             = useState<string | null>(null);
+  const [coachMode,         setCoachMode]         = useState<CoachMode>('socratic');
+  const [messageText,       setMessageText]       = useState('');
+  const [attachment,        setAttachment]        = useState<AttachedImage | null>(null);
+  const [selectedStepTitle, setSelectedStepTitle] = useState('');
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const textInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef    = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
 
   const planForSubject = useMemo(() => {
-    if (!activePlan || !activePlan.plan?.subjectId) {
-      return null;
-    }
+    if (!activePlan?.plan?.subjectId) return null;
     return activePlan.plan.subjectId === selectedSubjectId ? activePlan : null;
   }, [activePlan, selectedSubjectId]);
 
-  const planSteps = useMemo(() => (
-    planForSubject?.plan?.steps || []
-  ), [planForSubject]);
+  const planSteps = useMemo(() => planForSubject?.plan?.steps || [], [planForSubject]);
 
   useEffect(() => {
     if (planSteps.length > 0) {
       setSelectedStepTitle((prev) => prev || planSteps[0]?.title || '');
-      return;
+    } else {
+      setSelectedStepTitle('');
     }
-    setSelectedStepTitle('');
   }, [planSteps]);
 
   useEffect(() => {
@@ -70,42 +209,22 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       setMessages([]);
       return;
     }
-
-    let isActive = true;
+    let active = true;
     setLoading(true);
     setError(null);
 
     (async () => {
-      const nextSession = await aiTutorService.getOrCreateSession(
-        studentId,
-        selectedSubjectId,
-        studentId
-      );
-      if (!isActive) {
-        return;
-      }
-      setSession(nextSession);
-      const chatMessages = await aiTutorService.listMessages(nextSession.id);
-      if (!isActive) {
-        return;
-      }
-      setMessages(chatMessages);
+      const s = await aiTutorService.getOrCreateSession(studentId, selectedSubjectId, studentId);
+      if (!active) return;
+      setSession(s);
+      const msgs = await aiTutorService.listMessages(s.id);
+      if (!active) return;
+      setMessages(msgs);
     })()
-      .catch((err: any) => {
-        if (!isActive) {
-          return;
-        }
-        setError(err?.message || 'Failed to load AI tutor session.');
-      })
-      .finally(() => {
-        if (isActive) {
-          setLoading(false);
-        }
-      });
+      .catch((err: any) => { if (active) setError(err?.message || 'Failed to load session.'); })
+      .finally(() => { if (active) setLoading(false); });
 
-    return () => {
-      isActive = false;
-    };
+    return () => { active = false; };
   }, [studentId, selectedSubjectId]);
 
   useEffect(() => {
@@ -113,61 +232,52 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
   }, [messages, sending]);
 
   useEffect(() => {
-    if (!prefillMessage || inputMode !== 'text') {
-      return;
-    }
-    setTaskGoal((prev) => (prev.trim().length > 0 ? prev : prefillMessage));
-    setMessageText((prev) => (prev.trim().length > 0 ? prev : prefillMessage));
+    if (!prefillMessage) return;
+    setMessageText((prev) => prev.trim() ? prev : prefillMessage);
     onPrefillApplied?.();
-    setTimeout(() => textInputRef.current?.focus(), 0);
-  }, [prefillMessage, inputMode, onPrefillApplied]);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [prefillMessage, onPrefillApplied]);
 
-  const buildGuidedPrompt = (baseRequest: string) => {
-    const focus = selectedStepTitle || taskGoal.trim() || 'this topic';
-    if (baseRequest === 'hint') {
-      return `Give me one hint for ${focus}. Ask a guiding question and do not give the full solution.`;
-    }
-    if (baseRequest === 'challenge') {
-      return `Challenge my reasoning on ${focus}. Point out possible gaps and ask me to defend each step.`;
-    }
-    return `Give me one practice question on ${focus}. Let me attempt first, then guide with hints only.`;
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageText(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
   };
 
-  const applyGuidedPrompt = (kind: 'hint' | 'challenge' | 'practice') => {
-    setInputMode('text');
-    setMessageText(buildGuidedPrompt(kind));
-    setTimeout(() => textInputRef.current?.focus(), 0);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const base64 = await fileToBase64(file);
+      const previewUrl = URL.createObjectURL(file);
+      setAttachment({ file, previewUrl, base64 });
+      textareaRef.current?.focus();
+    } catch {
+      setError('Could not read image file.');
+    }
+    e.target.value = '';
   };
 
-  const saveCheckpoint = () => {
-    const note = reasoningCanvas.trim();
-    if (!note) {
-      return;
-    }
-    const snapshot = note.split('\n').slice(0, 3).join(' ').trim();
-    if (!snapshot) {
-      return;
-    }
-    const checkpoint: WorkspaceCheckpoint = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      note: snapshot.length > 180 ? `${snapshot.slice(0, 177)}...` : snapshot,
-      createdAt: new Date().toISOString(),
-    };
-    setWorkspaceCheckpoints((prev) => [checkpoint, ...prev].slice(0, 8));
+  const removeAttachment = () => {
+    if (attachment) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+  };
+
+  const buildShortcutPrompt = (kind: 'hint' | 'challenge' | 'practice') => {
+    const focus = selectedStepTitle || 'this topic';
+    if (kind === 'hint')      return `Give me one hint for "${focus}". Ask a guiding question — don't give the full answer.`;
+    if (kind === 'challenge') return `Challenge my reasoning on "${focus}". Point out any gaps and ask me to defend each step.`;
+    return `Give me one practice question on "${focus}". Let me attempt it first, then guide me with hints only.`;
+  };
+
+  const applyShortcut = (kind: 'hint' | 'challenge' | 'practice') => {
+    setMessageText(buildShortcutPrompt(kind));
+    setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
   const handleSend = async () => {
-    if (!session || sending) {
-      return;
-    }
-
-    const trimmedText = messageText.trim();
-    const trimmedTranscript = transcriptText.trim();
-    const hasContent = inputMode === 'text' ? trimmedText : trimmedTranscript;
-
-    if (!hasContent) {
-      return;
-    }
+    const text = messageText.trim();
+    if (!session || sending || (!text && !attachment)) return;
 
     setSending(true);
     setError(null);
@@ -177,25 +287,25 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
         sessionId: session.id,
         senderId: studentId,
         senderRole: 'student',
-        contentType: inputMode === 'voice' ? 'voice' : 'text',
-        content: inputMode === 'text' ? trimmedText : undefined,
-        transcript: inputMode === 'voice' ? trimmedTranscript : undefined,
+        contentType: 'text',
+        content: text || undefined,
+        imageBase64: attachment?.base64,
         contentPayload: {
           coachingMode: coachMode,
           noDirectSolutions: true,
           expectation: 'Guide with probing questions, hints, and reflective prompts.',
-          taskGoal: taskGoal.trim() || null,
           selectedPlanStep: selectedStepTitle || null,
-          reasoningCanvas: reasoningCanvas.trim() || null,
+          hasImageAttachment: !!attachment,
         },
         autoReply: true,
       });
 
       setMessageText('');
-      setTranscriptText('');
+      removeAttachment();
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-      const chatMessages = await aiTutorService.listMessages(session.id);
-      setMessages(chatMessages);
+      const msgs = await aiTutorService.listMessages(session.id);
+      setMessages(msgs);
     } catch (err: any) {
       setError(err?.message || 'Failed to send message.');
     } finally {
@@ -203,317 +313,325 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const canSend = (messageText.trim().length > 0 || !!attachment) && !sending;
+
+  // ── Empty state ─────────────────────────────────────────────────────────────
   if (selectedSubjectId === 'all') {
     return (
-      <div className="bg-white rounded-2xl shadow-sm p-8">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
-            <Brain className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800">AI Study Coach</h2>
-            <p className="text-slate-500 mt-1">
-              Select a subject to open your guided coaching workspace.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-              {subjects.map((subject) => (
-                <span key={subject.id} className="px-2.5 py-1 rounded-full bg-slate-100">
-                  {subject.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-        <div className="h-6 w-56 bg-blue-100 rounded animate-pulse" />
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {[...Array(2)].map((_, idx) => (
-            <div key={idx} className="h-96 bg-blue-50 rounded-xl animate-pulse" />
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', minHeight: 400, gap: 12,
+        color: 'var(--color-text-secondary)', padding: '2rem', textAlign: 'center',
+      }}>
+        <Brain style={{ width: 40, height: 40, opacity: 0.3 }} />
+        <p style={{ fontSize: 15, margin: 0 }}>Select a subject to open your coaching workspace.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 4 }}>
+          {subjects.map((s) => (
+            <span key={s.id} style={{
+              fontSize: 12, padding: '3px 10px', borderRadius: 99,
+              border: '0.5px solid var(--color-border-tertiary)',
+              color: 'var(--color-text-secondary)',
+            }}>{s.name}</span>
           ))}
         </div>
       </div>
     );
   }
 
+  // ── Loading skeleton ─────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {[80, 55, 90, 60].map((w, i) => (
+          <div key={i} style={{
+            height: 14, width: `${w}%`, borderRadius: 6,
+            background: 'var(--color-background-secondary)',
+            animation: 'tutorPulse 1.5s infinite',
+          }} />
+        ))}
+      </div>
+    );
+  }
+
+  // ── Main layout ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" />
-          {error}
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 640 }}>
+      <style>{`
+        @keyframes tutorBounce {
+          0%,60%,100% { transform: translateY(0); }
+          30% { transform: translateY(-4px); }
+        }
+        @keyframes tutorPulse {
+          0%,100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+      `}</style>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.25fr] gap-6 min-h-[680px]">
-        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col gap-4 min-h-0">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Learning Workspace</h3>
-            <p className="text-sm text-slate-500">Define your goal, think aloud, and let AI coach your reasoning.</p>
+      {/* ── Top bar ───────────────────────────────────────────────────────── */}
+      <div style={{
+        padding: '11px 18px',
+        borderBottom: '0.5px solid var(--color-border-tertiary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, flexWrap: 'wrap', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 'var(--border-radius-md)',
+            background: 'var(--color-background-info)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Target style={{ width: 14, height: 14, color: 'var(--color-text-info)' }} />
           </div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <BookOpen className="w-4 h-4 text-blue-600" />
-                Plan focus
-              </div>
-              {planSteps.length > 0 && (
-                <select
-                  value={selectedStepTitle}
-                  onChange={(event) => setSelectedStepTitle(event.target.value)}
-                  className="px-3 py-2 text-xs border border-slate-200 rounded-md bg-white text-slate-700"
-                >
-                  {planSteps.map((step) => (
-                    <option key={step.title} value={step.title}>
-                      {step.title}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <p className="text-xs text-slate-500">
-              {planForSubject
-                ? planForSubject.plan.name
-                : 'No active subject plan. Set a task goal manually to continue.'}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs text-slate-500">Task Goal</label>
-            <textarea
-              value={taskGoal}
-              onChange={(event) => setTaskGoal(event.target.value)}
-              placeholder="e.g. I need to understand simultaneous equations using substitution."
-              className="w-full min-h-[88px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-2 flex-1 min-h-0 flex flex-col">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs text-slate-500">Reasoning Canvas</label>
-              <button
-                type="button"
-                onClick={saveCheckpoint}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+          <div style={{ minWidth: 0 }}>
+            <p style={{
+              fontSize: 10, color: 'var(--color-text-tertiary)', margin: 0,
+              fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>Current step</p>
+            {planSteps.length > 1 ? (
+              <select
+                value={selectedStepTitle}
+                onChange={(e) => setSelectedStepTitle(e.target.value)}
+                style={{
+                  fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)',
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: 280,
+                }}
               >
-                Save checkpoint
-              </button>
-            </div>
-            <textarea
-              value={reasoningCanvas}
-              onChange={(event) => setReasoningCanvas(event.target.value)}
-              placeholder="Write your attempt, assumptions, or partial steps here."
-              className="w-full flex-1 min-h-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-xs text-slate-500">Coaching shortcuts</div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => applyGuidedPrompt('hint')}
-                className="px-2.5 py-1.5 text-xs rounded-full border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
-              >
-                Ask for next hint
-              </button>
-              <button
-                type="button"
-                onClick={() => applyGuidedPrompt('challenge')}
-                className="px-2.5 py-1.5 text-xs rounded-full border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
-              >
-                Challenge my reasoning
-              </button>
-              <button
-                type="button"
-                onClick={() => applyGuidedPrompt('practice')}
-                className="px-2.5 py-1.5 text-xs rounded-full border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700"
-              >
-                Give a practice question
-              </button>
-            </div>
-          </div>
-
-          {workspaceCheckpoints.length > 0 && (
-            <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-              <div className="text-xs font-semibold text-slate-600">Recent checkpoints</div>
-              {workspaceCheckpoints.map((checkpoint) => (
-                <div key={checkpoint.id} className="text-xs text-slate-600 border-l-2 border-slate-200 pl-2">
-                  <div>{checkpoint.note}</div>
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    {new Date(checkpoint.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col min-h-0">
-          <div className="p-5 border-b border-slate-200 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">AI Coach Dialog</h3>
-                <p className="text-sm text-slate-500">The tutor guides your thinking; it should not hand over full solutions.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCoachMode('socratic')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
-                    coachMode === 'socratic'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                  }`}
-                >
-                  Socratic
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCoachMode('hint')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
-                    coachMode === 'hint'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                  }`}
-                >
-                  Hint-first
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setInputMode('text')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
-                  inputMode === 'text'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                }`}
-              >
-                Text
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode('voice')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
-                  inputMode === 'voice'
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                }`}
-              >
-                Voice transcript
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 bg-slate-50">
-            {messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-center text-slate-500 py-16">
-                <div>
-                  <Brain className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p>No messages yet. Start by describing your approach in the workspace.</p>
-                </div>
-              </div>
+                {planSteps.map((step) => (
+                  <option key={step.title} value={step.title}>{step.title}</option>
+                ))}
+              </select>
             ) : (
-              messages.map((message) => {
-                const isStudent = message.senderRole === 'student';
-                const isSystem = message.senderRole === 'system';
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm ${
-                        isStudent
-                          ? 'bg-blue-600 text-white'
-                          : isSystem
-                            ? 'bg-amber-50 border border-amber-200 text-amber-800'
-                            : 'bg-white border border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      {!isStudent && !isSystem && (
-                        <div className="mb-1 text-[11px] uppercase tracking-wide font-semibold text-slate-500 flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" /> Tutor guidance
-                        </div>
-                      )}
-                      {message.contentType === 'voice' && (
-                        <div className="flex items-center gap-2 text-xs mb-1 opacity-80">
-                          <Mic className="w-3 h-3" />
-                          Voice note
-                        </div>
-                      )}
-                      <p className="whitespace-pre-wrap">{message.content || message.transcript || 'Message saved.'}</p>
-                      <p className={`text-[11px] mt-1 ${isStudent ? 'text-blue-100' : 'text-slate-400'}`}>
-                        {new Date(message.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
+              <p style={{ fontSize: 13, fontWeight: 500, margin: 0, color: 'var(--color-text-primary)' }}>
+                {selectedStepTitle || planForSubject?.plan.name || 'Free study'}
+              </p>
             )}
-
-            {sending && (
-              <div className="flex justify-start">
-                <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce" />
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
           </div>
+        </div>
 
-          <div className="border-t border-slate-200 p-5 space-y-3 bg-white">
-            {inputMode === 'voice' && (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Mic className="w-4 h-4 text-blue-600" />
-                Paste voice transcript for now. The coach will still respond with guided prompts.
-              </div>
-            )}
-            <div className="relative">
-              {inputMode === 'text' ? (
-                <textarea
-                  rows={3}
-                  ref={textInputRef}
-                  value={messageText}
-                  onChange={(event) => setMessageText(event.target.value)}
-                  placeholder="Ask the coach for the next step, hint, or reasoning check..."
-                  className="w-full border border-slate-200 rounded-lg px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              ) : (
-                <textarea
-                  rows={3}
-                  value={transcriptText}
-                  onChange={(event) => setTranscriptText(event.target.value)}
-                  placeholder="Paste voice transcript..."
-                  className="w-full border border-slate-200 rounded-lg px-4 py-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={sending || (inputMode === 'text' ? !messageText.trim() : !transcriptText.trim())}
-                className="absolute right-2 bottom-2 inline-flex h-9 min-w-9 items-center justify-center rounded-full bg-blue-600 px-3 text-white hover:bg-blue-700 disabled:opacity-60"
-                aria-label="Send coaching prompt"
-              >
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
+        {/* Coach mode toggle */}
+        <div style={{
+          display: 'flex', gap: 3, background: 'var(--color-background-secondary)',
+          padding: 3, borderRadius: 'var(--border-radius-md)', flexShrink: 0,
+        }}>
+          {(['socratic', 'hint'] as CoachMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setCoachMode(mode)}
+              style={{
+                fontSize: 12, fontWeight: 500, padding: '4px 10px',
+                borderRadius: 6, border: 'none', cursor: 'pointer',
+                background: coachMode === mode ? 'var(--color-background-primary)' : 'transparent',
+                color: coachMode === mode ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+                boxShadow: coachMode === mode ? '0 0 0 0.5px var(--color-border-secondary)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              {mode === 'socratic' ? 'Socratic' : 'Hint-first'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Message thread ─────────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: '16px',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        {error && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 12px', borderRadius: 'var(--border-radius-md)',
+            border: '0.5px solid var(--color-border-danger)',
+            background: 'var(--color-background-danger)',
+            color: 'var(--color-text-danger)', fontSize: 13,
+          }}>
+            <AlertCircle style={{ width: 14, height: 14, flexShrink: 0 }} />
+            {error}
+          </div>
+        )}
+
+        {messages.length === 0 && !sending ? (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 10, textAlign: 'center', padding: '2rem 1rem',
+            color: 'var(--color-text-tertiary)',
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%',
+              border: '0.5px solid var(--color-border-tertiary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Sparkles style={{ width: 20, height: 20 }} />
             </div>
-            <p className="text-[11px] text-slate-500">
-              Coaching rule: the AI should ask guiding questions, hints, and reflection prompts instead of giving final solved answers.
+            <p style={{ fontSize: 14, margin: 0, maxWidth: 280 }}>
+              Describe where you're stuck — or attach a photo of your working and the coach will guide you from there.
             </p>
           </div>
-        </section>
+        ) : (
+          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+        )}
+
+        {sending && <TypingIndicator />}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* ── Input area ─────────────────────────────────────────────────────── */}
+      <div style={{
+        flexShrink: 0,
+        borderTop: '0.5px solid var(--color-border-tertiary)',
+        background: 'var(--color-background-primary)',
+      }}>
+        {/* Shortcut chips */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px 0' }}>
+          {SHORTCUT_CHIPS.map((chip) => (
+            <button
+              key={chip.kind}
+              type="button"
+              onClick={() => applyShortcut(chip.kind)}
+              style={{
+                fontSize: 12, padding: '4px 10px', borderRadius: 99,
+                border: '0.5px solid var(--color-border-tertiary)',
+                background: 'var(--color-background-secondary)',
+                color: 'var(--color-text-secondary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <Zap style={{ width: 11, height: 11 }} />
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Attachment preview strip */}
+        {attachment && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            margin: '8px 14px 0', padding: '7px 10px',
+            borderRadius: 'var(--border-radius-md)',
+            border: '0.5px solid var(--color-border-tertiary)',
+            background: 'var(--color-background-secondary)',
+          }}>
+            <img
+              src={attachment.previewUrl}
+              alt="attachment preview"
+              style={{
+                width: 36, height: 36, borderRadius: 5, objectFit: 'cover',
+                border: '0.5px solid var(--color-border-tertiary)', flexShrink: 0,
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{
+                fontSize: 12, fontWeight: 500, margin: 0,
+                color: 'var(--color-text-primary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {attachment.file.name}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', margin: 0 }}>
+                Image · ready to send
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={removeAttachment}
+              aria-label="Remove attachment"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                borderRadius: 4, color: 'var(--color-text-tertiary)',
+                display: 'flex', alignItems: 'center',
+              }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+        )}
+
+        {/* Composer row */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end',
+          margin: '8px 14px',
+          border: '0.5px solid var(--color-border-secondary)',
+          borderRadius: 10, overflow: 'hidden',
+          background: 'var(--color-background-primary)',
+        }}>
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+
+          {/* Paperclip button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach a photo of your working"
+            style={{
+              width: 40, minHeight: 40, border: 'none', background: 'none',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: attachment ? 'var(--color-text-info)' : 'var(--color-text-tertiary)',
+              flexShrink: 0, paddingBottom: 1, transition: 'color 0.15s',
+            }}
+          >
+            <Paperclip style={{ width: 16, height: 16 }} />
+          </button>
+
+          {/* Vertical divider */}
+          <div style={{
+            width: '0.5px', background: 'var(--color-border-tertiary)',
+            alignSelf: 'stretch', margin: '6px 0', flexShrink: 0,
+          }} />
+
+          {/* Textarea */}
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={messageText}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              attachment
+                ? 'Add a message with your photo (optional)…'
+                : "Ask the coach, describe where you're stuck, or attach a photo of your working…"
+            }
+            style={{
+              flex: 1, resize: 'none', fontSize: 14, lineHeight: 1.55,
+              padding: '9px 10px', border: 'none', background: 'transparent',
+              color: 'var(--color-text-primary)', outline: 'none',
+              minHeight: 40, maxHeight: 120, fontFamily: 'inherit',
+            }}
+          />
+
+          {/* Send button */}
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!canSend}
+            aria-label="Send message"
+            style={{
+              width: 40, minHeight: 40, border: 'none', background: 'none',
+              cursor: canSend ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: canSend ? 'var(--color-text-info)' : 'var(--color-text-tertiary)',
+              flexShrink: 0, paddingBottom: 1, transition: 'color 0.15s',
+            }}
+          >
+            {sending
+              ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+              : <Send style={{ width: 15, height: 15 }} />}
+          </button>
+        </div>
       </div>
     </div>
   );

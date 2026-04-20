@@ -58,21 +58,50 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
     }
   }, [isOpen, submissionId]);
 
+// const fetchData = async () => {
+//   try {
+//     setLoading(true);
+
+//     // 1. Fetch the specific Result using the ID passed from the dashboard
+//     // This contains student info, assessment info, and AI suggestions
+//     const currentResult = await assessmentService.getResultById(submissionId);
+    
+//     setResult(currentResult);
+//     setEditedScore(currentResult.actualMark || currentResult.aiGradingSuggestion?.totalScore || 0);
+//     setTeacherFeedback(currentResult.teacherFeedback || '');
+
+//     // 2. Use the submission ID found inside the Result to fetch the raw answers
+//     if (currentResult.submission) {
+//       const submissionData = await submissionService.getSubmissionReviewDetail(currentResult.submission);
+//       setSubmission(submissionData);
+//     }
+
+//   } catch (error) {
+//     console.error('Surgical Fetch Error:', error);
+//     toast.error('Failed to load grading details');
+//   } finally {
+//     setLoading(false);
+//   }
+// };
+
 const fetchData = async () => {
   try {
     setLoading(true);
 
-    // 1. Fetch the specific Result using the ID passed from the dashboard
-    // This contains student info, assessment info, and AI suggestions
     const currentResult = await assessmentService.getResultById(submissionId);
-    
     setResult(currentResult);
     setEditedScore(currentResult.actualMark || currentResult.aiGradingSuggestion?.totalScore || 0);
     setTeacherFeedback(currentResult.teacherFeedback || '');
 
-    // 2. Use the submission ID found inside the Result to fetch the raw answers
+    // CHECK IF SUBMISSION IS AN OBJECT OR STRING
     if (currentResult.submission) {
-      const submissionData = await submissionService.getSubmissionReviewDetail(currentResult.submission);
+      // Use the _id if it's a populated object, otherwise use it directly if it's a string
+      const subId = typeof currentResult.submission === 'object' 
+        ? currentResult.submission._id 
+        : currentResult.submission;
+
+      // Now subId is definitely a string
+      const submissionData = await submissionService.getSubmissionReviewDetail(subId);
       setSubmission(submissionData);
     }
 
