@@ -60,6 +60,29 @@ getResults: async (
       body: JSON.stringify(updateData),
     });
   },
+  deleteAssessment: async (id: string): Promise<void> => {
+    await fetchData(`/assessments/${id}`, { method: 'DELETE' });
+  },
+
+  getAssessmentsOverview: async (filters?: { courseId?: string; status?: string }): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (filters?.courseId) params.append('courseId', filters.courseId);
+    if (filters?.status)   params.append('status',   filters.status);
+    const qs = params.toString();
+    const data = await fetchData<any[]>(`/assessments/overview${qs ? `?${qs}` : ''}`);
+    return Array.isArray(data) ? data : [];
+  },
+
+  // Lightweight mark/feedback update used by the detail page
+  updateResult: async (resultId: string, data: { actualMark?: number; teacherFeedback?: string }): Promise<any> => {
+    return fetchData(`/assessments/${resultId}/confirm-grade`, {
+      method: 'POST',
+      body: JSON.stringify({
+        finalScores: data.actualMark != null ? { total: data.actualMark } : {},
+        teacherFeedback: data.teacherFeedback ?? '',
+      }),
+    });
+  },
   getSubmissionResult: async (submissionId: string): Promise<any> => {
     return fetchData(`/assessments/results/by-submission/${submissionId}`);
   },

@@ -1,15 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle, 
-  TrendingUp, 
-  Users,
-  BarChart3,
-  Search,
-  ArrowLeft
-} from 'lucide-react';
+import { Search, ArrowLeft, Eye, CheckCircle } from 'lucide-react';
 import { submissionService, assessmentService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import SubmissionReviewModal from './SubmissionReviewModal';
@@ -24,10 +15,10 @@ interface GradingStats {
 }
 
 interface PendingResult {
-  _id: string; 
+  _id: string;
   student: {
     _id: string;
-    id: string; 
+    id: string;
     firstName: string;
     lastName: string;
   };
@@ -37,7 +28,7 @@ interface PendingResult {
     totalPoints: number;
     type: string;
   };
-  submission: any; // The populated submission object
+  submission: any;
   status: 'Submitted' | 'Pending AI Grading' | 'Pending Teacher Review' | 'Released';
   gradeType: 'MCQ Graded' | 'AI Suggested' | 'Manual' | 'Teacher Reviewed' | 'AI + MCQ Graded';
   aiGradingSuggestion: {
@@ -49,6 +40,86 @@ interface PendingResult {
   submittedAt: string;
 }
 
+const GRADE_TYPE_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+  'AI Suggested':     { bg: '#f3e8ff', text: '#6d28d9', label: 'AI' },
+  'AI + MCQ Graded':  { bg: '#ede9fe', text: '#5b21b6', label: 'AI + MCQ' },
+  'MCQ Graded':       { bg: '#dbeafe', text: '#1e40af', label: 'MCQ' },
+  'Teacher Reviewed': { bg: '#dcfce7', text: '#166534', label: 'Reviewed' },
+  'Manual':           { bg: '#fef3c7', text: '#92400e', label: 'Manual' },
+  'Standard':         { bg: '#f1f5f9', text: '#475569', label: 'Standard' },
+};
+
+const STATUS_BADGE: Record<string, { text: string; dot: string }> = {
+  'Pending Teacher Review': { text: '#92400e', dot: '#f59e0b' },
+  'Released':               { text: '#065f46', dot: '#10b981' },
+  'Submitted':              { text: '#1e40af', dot: '#3b82f6' },
+  'Pending AI Grading':     { text: '#6d28d9', dot: '#7c3aed' },
+};
+
+const ROW_BORDER_COLOR: Record<string, string> = {
+  'Pending Teacher Review': '#f59e0b',
+  'Released':               '#10b981',
+  'Submitted':              '#93c5fd',
+  'Pending AI Grading':     '#7c3aed',
+};
+
+const fmtDate = (v: string) =>
+  new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const fmtTime = (v: string) =>
+  new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const ConfidenceRing: React.FC<{ value: number }> = ({ value }) => {
+  const pct = Math.round(value * 100);
+  const r = 14;
+  const circumference = 2 * Math.PI * r;
+  const stroke = pct >= 80 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#ef4444';
+  const dash = (pct / 100) * circumference;
+  if (value === 0) return <span style={{ fontSize: 11, color: '#94a3b8' }}>—</span>;
+  return (
+    <svg width={36} height={36} viewBox="0 0 36 36">
+      <circle cx="18" cy="18" r={r} fill="none" stroke="#f1f5f9" strokeWidth="4" />
+      <circle
+        cx="18" cy="18" r={r} fill="none" stroke={stroke} strokeWidth="4"
+        strokeDasharray={`${dash} ${circumference}`} strokeLinecap="round"
+        transform="rotate(-90 18 18)"
+      />
+      <text x="18" y="22" textAnchor="middle" fontSize="9" fontWeight="700" fill={stroke}>
+        {pct}%
+      </text>
+    </svg>
+  );
+};
+
+const StatBar: React.FC<{ stats: GradingStats; pendingCount: number }> = ({ stats, pendingCount }) => {
+  const items = [
+    { label: 'In queue',        value: stats.totalSubmissions,              color: '#334155' },
+    { label: 'Needs review',    value: pendingCount,                        color: '#f59e0b' },
+    { label: 'Released',        value: stats.teacherReviewedCount,          color: '#10b981' },
+    { label: 'MCQ auto-graded', value: stats.autoGradedCount,              color: '#6366f1' },
+    { label: 'Avg score',       value: `${Math.round(stats.averageScore)}%`, color: stats.averageScore >= 60 ? '#10b981' : '#ef4444' },
+    { label: 'AI trust',        value: `${stats.averageConfidence}%`,      color: stats.averageConfidence >= 75 ? '#7c3aed' : '#f59e0b' },
+  ];
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'stretch', gap: 0,
+      background: 'white', border: '1.5px solid #e2e8f0', borderRadius: 10,
+      padding: '10px 20px', flexShrink: 0, flexWrap: 'wrap',
+    }}>
+      {items.map((s, i) => (
+        <React.Fragment key={s.label}>
+          {i > 0 && <div style={{ width: 1, background: '#e2e8f0', margin: '0 16px', alignSelf: 'stretch' }} />}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 58 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3, fontWeight: 500, whiteSpace: 'nowrap' }}>{s.label}</div>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+const PAGE_SIZE = 8;
+
 const GradingDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<GradingStats | null>(null);
@@ -58,6 +129,7 @@ const GradingDashboard: React.FC = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
   const { selectedCourse } = useAuth();
 
   useEffect(() => {
@@ -75,40 +147,35 @@ const GradingDashboard: React.FC = () => {
       ]);
 
       setStats(statsData);
-      
-      // LOG 1: Check the assessments list
       console.log("🚀 [Dashboard] Assessments list for course:", assessments);
 
-      const assessmentIds = assessments.map(a => a._id);
+      const assessmentIds = assessments.map((a: any) => a._id);
 
       if (assessmentIds.length > 0) {
         const resultsArrays = await Promise.all(
-          assessmentIds.map(id => 
-            assessmentService.getResults(id, { 
-              status: filterStatus === 'all' ? undefined : filterStatus 
+          assessmentIds.map((id: string) =>
+            assessmentService.getResults(id, {
+              status: filterStatus === 'all' ? undefined : filterStatus
             })
           )
         );
 
         const flattenedResults = resultsArrays.flat();
-
-        // LOG 2: Check raw results data before de-duplication
         console.log("🚀 [Dashboard] Raw Flattened Results:", flattenedResults);
 
         const uniqueResults = Array.from(
-          new Map(flattenedResults.map(item => [item._id, item])).values()
+          new Map(flattenedResults.map((item: any) => [item._id, item])).values()
         );
 
-        // LOG 3: Specifically check the assessment object inside the first result
         if (uniqueResults.length > 0) {
           console.log("🚀 [Dashboard] Sample Result Assessment Details:", {
-            name: uniqueResults[0].assessment?.name,
-            totalPoints: uniqueResults[0].assessment?.totalPoints,
-            rawAssessmentObj: uniqueResults[0].assessment
+            name: (uniqueResults[0] as any).assessment?.name,
+            totalPoints: (uniqueResults[0] as any).assessment?.totalPoints,
+            rawAssessmentObj: (uniqueResults[0] as any).assessment
           });
         }
 
-        const sortedResults = uniqueResults.sort((a, b) => 
+        const sortedResults = (uniqueResults as any[]).sort((a, b) =>
           new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
         );
 
@@ -116,7 +183,6 @@ const GradingDashboard: React.FC = () => {
       } else {
         setPendingSubmissions([]);
       }
-
     } catch (error) {
       console.error('Error fetching grading data:', error);
       toast.error('Failed to load grading queue');
@@ -126,250 +192,346 @@ const GradingDashboard: React.FC = () => {
   };
 
   const handleReviewSubmission = (resultId: string) => {
-    // LOG 4: Check what ID we are passing to the modal
     console.log("🚀 [Dashboard] Opening Modal for Result ID:", resultId);
     setSelectedSubmission(resultId);
     setShowReviewModal(true);
   };
 
-  const filteredSubmissions = pendingSubmissions.filter(submission => {
-    const studentName = `${submission.student?.firstName || ''} ${submission.student?.lastName || ''}`.toLowerCase();
-    const assessmentName = (submission.assessment?.name || '').toLowerCase();
-    const query = searchQuery.toLowerCase();
-    
-    return searchQuery === '' || studentName.includes(query) || assessmentName.includes(query);
-  });
+  const filteredSubmissions = useMemo(() => {
+    return pendingSubmissions.filter(submission => {
+      const studentName = `${submission.student?.firstName || ''} ${submission.student?.lastName || ''}`.toLowerCase();
+      const assessmentName = (submission.assessment?.name || '').toLowerCase();
+      const studentId = (submission.student?.id || '').toLowerCase();
+      const query = searchQuery.toLowerCase();
+      return searchQuery === '' || studentName.includes(query) || assessmentName.includes(query) || studentId.includes(query);
+    });
+  }, [pendingSubmissions, searchQuery]);
 
-  const getStatusColor = (status: string) => {
-    const s = status.toLowerCase();
-    if (s.includes('released')) return 'text-green-600 bg-green-100';
-    if (s.includes('review')) return 'text-yellow-600 bg-yellow-100';
-    if (s.includes('pending')) return 'text-blue-600 bg-blue-100';
-    return 'text-gray-600 bg-gray-100';
-  };
+  const pendingCount = pendingSubmissions.filter(s => s.status === 'Pending Teacher Review').length;
+  const totalPages = Math.ceil(filteredSubmissions.length / PAGE_SIZE);
+  const paginatedSubmissions = filteredSubmissions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const getConfidenceColor = (confidence: number) => {
-    const val = confidence * 100;
-    if (val >= 90) return 'text-green-600';
-    if (val >= 70) return 'text-blue-600';
-    if (val >= 50) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  const FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'Pending Teacher Review', label: `Needs review (${pendingCount})` },
+    { key: 'Released', label: 'Released' },
+    { key: 'Submitted', label: 'Submitted' },
+  ];
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="h-[calc(100vh-160px)] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center gap-4 mb-2">
-            <button 
-              onClick={() => navigate('/dashboard')}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
+    <div className="h-[calc(100vh-160px)]" style={{ display: 'flex', flexDirection: 'column', padding: '14px 18px', gap: 10, fontFamily: 'Inter, system-ui, sans-serif', background: '#f8fafc', overflow: 'hidden' }}>
+      <style>{`
+        @keyframes fadeInRow {
+          from { opacity: 0; transform: translateY(3px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .grading-row { animation: fadeInRow 0.15s ease; }
+        .grading-row:hover { background: #f8fafc !important; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, borderRadius: 8,
+            border: '1.5px solid #e2e8f0', background: 'white',
+            cursor: 'pointer', color: '#475569', flexShrink: 0,
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+          onMouseOut={e => (e.currentTarget.style.background = 'white')}
+        >
+          <ArrowLeft size={15} />
+        </button>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Grading Dashboard</h2>
+          <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, marginTop: 1 }}>
+            Review AI-assisted grading suggestions and release results to students
+          </p>
+        </div>
+      </div>
+
+      {/* Stat bar */}
+      {stats && <StatBar stats={stats} pendingCount={pendingCount} />}
+
+      {/* Toolbar */}
+      <div style={{
+        background: 'white', border: '1.5px solid #e2e8f0', borderRadius: 10,
+        padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => { setFilterStatus(f.key); setPage(1); }}
+              style={{
+                padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                border: '1.5px solid', cursor: 'pointer', whiteSpace: 'nowrap',
+                fontFamily: 'inherit', transition: 'all 0.12s',
+                ...(filterStatus === f.key
+                  ? { background: '#2563eb', color: 'white', borderColor: '#2563eb' }
+                  : { background: 'white', borderColor: '#e2e8f0', color: '#475569' }),
+              }}
             >
-              <ArrowLeft className="h-5 w-5" />
+              {f.label}
             </button>
-            <h2 className="text-xl font-semibold text-gray-800">Grading Dashboard</h2>
-          </div>
-          <p className="text-sm text-gray-600 ml-14">Review AI-assisted grading suggestions and release results to students</p>
+          ))}
         </div>
 
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="bg-white rounded-lg shadow p-3">
-              <div className="flex items-center">
-                <FileText className="w-6 h-6 text-blue-500 mr-2" />
-                <div>
-                  <div className="text-xl font-bold text-gray-800">{stats.totalSubmissions}</div>
-                  <div className="text-xs text-gray-500">Submissions</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-3">
-              <div className="flex items-center">
-                <CheckCircle className="w-6 h-6 text-green-500 mr-2" />
-                <div>
-                  <div className="text-xl font-bold text-gray-800">{stats.autoGradedCount}</div>
-                  <div className="text-xs text-gray-500">MCQ Graded</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-3">
-              <div className="flex items-center">
-                <Users className="w-6 h-6 text-purple-500 mr-2" />
-                <div>
-                  <div className="text-xl font-bold text-gray-800">{stats.teacherReviewedCount}</div>
-                  <div className="text-xs text-gray-500">Released</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-3">
-              <div className="flex items-center">
-                <BarChart3 className="w-6 h-6 text-orange-500 mr-2" />
-                <div>
-                  <div className="text-xl font-bold text-gray-800">{Math.round(stats.averageScore)}%</div>
-                  <div className="text-xs text-gray-500">Avg %</div>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-3">
-              <div className="flex items-center">
-                <TrendingUp className="w-6 h-6 text-cyan-500 mr-2" />
-                <div>
-                  <div className="text-xl font-bold text-gray-800">{stats.averageConfidence}%</div>
-                  <div className="text-xs text-gray-500">AI Trust</div>
-                </div>
-              </div>
-            </div>
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+          <div style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}>
+            <Search size={13} />
           </div>
-        )}
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-3 flex flex-col md:flex-row gap-3 items-center justify-between">
-          <div className="flex gap-2">
-            {['all', 'Pending Teacher Review', 'Released', 'Submitted'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  filterStatus === status ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {status === 'all' ? 'Full Queue' : status}
-              </button>
-            ))}
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search student or assessment..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <input
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
+            placeholder="Search student or assessment…"
+            style={{
+              border: '1.5px solid #e2e8f0', borderRadius: 8,
+              padding: '6px 10px 6px 28px', fontSize: 12,
+              color: '#334155', width: 230, outline: 'none', fontFamily: 'inherit',
+              transition: 'border-color 0.12s, box-shadow 0.12s',
+            }}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = '#2563eb';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)';
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          />
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <th className="px-6 py-3">Student</th>
-                <th className="px-6 py-3">Assessment</th>
-                <th className="px-6 py-3">Score (AI)</th>
-                <th className="px-6 py-3">Confidence</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Submitted</th>
-                <th className="px-6 py-3">Actions</th>
+        <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+          <b style={{ color: '#334155' }}>{filteredSubmissions.length}</b> results
+        </span>
+      </div>
+
+      {/* Table */}
+      <div style={{ flex: 1, minHeight: 0, background: 'white', border: '1.5px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'auto' }}>
+          <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0' }}>
+                {['Student', 'Assessment', 'Score', 'AI Confidence', 'Status', 'Submitted', 'Action'].map((h, i) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: '9px 14px', fontSize: 10, fontWeight: 700, color: '#94a3b8',
+                      textTransform: 'uppercase', letterSpacing: '0.05em',
+                      textAlign: i === 6 ? 'center' : 'left', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-<tbody className="bg-white divide-y divide-gray-200">
-  {filteredSubmissions.map((result, index) => (
-    <tr key={`${result._id}-${index}`} className="hover:bg-gray-50 transition-colors">
-      <td className="px-6 py-4">
-        <div className="text-sm font-medium text-gray-900">
-          {result.student?.firstName} {result.student?.lastName}
-        </div>
-        <div className="text-xs text-slate-500 font-mono">{result.student?.id}</div>
-      </td>
-      
-      <td className="px-6 py-4">
-        <div className="text-sm text-gray-900 font-medium">{result.assessment?.name}</div>
-        {/* NEW: Grading Type Badge */}
-        <div className="flex gap-1 mt-1">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
-            result.gradeType?.includes('AI') 
-              ? 'bg-purple-100 text-purple-700 border border-purple-200' 
-              : 'bg-blue-100 text-blue-700 border border-blue-200'
-          }`}>
-            {result.gradeType || 'Standard'}
-          </span>
-        </div>
-      </td>
+            <tbody>
+              {paginatedSubmissions.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                    No submissions match your filters.
+                  </td>
+                </tr>
+              ) : paginatedSubmissions.map((result, index) => {
+                const isReleased = result.status === 'Released';
+                const score = isReleased ? result.actualMark : result.aiGradingSuggestion?.totalScore;
+                const pct = score != null ? Math.round((score / result.assessment?.totalPoints) * 100) : null;
+                const gt = GRADE_TYPE_STYLE[result.gradeType] ?? GRADE_TYPE_STYLE['Standard'];
+                const sb = STATUS_BADGE[result.status] ?? STATUS_BADGE['Submitted'];
+                const borderColor = ROW_BORDER_COLOR[result.status] ?? '#e2e8f0';
 
-      <td className="px-6 py-4">
-        <div className="text-sm font-bold text-slate-900">
-          {result.status === 'Released' 
-            ? `${Math.round(result.actualMark || 0)} / ${result.assessment?.totalPoints || 0}`
-            : `${Math.round(result.aiGradingSuggestion?.totalScore || 0)} / ${result.assessment?.totalPoints || 0}`}
-        </div>
-        {result.status !== 'Released' && (
-          <div className="text-[10px] text-amber-600 font-bold uppercase tracking-tighter">AI Suggestion</div>
-        )}
-      </td>
+                return (
+                  <tr
+                    key={`${result._id}-${index}`}
+                    className="grading-row"
+                    style={{
+                      borderBottom: '1px solid #f1f5f9',
+                      borderLeft: `3px solid ${borderColor}`,
+                      transition: 'background 0.1s',
+                    }}
+                  >
+                    {/* Student */}
+                    <td style={{ padding: '9px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                        {result.student?.firstName} {result.student?.lastName}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace', marginTop: 1 }}>
+                        {result.student?.id}
+                      </div>
+                    </td>
 
-      <td className="px-6 py-4">
-        <div className="flex flex-col">
-          <span className={`text-sm font-bold ${getConfidenceColor(result.aiGradingSuggestion?.confidenceScore || 0)}`}>
-            {Math.round((result.aiGradingSuggestion?.confidenceScore || 0) * 100)}%
-          </span>
-          <div className="w-16 h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
-            <div 
-              className={`h-full ${result.aiGradingSuggestion?.confidenceScore > 0.8 ? 'bg-green-500' : 'bg-amber-500'}`}
-              style={{ width: `${(result.aiGradingSuggestion?.confidenceScore || 0) * 100}%` }}
-            />
-          </div>
-        </div>
-      </td>
+                    {/* Assessment */}
+                    <td style={{ padding: '9px 14px', maxWidth: 210 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {result.assessment?.name}
+                      </div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                        background: gt.bg, color: gt.text, display: 'inline-block', marginTop: 3,
+                      }}>
+                        {gt.label}
+                      </span>
+                    </td>
 
-      <td className="px-6 py-4">
-        <span className={`px-2.5 py-1 text-[10px] font-black rounded-full uppercase border ${getStatusColor(result.status)}`}>
-          {result.status}
-        </span>
-      </td>
+                    {/* Score */}
+                    <td style={{ padding: '9px 14px' }}>
+                      {score != null ? (
+                        <div>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: (pct ?? 0) >= 60 ? '#065f46' : '#991b1b' }}>
+                            {Math.round(score)}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}> / {result.assessment?.totalPoints}</span>
+                          {!isReleased && (
+                            <div style={{ fontSize: 9, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 1 }}>
+                              AI suggestion
+                            </div>
+                          )}
+                        </div>
+                      ) : <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>}
+                    </td>
 
-      <td className="px-6 py-4 text-xs text-slate-500 font-medium">
-        {new Date(result.submittedAt).toLocaleDateString()}
-        <div className="text-[10px] text-slate-400">{new Date(result.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-      </td>
+                    {/* Confidence */}
+                    <td style={{ padding: '9px 14px' }}>
+                      <ConfidenceRing value={result.aiGradingSuggestion?.confidenceScore || 0} />
+                    </td>
 
-      <td className="px-6 py-4">
-        <button
-          onClick={() => handleReviewSubmission(result._id)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
-            result.status === 'Released'
-              ? 'text-slate-600 hover:bg-slate-100'
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-          }`}
-        >
-          {result.status === 'Released' ? (
-            <><Search className="w-4 h-4" /> View</>
-          ) : (
-            <><CheckCircle className="w-4 h-4" /> Grade</>
-          )}
-        </button>
-      </td>
-    </tr>
-  ))}
-</tbody>
+                    {/* Status */}
+                    <td style={{ padding: '9px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: sb.dot, flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: sb.text, whiteSpace: 'nowrap' }}>
+                          {result.status}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Submitted */}
+                    <td style={{ padding: '9px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#475569', fontWeight: 500 }}>{fmtDate(result.submittedAt)}</div>
+                      <div style={{ fontSize: 10, color: '#94a3b8' }}>{fmtTime(result.submittedAt)}</div>
+                    </td>
+
+                    {/* Action */}
+                    <td style={{ padding: '9px 14px', textAlign: 'center' }}>
+                      {isReleased ? (
+                        <button
+                          onClick={() => handleReviewSubmission(result._id)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            background: '#f8fafc', color: '#475569',
+                            border: '1.5px solid #e2e8f0', borderRadius: 7,
+                            padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                          onMouseOut={e => (e.currentTarget.style.background = '#f8fafc')}
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleReviewSubmission(result._id)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            background: '#2563eb', color: 'white',
+                            border: 'none', borderRadius: 7,
+                            padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
+                          }}
+                          onMouseOver={e => (e.currentTarget.style.background = '#1d4ed8')}
+                          onMouseOut={e => (e.currentTarget.style.background = '#2563eb')}
+                        >
+                          <CheckCircle size={12} /> Grade
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
           </table>
-          {filteredSubmissions.length === 0 && (
-            <div className="text-center py-10 text-gray-500">No submissions found in this queue.</div>
-          )}
         </div>
 
-        {showReviewModal && selectedSubmission && (
-          <SubmissionReviewModal
-            isOpen={showReviewModal}
-            onClose={() => {
-              setShowReviewModal(false);
-              setSelectedSubmission(null);
-            }}
-            submissionId={selectedSubmission}
-            onReviewComplete={fetchData}
-          />
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ borderTop: '1px solid #e2e8f0', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>
+              Showing{' '}
+              <b style={{ color: '#334155' }}>
+                {Math.min((page - 1) * PAGE_SIZE + 1, filteredSubmissions.length)}–{Math.min(page * PAGE_SIZE, filteredSubmissions.length)}
+              </b>
+              {' '}of{' '}
+              <b style={{ color: '#334155' }}>{filteredSubmissions.length}</b>
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                  background: 'white', border: '1.5px solid #e2e8f0', color: '#334155',
+                  cursor: page === 1 ? 'default' : 'pointer', opacity: page === 1 ? 0.4 : 1,
+                  fontFamily: 'inherit', transition: 'all 0.12s',
+                }}
+              >
+                ← Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  style={{
+                    width: 28, height: 28, borderRadius: 6,
+                    border: `1.5px solid ${page === p ? '#2563eb' : '#e2e8f0'}`,
+                    background: page === p ? '#eff6ff' : 'white',
+                    color: page === p ? '#2563eb' : '#475569',
+                    fontSize: 12, fontWeight: page === p ? 700 : 400,
+                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.1s',
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                  background: 'white', border: '1.5px solid #e2e8f0', color: '#334155',
+                  cursor: page === totalPages ? 'default' : 'pointer', opacity: page === totalPages ? 0.4 : 1,
+                  fontFamily: 'inherit', transition: 'all 0.12s',
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
         )}
       </div>
+
+      {showReviewModal && selectedSubmission && (
+        <SubmissionReviewModal
+          isOpen={showReviewModal}
+          onClose={() => {
+            setShowReviewModal(false);
+            setSelectedSubmission(null);
+          }}
+          submissionId={selectedSubmission}
+          onReviewComplete={fetchData}
+        />
+      )}
     </div>
   );
 };

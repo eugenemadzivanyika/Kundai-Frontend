@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, ChevronRight, ChevronLeft, X,
-  BookOpen, Sparkles, CheckCircle, Search, ChevronDown, GraduationCap,
+  BookOpen, Sparkles, CheckCircle, Search, ChevronDown, GraduationCap, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Question, Assessment, CourseAttribute, AssessmentType, Course } from '@/types';
@@ -161,7 +161,26 @@ const defaultFormData = {
     setFormData(defaultFormData);
   };
 
+  // Deletes the saved draft then closes — called by Discard button and X during review
+  const handleDiscard = async () => {
+    if (fullAssessment?._id) {
+      try {
+        await assessmentService.deleteAssessment(fullAssessment._id);
+        toast.success('Draft assessment discarded.');
+      } catch {
+        toast.error('Could not delete draft — you may need to remove it manually.');
+      }
+    }
+    resetModal();
+    onClose();
+  };
+
   const handleClose = () => {
+    // If a draft was saved to the DB, delete it on close
+    if (fullAssessment?._id) {
+      handleDiscard();
+      return;
+    }
     resetModal();
     onClose();
   };
@@ -323,6 +342,7 @@ setIsGenerating(true);
   };
 
   // ── Finalize / publish ────────────────────────────────────────────────────────
+  // ✅ AFTER — clear fullAssessment first so handleClose() just resets cleanly
   const finalizeAssessment = async () => {
     if (!fullAssessment) return;
     try {
@@ -333,7 +353,9 @@ setIsGenerating(true);
       });
       onAssessmentCreated(updated);
       toast.success('Assessment finalized and published!');
-      handleClose();
+      setFullAssessment(null); // ← clear BEFORE closing so handleClose doesn't discard
+      resetModal();
+      onClose();
     } catch {
       toast.error('Failed to save assessment.');
     } finally {
@@ -669,7 +691,7 @@ setIsGenerating(true);
             <Button
               variant="outline"
               onClick={handleBack}
-              disabled={step === 'course-selection' || isGenerating}
+              disabled={step === 'course-selection' || isGenerating || step === 'review'}
             >
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
             </Button>
@@ -685,6 +707,18 @@ setIsGenerating(true);
                 <span className="text-xs text-emerald-600 font-medium">✓ Mix looks good</span>
               );
             })()}
+
+            {/* Discard button — only shown on review step where a draft already exists in the DB */}
+            {step === 'review' && (
+              <Button
+                variant="outline"
+                onClick={handleDiscard}
+                disabled={isSubmitting}
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+              >
+                <Trash2 className="w-4 h-4 mr-1" /> Discard Draft
+              </Button>
+            )}
 
             <Button
               onClick={handleNext}

@@ -30,21 +30,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onUploadClick, onCreateAssignment, re
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const actions = [
-    { id: 'upload', label: 'Upload Resource', icon: UploadCloud, onClick: onUploadClick },
+    // { id: 'upload', label: 'Upload Resource', icon: UploadCloud, onClick: onUploadClick },
     { id: 'create-assignment', label: 'Create Assignment', icon: CreateAssignmentIcon, onClick: onCreateAssignment },
     { id: 'mark-assignment', label: 'Mark Assignment', icon: CheckCircle, onClick: () => {} },
     { id: 'dev-plan', label: 'Development Plans', icon: Target, onClick: () => {} }
   ];
+
+  const visibleUploads = recentUploads.slice(0, 4);
 
   return (
     <motion.aside
         // ✨ UX Improvement: Sidebar is now animated and collapsible
         animate={{ width: isCollapsed ? '5rem' : '16rem' }}
         transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="bg-white border-r border-slate-200 flex flex-col h-screen"
+        className="bg-white border-r border-slate-200 flex flex-col h-full"
     >
-      <div className={clsx("p-4 border-b border-slate-200 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
-        {!isCollapsed && <h2 className="text-lg font-bold text-slate-800">Actions</h2>}
+      <div className={clsx("px-3 py-2.5 border-b border-slate-200 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+        {!isCollapsed && <h2 className="text-sm font-bold text-slate-800">Actions</h2>}
         <button onClick={() => setIsCollapsed(!isCollapsed)} className="p-1 rounded-md hover:bg-slate-100">
           <Menu className="h-5 w-5 text-slate-600" />
         </button>
@@ -84,8 +86,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onUploadClick, onCreateAssignment, re
             {isCollapsed ? "..." : "Recent Uploads"}
           </h3>
           <div className="space-y-1">
-            {recentUploads.length > 0 ? recentUploads.map(upload => (
-                <div key={upload._id} className={clsx("flex items-center gap-3 p-2.5 text-sm rounded-md", isCollapsed && "justify-center")} title={isCollapsed ? `${upload.name} in ${upload.course.name}` : undefined}>
+            {visibleUploads.length > 0 ? visibleUploads.map(upload => (
+                <div key={upload._id} className={clsx("flex items-center gap-3 p-2.5 text-xs rounded-md", isCollapsed && "justify-center")} title={isCollapsed ? `${upload.name} in ${upload.course.name}` : undefined}>
                   <div className="flex-shrink-0">{getFileIcon(upload.type)}</div>
                   {!isCollapsed && (
                     <div className="min-w-0">

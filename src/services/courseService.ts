@@ -21,15 +21,6 @@ export const courseService = {
     return fetchData<Course[]>('/courses/teaching');
   },
 
-  // Alias for subjects (legacy naming in some UIs)
-  getSubjects: async (): Promise<Course[]> => {
-    return fetchData<Course[]>('/courses');
-  },
-
-  getSubjectById: async (id: string): Promise<Course> => {
-    return fetchData<Course>(`/courses/${id}`);
-  },
-
   createCourse: async (courseData: { code: string; name: string; description: string }): Promise<Course> => {
     return fetchData<Course>('/courses', {
       method: 'POST',
@@ -51,12 +42,12 @@ export const courseService = {
       method: 'DELETE',
     });
   },
-  // Syllabus attributes for a course (the published curriculum)
-  getCourseAttributes: (courseId: string) =>
+    // Syllabus Attributes
+  getCourseAttributes: (courseId: string) => 
     fetchData<CourseAttribute[]>(`/courses/attributes/course/${courseId}`),
 
-  // Student mastery records for a specific course
-  // Route: GET /api/courses/attributes/student/:studentId/course/:courseIdorCode
-  getStudentAttributes: (studentId: string, courseId: string) =>
-    fetchData<StudentAttribute[]>(`/courses/attributes/student/${studentId}/course/${courseId}`),
+// src/services/api.ts (developmentService)
+  getStudentAttributes: (studentId: string, courseId: string) => 
+    fetchData<StudentAttribute[]>(`/courses/attributes/student/${studentId}/course/${courseId}`)
 };
+

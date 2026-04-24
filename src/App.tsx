@@ -18,6 +18,10 @@ import AdminCourses from './pages/AdminCourses';
 import AdminStudents from './pages/AdminStudents';
 import AdminResources from './pages/AdminResources';
 import AIResourceViewer from './components/classroom/AIResourceViewer';
+import AssessmentsDashboardPage from './pages/AssessmentsDashboardPage';
+import AssessmentDetailPage from './pages/AssessmentDetailPage';
+import AssessmentAnalysisPage from './pages/AssessmentAnalysisPage';
+import EditAssessmentPage from './pages/EditAssessmentPage';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -107,6 +111,11 @@ function App() {
             <Route path="development/:studentId" element={<DevelopmentPage />} />
             <Route path="resources" element={<ResourcesDashboard />} />
             <Route path="grading" element={<GradingDashboard />} />
+            {/* Assessment management */}
+            <Route path="teacher/assessments" element={<AssessmentsDashboardPage />} />
+            <Route path="teacher/assessments/analysis" element={<AssessmentAnalysisPage />} />
+            <Route path="teacher/assessments/:id" element={<AssessmentDetailPage />} />
+            <Route path="teacher/assessments/:id/edit" element={<EditAssessmentPage />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="admin/courses" element={<AdminCourses />} />
             <Route path="admin/students" element={<AdminStudents />} />

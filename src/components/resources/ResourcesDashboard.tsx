@@ -152,7 +152,7 @@ const ResourcesDashboard: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-slate-50">
+            <div className="flex h-full items-center justify-center bg-slate-50 rounded-xl">
                 <div className="flex flex-col items-center gap-2">
                     <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     <p className="text-slate-500 font-medium">Loading Resources...</p>
@@ -175,50 +175,56 @@ const ResourcesDashboard: React.FC = () => {
     }
 
     return (
-        <div className="flex h-screen bg-slate-50 text-slate-900">
+        <div className="flex h-full min-h-0 bg-slate-50 text-slate-900 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
             <Sidebar 
                 onUploadClick={() => handleUploadClick()} 
                 onCreateAssignment={() => handleCreateAssignment(courses[0]?._id)} 
                 recentUploads={recentUploads} 
             />
             
-            <main className="flex-1 p-8 overflow-y-auto">
-                <header className="flex justify-between items-center mb-8">
-                    <div className="flex items-center space-x-4">
+            {/* main: flex column, never grows past its parent */}
+            <main className="flex-1 min-w-0 flex flex-col min-h-0 overflow-hidden">
+
+                {/* Fixed header */}
+                <header className="flex-shrink-0 flex justify-between items-center px-4 py-2.5 border-b border-slate-200 bg-white">
+                    <div className="flex items-center gap-2">
                         <button 
                             onClick={() => navigate('/dashboard')}
-                            className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200"
+                            className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
                         >
-                            <ArrowLeft className="h-5 w-5" />
+                            <ArrowLeft className="h-3.5 w-3.5" />
                         </button>
-                        <h1 className="text-2xl font-bold">Resources</h1>
+                        <h1 className="text-sm font-bold">Resources</h1>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => handleUploadClick()} 
-                            className="bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                        >
-                           <UploadCloud size={18} /> Upload
-                        </button>
-                    </div>
+                    <button 
+                        onClick={() => handleUploadClick()} 
+                        className="bg-blue-600 text-white font-semibold px-2.5 py-1 text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                    >
+                        <UploadCloud size={13} /> Upload
+                    </button>
                 </header>
 
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                    <div className="xl:col-span-2 space-y-8">
-                        <div className="relative">
-                            <SearchIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+                {/* Body: two columns, each handles its own scroll */}
+                <div className="flex-1 min-h-0 flex overflow-hidden">
+
+                    {/* LEFT column: search bar (fixed) + scrollable card grid */}
+                    <div className="flex-1 min-w-0 flex flex-col min-h-0 p-3 border-r border-slate-100">
+                        {/* Search — never scrolls away */}
+                        <div className="flex-shrink-0 relative mb-2">
+                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                             <input 
                                 type="text" 
                                 value={searchQuery} 
                                 onChange={(e) => setSearchQuery(e.target.value)} 
-                                placeholder="Search your classes by name or code..." 
-                                className="w-full pl-12 pr-4 py-3 border bg-white border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                placeholder="Search by name or code..." 
+                                className="w-full pl-8 pr-3 py-1.5 text-xs border bg-white border-slate-200 rounded-md focus:ring-1 focus:ring-blue-500 outline-none" 
                             />
                         </div>
+                        <p className="flex-shrink-0 text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Your Classes</p>
 
-                        <section>
-                            <h2 className="text-xl font-bold text-slate-700 mb-4">Your Classes</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Scrollable grid — only this scrolls */}
+                        <div className="flex-1 min-h-0 overflow-y-auto">
+                            <div className="grid grid-cols-4 gap-2 pb-1 pr-0.5">
                                 {filteredCourses.map((course) => (
                                     <CourseCard 
                                         key={course._id} 
@@ -228,38 +234,36 @@ const ResourcesDashboard: React.FC = () => {
                                     />
                                 ))}
                             </div>
-                        </section>
+                        </div>
                     </div>
 
-                    <div className="xl:col-span-1 space-y-8">
-                        <section>
-                            <h2 className="text-xl font-bold text-slate-700 mb-4">Resource Analytics</h2>
-                            <div className="space-y-4">
-                               <StatCard icon={Folder} value={analytics.totalResources} label="Total Resources" color="blue" />
-                               <StatCard icon={BarChart} value={analytics.averageDownloads} label="Avg. Downloads" color="green" />
-                               <StatCard icon={LinkIcon} value={analytics.mostPopularResource} label="Most Popular" color="purple" isText />
-                               <StatCard icon={Star} value={analytics.topClassEngagement} label="Top Class" color="amber" isText />
+                    {/* RIGHT column: analytics + quick access, fixed width */}
+                    <div className="w-48 flex-shrink-0 flex flex-col gap-3 p-3 overflow-y-auto bg-white">
+                        <div>
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Analytics</p>
+                            <div className="space-y-1.5">
+                                <StatCard icon={Folder} value={analytics.totalResources} label="Total Resources" color="blue" />
+                                <StatCard icon={BarChart} value={analytics.averageDownloads} label="Downloads" color="green" />
+                                <StatCard icon={LinkIcon} value={analytics.mostPopularResource} label="Most Popular" color="purple" isText />
+                                <StatCard icon={Star} value={analytics.topClassEngagement} label="Top Class" color="amber" isText />
                             </div>
-                        </section>
+                        </div>
 
-                        <section>
-                            <h2 className="text-xl font-bold text-slate-700 mb-4">Quick Access</h2>
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 space-y-1">
-                                {courses.slice(0, 3).map(course => (
+                        <div>
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">Quick Access</p>
+                            <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                                {courses.slice(0, 5).map(course => (
                                     <button 
                                         key={course._id} 
                                         onClick={() => handleClassNavigation(course._id)} 
-                                        className="w-full text-left flex items-center gap-3 p-3 hover:bg-slate-50 rounded-md transition-colors"
+                                        className="w-full text-left flex items-center gap-1.5 px-2 py-1.5 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
                                     >
-                                        <Folder className="flex-shrink-0 text-amber-500" size={20} />
-                                        <div>
-                                            <p className="font-semibold text-sm text-slate-800">{course.name}</p>
-                                            <p className="text-xs text-slate-500">View resources</p>
-                                        </div>
+                                        <Folder className="flex-shrink-0 text-amber-500" size={12} />
+                                        <p className="font-medium text-[11px] text-slate-700 truncate">{course.name}</p>
                                     </button>
                                 ))}
                             </div>
-                        </section>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -278,7 +282,7 @@ const ResourcesDashboard: React.FC = () => {
                     isOpen={isAssessmentModalOpen} 
                     onClose={() => setIsAssessmentModalOpen(false)} 
                     courseId={selectedCourseIdForAssessment} 
-                    onAssessmentCreated={() => {}} 
+                    onAssessmentCreated={() =>{}} 
                 />
             )}
         </div>

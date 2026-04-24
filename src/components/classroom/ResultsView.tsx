@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Student } from '../../types';
-import { User, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { assessmentService } from '../../services/api';
 
 interface ResultsViewProps {
@@ -36,21 +35,6 @@ const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
 
   return (
     <div className="bg-white rounded-lg shadow-xl p-0 flex flex-col h-full overflow-hidden border border-slate-200">
-      {/* Surgical Header */}
-      <div className="flex items-center p-4 sticky top-0 bg-slate-900 text-white z-10 shadow-md">
-        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-3 shadow-inner">
-          <User className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h2 className="text-sm font-black uppercase tracking-tight leading-none">{student.firstName}</h2>
-          <p className="text-xs text-slate-400 mt-1 uppercase font-bold">Assessment Timeline</p>
-        </div>
-        <div className="ml-auto text-right">
-          <div className="text-2xl font-black leading-none text-blue-400">{student.overall}%</div>
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Average</div>
-        </div>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
         <table className="w-full text-xs">
           <thead>

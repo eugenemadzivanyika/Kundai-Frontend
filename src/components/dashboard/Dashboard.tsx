@@ -134,7 +134,7 @@ const devProfiles = await Promise.all(
   }, [selectedCourse]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[calc(100vh-180px)] p-0 relative overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[calc(100vh-160px)] p-0 relative overflow-hidden">
       
       {/* LEFT COLUMN */}
       <div className="flex flex-col h-full min-h-0">

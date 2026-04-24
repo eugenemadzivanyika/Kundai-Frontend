@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, LayoutGrid, Mail, Calendar, LogOut, Bell } from 'lucide-react';
+import { Home, LayoutGrid, Mail, Calendar, LogOut, Bell, ClipboardList } from 'lucide-react';
 import { authService, notificationService, courseService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import NotificationCenter from '../teacher/NotificationCenter';
@@ -73,16 +73,20 @@ useEffect(() => {
 
       <nav className="flex gap-1 mt-3">
         {[
-          { name: 'Home', path: 'dashboard', icon: <Home size={14} /> },
-          { name: 'Classroom', path: 'classroom', icon: <LayoutGrid size={14} /> },
-          { name: 'Staffroom', path: 'staffroom', icon: <Mail size={14} /> },
-          { name: 'Calendar', path: 'calendar', icon: <Calendar size={14} /> },
-        ].map((link) => (
-          <button key={link.path} onClick={() => navigate(`/${link.path}`)}
-            className={`flex items-center gap-2 py-2 px-5 rounded-md text-[11px] font-black uppercase transition-all ${activeTab === link.path ? 'bg-blue-600 text-white shadow-md' : 'bg-[#ececed] text-gray-500 hover:bg-gray-200'}`}>
-            {link.icon} {link.name}
-          </button>
-        ))}
+          { name: 'Home',        path: 'dashboard',           icon: <Home size={14} /> },
+          { name: 'Classroom',   path: 'classroom',            icon: <LayoutGrid size={14} /> },
+          { name: 'Assessments', path: 'teacher/assessments',  icon: <ClipboardList size={14} /> },
+          { name: 'Staffroom',   path: 'staffroom',            icon: <Mail size={14} /> },
+          { name: 'Calendar',    path: 'calendar',             icon: <Calendar size={14} /> },
+        ].map((link) => {
+          const isActive = location.pathname.startsWith(`/${link.path}`);
+          return (
+            <button key={link.path} onClick={() => navigate(`/${link.path}`)}
+              className={`flex items-center gap-2 py-2 px-5 rounded-md text-[11px] font-black uppercase transition-all ${isActive ? 'bg-blue-600 text-white shadow-md' : 'bg-[#ececed] text-gray-500 hover:bg-gray-200'}`}>
+              {link.icon} {link.name}
+            </button>
+          );
+        })}
       </nav>
 
       <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
