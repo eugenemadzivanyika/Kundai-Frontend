@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { QuestionText } from '@/components/ui/DiagramRenderer';
+import { QuestionText, MathText } from '@/components/ui/DiagramRenderer';
+import { getQuestionTypeLabel, type MathPaperType } from '@/utils/questionTypeLabel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,9 +28,10 @@ interface ReviewStepProps {
   onRegenerate: (feedback: string) => Promise<void>;
   onRegenerateSingle: (questionId: string) => Promise<void>;
   isGenerating: boolean;
+  mathPaperType?: MathPaperType;
 }
 
-export function ReviewStep({ questions, onUpdateQuestion, onRegenerate, onRegenerateSingle, isGenerating }: ReviewStepProps) {
+export function ReviewStep({ questions, onUpdateQuestion, onRegenerate, onRegenerateSingle, isGenerating, mathPaperType }: ReviewStepProps) {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [regeneratingQuestionId, setRegeneratingQuestionId] = useState<string | null>(null);
@@ -305,7 +307,7 @@ const renderQuestionContent = (question: Question) => {
                       {String.fromCharCode(65 + idx)}.
                     </span>
                     <span className={`text-sm ${isCorrect ? 'font-bold text-green-800' : 'text-gray-700'}`}>
-                      {optionText}
+                      <MathText text={optionText} />
                     </span>
                     {isCorrect && (
                       <Badge className="ml-auto bg-green-600 text-white text-[10px] h-5 px-1.5 uppercase font-black">
@@ -450,11 +452,7 @@ const renderQuestionContent = (question: Question) => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className={`text-xs ${getQuestionTypeColor(question.type)}`}>
-                      {question.type === 'multiple_choice' ? 'Multiple Choice' : 
-                       question.type === 'true_false' ? 'True/False' : 
-                       question.type === 'short_answer' ? 'Short Answer' : 
-                       question.type === 'essay' ? 'Essay' : 
-                       question.type === 'code' ? 'Coding' : question.type}
+                      {getQuestionTypeLabel(question.type, mathPaperType)}
                     </Badge>
                     <Badge className={`text-xs ${getDifficultyColor(question.difficulty || 'medium')}`}>
                       {question.difficulty || 'Medium'}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { QuestionText } from '../components/ui/DiagramRenderer';
+import { QuestionText, MathText } from '../components/ui/DiagramRenderer';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Edit2, FileText, List, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { assessmentService, courseService, submissionService } from '../services
 import { Assessment } from '../types';
 import TablePagination from '../components/ui/TablePagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { getQuestionTypeInfo } from '../utils/questionTypeLabel';
 
 type DetailTab = 'questions' | 'submissions' | 'scheme';
 
@@ -21,13 +22,6 @@ interface ResultRecord {
   aiGradingSuggestion?: { totalScore?: number; overallFeedback?: string; confidenceScore?: number };
   submittedAt?: string;
 }
-
-const TYPE_META: Record<string, { label: string; bg: string; color: string }> = {
-  multiple_choice: { label: 'Multiple choice', bg: '#ede9fe', color: '#6d28d9' },
-  true_false:      { label: 'True / False',    bg: '#fef3c7', color: '#92400e' },
-  short_answer:    { label: 'Short answer',    bg: '#dcfce7', color: '#166534' },
-  essay:           { label: 'Essay',           bg: '#fce7f3', color: '#9d174d' },
-};
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string }> = {
   published: { bg: '#ecfdf5', color: '#065f46' },
@@ -278,7 +272,7 @@ const AssessmentDetailPage: React.FC = () => {
                   <p className="text-xs text-slate-400 p-2">No questions found.</p>
                 ) : (
                   questions.map((q, i) => {
-                    const tm = TYPE_META[q.type] ?? TYPE_META.short_answer;
+                    const tm = getQuestionTypeInfo(q.type, assessment?.mathPaperType);
                     return (
                       <div key={q._id ?? i} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50">
                         <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -314,7 +308,7 @@ const AssessmentDetailPage: React.FC = () => {
                                   border:      `1px solid ${opt === q.correctAnswer ? '#bbf7d0' : 'transparent'}`,
                                 }}
                               >
-                                {String.fromCharCode(65 + oi)}. {opt} {opt === q.correctAnswer && '✓'}
+                                {String.fromCharCode(65 + oi)}. <MathText text={opt} /> {opt === q.correctAnswer && '✓'}
                               </div>
                             ))}
                           </div>
@@ -324,7 +318,7 @@ const AssessmentDetailPage: React.FC = () => {
                             className="text-[11px] px-2 py-1 rounded-md leading-relaxed"
                             style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}
                           >
-                            <span className="font-bold">Model: </span>{q.correctAnswer}
+                            <span className="font-bold">Model: </span><MathText text={q.correctAnswer} />
                           </div>
                         )}
                         {q.primaryAttributeId && (
@@ -442,7 +436,7 @@ const AssessmentDetailPage: React.FC = () => {
                                 <div className="text-[11px] text-slate-700 leading-relaxed">{studentAnswer}</div>
                                 {isCorrect === false && (
                                   <div className="text-[10px] mt-1" style={{ color: '#065f46' }}>
-                                    Correct: {q.correctAnswer}
+                                    Correct: <MathText text={q.correctAnswer} />
                                   </div>
                                 )}
                               </div>
@@ -649,7 +643,7 @@ const AssessmentDetailPage: React.FC = () => {
                     </thead>
                     <tbody>
                       {questions.map((q, i) => {
-                        const tm = TYPE_META[q.type] ?? TYPE_META.short_answer;
+                        const tm = getQuestionTypeInfo(q.type, assessment?.mathPaperType);
                         return (
                           <tr
                             key={q._id ?? i}
@@ -658,7 +652,7 @@ const AssessmentDetailPage: React.FC = () => {
                           >
                             <td className="px-3.5 py-2.5 text-[12px] font-bold text-slate-400">{i + 1}</td>
                             <td className="px-3.5 py-2.5" style={{ maxWidth: 260 }}>
-                              <div className="text-[12px] font-medium text-slate-700 leading-relaxed">{q.text}</div>
+                              <MathText text={q.text} className="text-[12px] font-medium text-slate-700 leading-relaxed" block />
                               {q.tags?.length > 0 && (
                                 <div className="flex gap-1 mt-1 flex-wrap">
                                   {q.tags.map((tag: string) => (
@@ -694,7 +688,7 @@ const AssessmentDetailPage: React.FC = () => {
                                   className="text-[11px] px-2 py-1 rounded-md leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap"
                                   style={{ color: '#065f46', background: '#f0fdf4', border: '1px solid #bbf7d0' }}
                                 >
-                                  {q.correctAnswer}
+                                  <MathText text={q.correctAnswer} />
                                 </div>
                               ) : (
                                 <span className="text-[11px] text-slate-400">—</span>

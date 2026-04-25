@@ -1,4 +1,46 @@
 import React from 'react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+// ─── Math rendering ───────────────────────────────────────────────────────────
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderMath(text: string): string {
+  if (!text) return '';
+  // Match $$...$$ (display) before $...$ (inline) to avoid false positives
+  const re = /(\$\$[\s\S]*?\$\$|\$(?!\$)[^$\n]*?\$)/g;
+  const parts: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(escapeHtml(text.slice(last, m.index)));
+    const raw = m[0];
+    const display = raw.startsWith('$$');
+    const math = display ? raw.slice(2, -2).trim() : raw.slice(1, -1).trim();
+    try {
+      parts.push(katex.renderToString(math, { displayMode: display, throwOnError: false, output: 'html' }));
+    } catch {
+      parts.push(escapeHtml(raw));
+    }
+    last = m.index + raw.length;
+  }
+  if (last < text.length) parts.push(escapeHtml(text.slice(last)));
+  return parts.join('');
+}
+
+interface MathTextProps {
+  text: string;
+  className?: string;
+  block?: boolean;
+}
+
+export const MathText: React.FC<MathTextProps> = ({ text, className, block }) => {
+  const Tag = block ? 'div' : 'span';
+  return <Tag className={className} dangerouslySetInnerHTML={{ __html: renderMath(text ?? '') }} />;
+};
 
 // ─── Manifest Types ───────────────────────────────────────────────────────────
 
@@ -332,7 +374,7 @@ export const QuestionText: React.FC<QuestionTextProps> = ({
   diagramWidth = 220,
 }) => (
   <div>
-    <p className={textClassName}>{text}</p>
+    <MathText text={text} className={textClassName} block />
     {manifest && (
       <div className="mt-3">
         <DiagramRenderer manifest={manifest} width={diagramWidth} />

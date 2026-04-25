@@ -1,6 +1,7 @@
 import React from 'react';
 import { Loader2, BookOpen, FileText, Sparkles } from 'lucide-react';
 import { Progress } from '../../../components/ui/progress';
+import { getQuestionTypeLabel, type MathPaperType } from '../../../utils/questionTypeLabel';
 
 export interface GenerateStepProps {
   formData: {
@@ -8,30 +9,29 @@ export interface GenerateStepProps {
     questionTypes: string[];
     difficulty: string;
     selectedAttributes: string[];
+    mathPaperType?: MathPaperType;
   };
   attributes: Array<{ _id: string; name: string }>;
   uploadedFile?: File | null;
 }
 
 export function GenerateStep({ formData, attributes, uploadedFile }: GenerateStepProps) {
-  const { questionCount, questionTypes, difficulty, selectedAttributes } = formData;
-  
+  const { questionCount, questionTypes, difficulty, selectedAttributes, mathPaperType } = formData;
+
   // Get attribute names for display
   const selectedAttributeNames = selectedAttributes
     .map(id => attributes.find(a => a._id === id)?.name)
     .filter(Boolean);
 
-  // Format question types for display
-  const formattedQuestionTypes = questionTypes
-    .map(type => {
-      switch (type) {
-        case 'multiple_choice': return 'Multiple Choice';
-        case 'true_false': return 'True/False';
-        case 'short_answer': return 'Short Answer';
-        case 'essay': return 'Essay';
-        case 'code': return 'Coding';
-        default: return type;
-      }
+  // Format question types for display — deduplicate, count, and apply math-aware labels
+  const typeCounts = questionTypes.reduce<Record<string, number>>((acc, t) => {
+    acc[t] = (acc[t] ?? 0) + 1;
+    return acc;
+  }, {});
+  const formattedQuestionTypes = Object.entries(typeCounts)
+    .map(([type, count]) => {
+      const label = getQuestionTypeLabel(type, mathPaperType);
+      return count > 1 ? `${count}× ${label}` : label;
     })
     .join(', ');
 

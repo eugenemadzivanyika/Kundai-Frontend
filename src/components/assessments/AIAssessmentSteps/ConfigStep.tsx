@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Label } from '@/components/ui/label';
 import { Gauge, ListChecks, ToggleLeft, AlignLeft, Code2, FileText } from 'lucide-react';
 import { Course } from '@/types';
+import { getQuestionTypeLabel } from '@/utils/questionTypeLabel';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type MathPaperType = 'paper1' | 'paper2' | 'both';
@@ -319,19 +320,21 @@ export function ConfigStep({
                     key={s.key}
                     style={{ width: `${s.pct}%` }}
                     className={`${COLOUR_MAP[s.key]} transition-all duration-300`}
-                    title={`${s.label}: ${s.pct}%`}
+                    title={`${getQuestionTypeLabel(s.key, formData.mathPaperType)}: ${s.pct}%`}
                   />
                 ))
               )}
             </div>
 
             <div className="flex flex-col gap-4 flex-1">
-              {Q_TYPES.map(({ key, label, icon, colour, track }) => (
+              {Q_TYPES.map(({ key, icon, colour, track }) => (
                 <div key={key} className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className={`flex items-center gap-1.5 ${colour}`}>
                       {icon}
-                      <span className="text-xs font-semibold text-gray-700">{label}</span>
+                      <span className="text-xs font-semibold text-gray-700">
+                        {getQuestionTypeLabel(key, formData.mathPaperType)}
+                      </span>
                     </div>
                     <span className="text-sm font-black text-gray-800 tabular-nums w-10 text-right">
                       {dist[key]}%

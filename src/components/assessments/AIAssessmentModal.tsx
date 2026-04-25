@@ -648,6 +648,7 @@ setIsGenerating(true);
             onRegenerate={regenerateQuestions}
             onRegenerateSingle={regenerateSingle}
             isGenerating={isGenerating}
+            mathPaperType={formData.mathPaperType}
           />
         );
 

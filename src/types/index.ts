@@ -217,6 +217,7 @@ export interface Assessment {
   courseId: string;
   status: AssessmentStatus;
   isAIEnhanced?: boolean;
+  mathPaperType?: 'paper1' | 'paper2' | 'both' | null;
   questions: Question[] | string; // Can be array of questions or JSON string
   resource?: string; // ID of the linked resource/document
   createdBy: string | { _id: string; firstName: string; lastName: string };
