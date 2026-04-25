@@ -110,12 +110,12 @@ function App() {
             <Route path="classroom" element={<ClassroomView />} />
             <Route path="development/:studentId" element={<DevelopmentPage />} />
             <Route path="resources" element={<ResourcesDashboard />} />
-            <Route path="grading" element={<GradingDashboard />} />
             {/* Assessment management */}
             <Route path="teacher/assessments" element={<AssessmentsDashboardPage />} />
             <Route path="teacher/assessments/analysis" element={<AssessmentAnalysisPage />} />
             <Route path="teacher/assessments/:id" element={<AssessmentDetailPage />} />
             <Route path="teacher/assessments/:id/edit" element={<EditAssessmentPage />} />
+            <Route path="teacher/assessments/marking-dashboard" element={<GradingDashboard />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="admin/courses" element={<AdminCourses />} />
             <Route path="admin/students" element={<AdminStudents />} />

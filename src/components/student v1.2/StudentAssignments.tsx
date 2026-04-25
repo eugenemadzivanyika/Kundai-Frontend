@@ -21,6 +21,7 @@ import type { SubmissionReviewDetail, SubmissionReviewQuestionDetail } from '../
 import type { StudentAssessmentDetail, StudentAssessmentHistoryItem } from '../../services/studentService';
 import { toast } from 'sonner';
 import TablePagination from '../ui/TablePagination';
+import { QuestionText } from '../ui/DiagramRenderer';
 import { useClientPagination } from '../../hooks/useClientPagination';
 
 interface StudentAssignmentsProps {
@@ -39,9 +40,10 @@ interface AssessmentQuestionItem {
   assessmentQuestionId?: string;
   questionId?: string;
   stem: string;        // We map 'text' to 'stem' in ensureAssessmentWithQuestions
-  options: string[];   // ADD THIS: Direct array of strings
-  correctAnswer?: string; // ADD THIS
+  options: string[];
+  correctAnswer?: string;
   points?: number;
+  diagram_manifest?: import('@/types').DiagramManifest | null;
 }
 interface AssessmentWithQuestionsItem {
   id: string;
@@ -341,9 +343,10 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
     const normalizedQuestions = (raw?.questions || []).map((question: any) => ({
       ...question,
       id: question._id || question.id,
-      stem: question.text, // Map backend 'text' to frontend 'stem'
-      points: question.maxPoints, // Map backend 'maxPoints' to frontend 'points'
-      correctAnswer: question.correctAnswer, // Directly use 'correctAnswer' from backend
+      stem: question.text,
+      points: question.maxPoints,
+      correctAnswer: question.correctAnswer,
+      diagram_manifest: question.diagram_manifest ?? null,
     }));
 
     const mergedAssessment: AssessmentWithQuestionsItem = {
@@ -925,7 +928,11 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                                   <div key={questionId} className="rounded-md border border-slate-200 bg-slate-50 p-4 space-y-3">
                                     <div>
                                       <p className="text-sm font-semibold text-slate-900">Question {index + 1}</p>
-                                      <p className="mt-1 text-sm text-slate-700">{question.stem}</p>
+                                      <QuestionText
+                                        text={question.stem}
+                                        manifest={question.diagram_manifest}
+                                        textClassName="mt-1 text-sm text-slate-700"
+                                      />
                                     </div>
 
                                     {options.length > 0 ? (

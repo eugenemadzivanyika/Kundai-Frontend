@@ -166,7 +166,7 @@ const devProfiles = await Promise.all(
             <p className="text-[10px] text-gray-400">Syllabus & Materials</p>
           </button>
           <button 
-            onClick={() => navigate('/grading')} 
+            onClick={() => navigate('/teacher/assessments/marking-dashboard')} 
             className="w-1/2 bg-gray-50 p-3 rounded-lg shadow hover:bg-white hover:border-blue-200 border border-transparent transition-all flex flex-col justify-center items-center"
           >
             <h2 className="font-bold text-sm text-gray-800">GRADING</h2>

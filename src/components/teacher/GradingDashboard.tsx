@@ -147,7 +147,6 @@ const GradingDashboard: React.FC = () => {
       ]);
 
       setStats(statsData);
-      console.log("🚀 [Dashboard] Assessments list for course:", assessments);
 
       const assessmentIds = assessments.map((a: any) => a._id);
 
@@ -161,7 +160,6 @@ const GradingDashboard: React.FC = () => {
         );
 
         const flattenedResults = resultsArrays.flat();
-        console.log("🚀 [Dashboard] Raw Flattened Results:", flattenedResults);
 
         const uniqueResults = Array.from(
           new Map(flattenedResults.map((item: any) => [item._id, item])).values()
@@ -240,7 +238,7 @@ const GradingDashboard: React.FC = () => {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/teacher/assessments')}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             width: 32, height: 32, borderRadius: 8,
@@ -253,9 +251,9 @@ const GradingDashboard: React.FC = () => {
           <ArrowLeft size={15} />
         </button>
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Grading Dashboard</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Marking Dashboard</h2>
           <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, marginTop: 1 }}>
-            Review AI-assisted grading suggestions and release results to students
+            Mark & Review AI-assisted marking suggestions and release results to students
           </p>
         </div>
       </div>

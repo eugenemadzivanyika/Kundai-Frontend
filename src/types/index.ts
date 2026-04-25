@@ -170,6 +170,7 @@ export interface Question {
   maxPoints: number;    // Update this to match your MongoDB Schema
   points?: number;
   difficulty: DifficultyLevel;
+  primaryAttributeId?: string;
   courseAttributes?: string[]; // IDs of related course attributes
   metadata?: {
     isAIEnhanced?: boolean;
@@ -177,7 +178,32 @@ export interface Question {
     feedback?: string;
   };
   order?: number;
+  // Geometric/coordinate data for SVG diagram rendering. Null = no diagram.
+  diagram_manifest?: DiagramManifest | null;
+  solution_schema?: { steps: string[]; final_answer: string };
 }
+
+// DiagramManifest mirrors the backend assessmentModel question.diagram_manifest shape
+export type DiagramManifest = {
+  type:
+    | 'Circle_Geometry'
+    | 'Triangle_Geometry'
+    | 'Velocity_Time_Graph'
+    | 'Construction_Loci'
+    | 'Bar_Chart'
+    | 'Number_Line'
+    | 'Coordinate_Plane'
+    | 'Generic';
+  viewBox?: string;
+  circles?: Array<{ cx: number; cy: number; r: number; label?: string; labelOffset?: { dx?: number; dy?: number } }>;
+  points?: Array<{ label?: string; x: number; y: number }>;
+  lines?: Array<{ x1: number; y1: number; x2: number; y2: number; label?: string; dashed?: boolean }>;
+  angleMarkers?: Array<{ cx: number; cy: number; r: number; startAngle: number; endAngle: number; label?: string }>;
+  axes?: { x: { label: string; min: number; max: number; ticks?: number[] }; y: { label: string; min: number; max: number; ticks?: number[] } };
+  dataPoints?: Array<{ x: number; y: number }>;
+  bars?: Array<{ label: string; value: number }>;
+  numberLineRange?: { min: number; max: number; marked?: number[] };
+};
 
 // Assessment Interface - Represents an assessment definition
 export interface Assessment {

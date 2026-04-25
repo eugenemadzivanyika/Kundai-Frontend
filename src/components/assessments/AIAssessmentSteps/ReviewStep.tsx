@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { QuestionText } from '@/components/ui/DiagramRenderer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -267,7 +268,11 @@ const renderQuestionContent = (question: Question) => {
       <div className="space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <p className="font-medium text-gray-900 leading-relaxed">{question.text}</p>
+            <QuestionText
+          text={question.text}
+          manifest={question.diagram_manifest}
+          textClassName="font-medium text-gray-900 leading-relaxed"
+        />
           </div>
           <button
             onClick={() => setExpandedQuestionId(isExpanded ? null : question._id || null)}

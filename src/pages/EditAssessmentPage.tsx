@@ -645,9 +645,11 @@ const EditAssessmentPage: React.FC = () => {
 
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
+  const [saveConfirm, setSaveConfirm] = useState<{ message: string; sub: string } | null>(null);
   const [attributes, setAttributes] = useState<{ _id: string; name: string }[]>([]);
   const [courseId, setCourseId]     = useState('');
   const [activeIdx, setActiveIdx]   = useState(0);
+  const originalQuestionsRef        = useRef<string>('');
 
   const [form, setForm] = useState({
     name: '', type: 'Exercise', difficulty: 'medium', totalPoints: '100', status: 'draft', dueDate: '',
@@ -682,6 +684,7 @@ const EditAssessmentPage: React.FC = () => {
           tags:               Array.isArray(q.tags) ? q.tags : [],
         }));
         setQuestions(qs);
+        originalQuestionsRef.current = JSON.stringify(qs);
 
         const cId = typeof a.course === 'object' ? (a.course?._id ?? '') : (a.course ?? a.courseId ?? '');
         setCourseId(cId);
@@ -708,7 +711,23 @@ const EditAssessmentPage: React.FC = () => {
     setActiveIdx((prev) => Math.min(prev, Math.max(0, questions.length - 2)));
   };
 
-  const handleSave = async (newStatus?: string) => {
+  const buildQuestionsPayload = () =>
+    questions.map((q) => ({
+      _id:                q._id,
+      text:               q.text,
+      options:            q.options.filter(Boolean),
+      correctAnswer:      q.correctAnswer,
+      maxPoints:          q.maxPoints,
+      primaryAttributeId: q.primaryAttributeId,
+      tags:               q.tags,
+    }));
+
+  const confirm = (message: string, sub: string) => {
+    setSaveConfirm({ message, sub });
+    setTimeout(() => navigate('/teacher/assessments'), 2000);
+  };
+
+  const handleSave = async (newStatus?: string, fromBanner = false) => {
     if (!id) return;
     setSaving(true);
     try {
@@ -719,24 +738,51 @@ const EditAssessmentPage: React.FC = () => {
         totalPoints: Number(form.totalPoints),
         status:      (newStatus ?? form.status) as any,
         dueDate:     form.dueDate ? new Date(form.dueDate) : undefined,
-        questions:   questions.map((q) => ({
-          _id:                q._id,
-          text:               q.text,
-          options:            q.options.filter(Boolean),
-          correctAnswer:      q.correctAnswer,
-          maxPoints:          q.maxPoints,
-          primaryAttributeId: q.primaryAttributeId,
-          tags:               q.tags,
-        })),
+        questions:   buildQuestionsPayload(),
       } as any);
-      toast.success(newStatus === 'published' ? 'Assessment published!' : 'Draft saved.');
-      if (newStatus === 'published') navigate('/teacher/assessments');
+      if (fromBanner) {
+        confirm('Published assessment updated.', `${questions.length} question${questions.length !== 1 ? 's' : ''} saved and live.`);
+      } else if (newStatus === 'published') {
+        confirm('Assessment published!', 'Taking you to the dashboard…');
+      } else if (newStatus === 'archived') {
+        confirm('Assessment archived.', 'Taking you to the dashboard…');
+      } else {
+        toast.success('Draft saved.');
+      }
     } catch {
       toast.error('Failed to save assessment.');
     } finally {
       setSaving(false);
     }
   };
+
+  const handleSaveAsNewDraft = async () => {
+    setSaving(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const strippedQuestions = buildQuestionsPayload().map(({ _id, ...q }) => q);
+      const draftName = `${form.name} (Draft)`;
+      await assessmentService.createAssessment({
+        name:        draftName,
+        type:        form.type as 'Exercise' | 'Test' | 'Exam' | 'Homework' | 'D-Plan',
+        difficulty:  form.difficulty,
+        totalPoints: Number(form.totalPoints),
+        status:      'draft',
+        dueDate:     form.dueDate ? new Date(form.dueDate) : undefined,
+        courseId,
+        questions:   strippedQuestions as unknown as Question[],
+      });
+      confirm('Saved as new draft.', `"${draftName}" is ready to edit. The published version is unchanged.`);
+    } catch {
+      toast.error('Failed to save as new draft.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasPublishedChanges =
+    form.status === 'published' &&
+    JSON.stringify(questions) !== originalQuestionsRef.current;
 
   const statusBadge = ({
     draft:     'bg-yellow-100 text-yellow-800',
@@ -842,6 +888,39 @@ const EditAssessmentPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ── Published-changes banner ── */}
+      {saveConfirm ? (
+        <div className="shrink-0 flex items-center gap-3 px-5 py-2.5 bg-emerald-50 border-b border-emerald-200">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-semibold text-emerald-800">{saveConfirm.message}</span>
+            <span className="text-xs text-emerald-600 ml-2">{saveConfirm.sub}</span>
+          </div>
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500 shrink-0" />
+        </div>
+      ) : hasPublishedChanges && (
+        <div className="shrink-0 flex items-center gap-3 px-5 py-2.5 bg-amber-50 border-b border-amber-200">
+          <span className="text-xs text-amber-800 font-medium flex-1">
+            This published assessment has unsaved changes — choose how to save:
+          </span>
+          <button
+            onClick={() => handleSave(undefined, true)}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            Update published
+          </button>
+          <button
+            onClick={handleSaveAsNewDraft}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-60 transition-colors"
+          >
+            Save as new draft
+          </button>
+        </div>
+      )}
 
       {/* ── Body: sidebar + editor ── */}
       <div className="flex-1 flex overflow-hidden">

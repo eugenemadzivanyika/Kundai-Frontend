@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, Plus, Search, Filter } from 'lucide-react';
+import { toast } from 'sonner';
 import { assessmentService, courseService } from '../services/api';
 import { Course, Assessment } from '../types';
 import TablePagination from '../components/ui/TablePagination';
@@ -93,11 +94,13 @@ function StatsSummary({ row }: { row: any }) {
 }
 
 // ── Row actions (hover-reveal + kebab) ────────────────────────────────────
-function RowActions({ row, onView, onEdit, onAnalysis }: {
+function RowActions({ row, onView, onEdit, onAnalysis, onArchive, onDelete }: {
   row: any;
   onView: () => void;
   onEdit: () => void;
   onAnalysis: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
 }) {
   const [kebabOpen, setKebabOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -183,9 +186,16 @@ function RowActions({ row, onView, onEdit, onAnalysis }: {
             </button>
             <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0' }} />
             <button
+              onClick={() => { onArchive(); setKebabOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 7, border: 'none', background: 'none', fontSize: 13, color: '#ef4444', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               Archive
+            </button>
+            <button
+              onClick={() => { onDelete(); setKebabOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 7, border: 'none', background: 'none', fontSize: 13, color: '#ef4444', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Delete
             </button>
           </div>
         )}
@@ -241,6 +251,8 @@ const AssessmentsDashboardPage: React.FC = () => {
   const [searchQuery, setSearchQuery]       = useState('');
   const [error, setError]                   = useState<string | null>(null);
   const [modalOpen, setModalOpen]           = useState(false);
+  const [deleteTarget, setDeleteTarget]     = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting]             = useState(false);
 
   useEffect(() => {
     courseService.getTeachingCourses()
@@ -314,7 +326,7 @@ const AssessmentsDashboardPage: React.FC = () => {
           <CompactStats rows={rows} />
           <div className="ml-auto flex gap-1.5">
             <button
-              onClick={() => navigate('/grading')}
+              onClick={() => navigate('marking-dashboard')}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
             >
               <BarChart2 className="w-3.5 h-3.5" /> Grading
@@ -487,6 +499,16 @@ const AssessmentsDashboardPage: React.FC = () => {
                             onView={() => navigate(`/teacher/assessments/${row._id}`)}
                             onEdit={() => navigate(`/teacher/assessments/${row._id}/edit`)}
                             onAnalysis={() => navigate(`/teacher/assessments/analysis?assessmentId=${row._id}`)}
+                            onArchive={async () => {
+                              try {
+                                await assessmentService.updateAssessment(row._id, { status: 'archived' as Assessment['status'] });
+                                toast.success(`"${row.name}" archived.`);
+                                reloadRows();
+                              } catch {
+                                toast.error('Failed to archive assessment.');
+                              }
+                            }}
+                            onDelete={() => setDeleteTarget({ id: row._id, name: row.name })}
                           />
                         </td>
                       </tr>
@@ -522,6 +544,59 @@ const AssessmentsDashboardPage: React.FC = () => {
           reloadRows();
         }}
       />
+
+      {/* ── Delete confirmation modal ── */}
+      {deleteTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 14, padding: '28px 28px 22px', maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                🗑️
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Delete assessment</div>
+                <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
+                  Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{deleteTarget.name}"</strong>? This will permanently remove the assessment and all associated submissions. This action cannot be undone.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: 'white', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer', fontFamily: 'inherit', opacity: deleting ? 0.5 : 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await assessmentService.deleteAssessment(deleteTarget.id);
+                    toast.success(`"${deleteTarget.name}" has been deleted.`);
+                    setDeleteTarget(null);
+                    reloadRows();
+                  } catch {
+                    toast.error('Failed to delete assessment. Please try again.');
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: deleting ? '#fca5a5' : '#ef4444', fontSize: 13, fontWeight: 600, color: 'white', cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', minWidth: 80 }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

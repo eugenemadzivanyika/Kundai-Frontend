@@ -125,7 +125,7 @@ return (
 
 className="bg-gray-50 p-2 rounded-lg shadow h-full cursor-pointer hover:bg-gray-100 transition-colors flex flex-col overflow-hidden"
 
-onClick={() => navigate(`/classroom/development/${student.studentId}`)}
+onClick={() => navigate(`/development/${student.studentId}`)}
 
 >
 

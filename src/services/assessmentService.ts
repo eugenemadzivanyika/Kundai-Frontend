@@ -54,6 +54,13 @@ getResults: async (
       body: JSON.stringify(resultData),
     });
   },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createAssessment: async (data: Record<string, any>): Promise<Assessment> => {
+    return fetchData<Assessment>('/assessments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
   updateAssessment: async (id: string, updateData: Partial<Assessment>): Promise<Assessment> => {
     return fetchData<Assessment>(`/assessments/${id}`, {
       method: 'PUT',

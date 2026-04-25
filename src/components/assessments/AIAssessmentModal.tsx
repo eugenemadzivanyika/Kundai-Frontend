@@ -73,6 +73,7 @@ const defaultFormData = {
   } as QuestionTypeDistribution,
   selectedAttributes: [] as string[],
   weight: 100,
+  mathPaperType: null as 'paper1' | 'paper2' | 'both' | null,
 };
   const [formData, setFormData] = useState(defaultFormData);
 
@@ -202,6 +203,9 @@ const defaultFormData = {
   const handleDistributionChange = (dist: QuestionTypeDistribution) =>
     setFormData((prev) => ({ ...prev, questionTypeDistribution: dist }));
 
+  const handleMathPaperTypeChange = (type: 'paper1' | 'paper2' | 'both') =>
+    setFormData((prev) => ({ ...prev, mathPaperType: type }));
+
   const handleCourseSelect = (course: Course) => {
     setSelectedCourse(course);
     setDropdownOpen(false);
@@ -251,6 +255,7 @@ setIsGenerating(true);
       difficulty: formData.difficulty,
       type: formData.type,
       questionTypeDistribution: formData.questionTypeDistribution,
+      mathPaperType: formData.mathPaperType,
       uploadedFile: uploadedFile,        // The visual/PDF reference context
     });
       if (generatedAssessment?.questions) {
@@ -369,6 +374,10 @@ setIsGenerating(true);
       case 'course-selection': return !!selectedCourse && formData.name.trim() !== '';
       case 'objectives':       return formData.selectedAttributes.length > 0;
       case 'config': {
+        const isMaths = selectedCourse
+          ? `${selectedCourse.name} ${selectedCourse.code}`.toLowerCase().includes('math')
+          : false;
+        if (isMaths) return !!formData.mathPaperType;
         const total = Object.values(formData.questionTypeDistribution).reduce((a, b) => a + b, 0);
         return total === 100;
       }
@@ -597,8 +606,10 @@ setIsGenerating(true);
         return (
           <ConfigStep
             formData={formData}
+            selectedCourse={selectedCourse}
             onSelectChange={handleSelectChange}
             onDistributionChange={handleDistributionChange}
+            onMathPaperTypeChange={handleMathPaperTypeChange}
           />
         );
 
@@ -696,8 +707,18 @@ setIsGenerating(true);
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
             </Button>
 
-            {/* Config step: show live percentage total hint */}
+            {/* Config step: show live hint */}
             {step === 'config' && (() => {
+              const isMaths = selectedCourse
+                ? `${selectedCourse.name} ${selectedCourse.code}`.toLowerCase().includes('math')
+                : false;
+              if (isMaths) {
+                return formData.mathPaperType ? (
+                  <span className="text-xs text-emerald-600 font-medium">✓ Paper type selected</span>
+                ) : (
+                  <span className="text-xs text-amber-500 font-medium">Select a paper type to continue</span>
+                );
+              }
               const total = Object.values(formData.questionTypeDistribution).reduce((a, b) => a + b, 0);
               return total !== 100 ? (
                 <span className="text-xs text-red-500 font-medium">

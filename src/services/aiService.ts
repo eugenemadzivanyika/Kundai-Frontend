@@ -21,21 +21,16 @@ export interface GenerateQuestionsParams {
   questionCount: number;
   difficulty: 'easy' | 'medium' | 'hard';
   type: string;
-  
-  // --- ADD THESE NEW FIELDS ---
-  maxScore?: number;    // The "Point Boundary" for the AI
-  dueDate?: string;     // Context for the assessment
-  dueTime?: string;     // Context for the assessment
-  
-  // If you are sending the distribution mix
+  maxScore?: number;
+  dueDate?: string;
+  dueTime?: string;
   questionTypeDistribution?: {
     multiple_choice: number;
     true_false: number;
     short_answer: number;
     essay: number;
   };
-  
-  // If you are still planning to handle files eventually
+  mathPaperType?: 'paper1' | 'paper2' | 'both' | null;
   uploadedFile?: File | null;
 }
 
@@ -61,7 +56,7 @@ generateQuestions: async (params: GenerateQuestionsParams): Promise<Assessment> 
       dueDate: params.dueDate,
       dueTime: params.dueTime,
       questionTypeDistribution: params.questionTypeDistribution,
-      // level: params.level, // If you extracted this in the modal
+      mathPaperType: params.mathPaperType,
     }),
   });
 },

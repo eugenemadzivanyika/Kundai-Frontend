@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { QuestionText } from '../components/ui/DiagramRenderer';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Edit2, FileText, List, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -294,7 +295,12 @@ const AssessmentDetailPage: React.FC = () => {
                             </span>
                           </div>
                         </div>
-                        <p className="text-[12px] font-medium text-slate-700 leading-relaxed mb-1.5">{q.text}</p>
+                        <QuestionText
+                          text={q.text}
+                          manifest={q.diagram_manifest}
+                          textClassName="text-[12px] font-medium text-slate-700 leading-relaxed mb-1.5"
+                          diagramWidth={200}
+                        />
                         {q.options?.length > 0 && (
                           <div className="space-y-0.5">
                             {q.options.map((opt: string, oi: number) => (
