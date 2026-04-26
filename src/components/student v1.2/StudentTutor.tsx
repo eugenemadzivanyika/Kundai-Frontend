@@ -11,7 +11,27 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { aiTutorService, AiTutorMessage, AiTutorSession } from '../../services/aiTutorService';
+
+// Handles the case where the AI returned JSON prose instead of plain text.
+// Extracts all string leaf values depth-first and joins them as paragraphs.
+function ensurePlainText(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed);
+    const collect = (obj: unknown): string[] => {
+      if (typeof obj === 'string') return [obj];
+      if (Array.isArray(obj)) return obj.flatMap(collect);
+      if (obj && typeof obj === 'object') return Object.values(obj).flatMap(collect);
+      return [];
+    };
+    return collect(parsed).join('\n\n');
+  } catch {
+    return trimmed;
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +102,7 @@ const StepTrail: React.FC<{
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 4,
-      padding: '10px 18px', borderBottom: '0.5px solid #e2e8f0',
+      padding: '8px 14px', borderBottom: '0.5px solid #e2e8f0',
       background: '#f8fafc', flexShrink: 0, overflowX: 'auto',
     }}>
       {start > 0 && (
@@ -203,15 +223,23 @@ const MessageBubble: React.FC<{ message: AiTutorMessage }> = ({ message }) => {
         {/* Text content */}
         {(message.content || message.transcript) && (
           <div style={{
-            padding: '9px 13px', fontSize: 14, lineHeight: 1.65,
+            padding: '8px 12px', fontSize: 13, lineHeight: 1.6,
             borderRadius: isStudent ? '14px 14px 3px 14px' : '14px 14px 14px 3px',
             background: isStudent ? '#eff6ff' : isSystem ? '#fffbeb' : '#fff',
             color:      isStudent ? '#1d4ed8' : isSystem ? '#92400e'  : '#1e293b',
             border:     isStudent ? 'none' : `0.5px solid ${isSystem ? '#fde68a' : '#e2e8f0'}`,
           }}>
-            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-              {message.content || message.transcript}
-            </p>
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p style={{ margin: '0 0 6px' }}>{children}</p>,
+                strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
+                ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ol>,
+                ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 18 }}>{children}</ul>,
+                li: ({ children }) => <li style={{ marginBottom: 2 }}>{children}</li>,
+              }}
+            >
+              {ensurePlainText(message.content || message.transcript || '')}
+            </ReactMarkdown>
             <p style={{ margin: '4px 0 0', fontSize: 11, color: isStudent ? '#93c5fd' : '#94a3b8', opacity: 0.85 }}>
               {new Date(message.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
@@ -354,17 +382,38 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
     const text = messageText.trim();
     if (!session || sending || (!text && !attachment)) return;
 
+    // Capture before clearing so we can roll back on error
+    const capturedText       = text;
+    const capturedAttachment = attachment;
+    const optimisticId       = `optimistic-${Date.now()}`;
+
+    // ── 1. Update UI immediately ───────────────────────────────────────────────
+    // Message leaves the box and appears in chat right away.
+    // The typing indicator shows while the AI generates its reply.
+    setMessageText('');
+    setAttachment(null);                                      // clear preview pane
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setSending(true);
     setError(null);
+    setMessages(prev => [...prev, {
+      id:          optimisticId,
+      sessionId:   session.id,
+      senderRole:  'student' as const,
+      contentType: 'text'    as const,
+      content:     capturedText || undefined,
+      imageUrl:    capturedAttachment?.previewUrl,            // blob URL is valid until we revoke it below
+      ts:          new Date().toISOString(),
+    }]);
 
     try {
+      // ── 2. Send to server (AI reply generated here) ────────────────────────
       const response = await aiTutorService.sendMessage({
         sessionId:   session.id,
         senderId:    studentId,
         senderRole:  'student',
         contentType: 'text',
-        content:     text || undefined,
-        imageBase64: attachment?.base64,
+        content:     capturedText || undefined,
+        imageBase64: capturedAttachment?.base64,
         contentPayload: {
           coachingMode:      coachMode,
           noDirectSolutions: true,
@@ -374,18 +423,20 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
         autoReply: true,
       });
 
-      // If checkpoint was passed, notify the parent so the sidebar can update
-      if (response.checkpointPassed) {
-        onCheckpointPassed?.();
-      }
+      if (response.checkpointPassed) onCheckpointPassed?.();
 
-      setMessageText('');
-      removeAttachment();
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
-
+      // ── 3. Replace optimistic message + append AI reply with DB truth ──────
       const msgs = await aiTutorService.listMessages(session.id);
       setMessages(msgs);
+
+      // Safe to release the blob URL now that the real image URL is in state
+      if (capturedAttachment) URL.revokeObjectURL(capturedAttachment.previewUrl);
+
     } catch (err: any) {
+      // ── 4. Roll back on failure: remove optimistic msg, restore input ──────
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
+      setMessageText(capturedText);
+      if (capturedAttachment) setAttachment(capturedAttachment);
       setError(err?.message || 'Failed to send message.');
     } finally {
       setSending(false);
@@ -430,52 +481,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       <StepTrail steps={allSteps} activeIndex={activeStepIndex} />
 
       {/* ── Active step context bar ─────────────────────────────────────── */}
-      <div style={{
-        padding: '10px 18px', borderBottom: '0.5px solid #e2e8f0',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 12, flexWrap: 'wrap', flexShrink: 0, background: '#fff',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 8, background: '#eff6ff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <BookOpen style={{ width: 14, height: 14, color: '#3b82f6' }} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ fontSize: 10, color: '#94a3b8', margin: 0, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Current step
-            </p>
-            <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
-              {activeStep?.title || 'No step selected'}
-            </p>
-            {activeStep?.exitCheckpoint?.expectedLogic && (
-              <p style={{ fontSize: 11, color: '#64748b', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
-                Goal: {activeStep.exitCheckpoint.expectedLogic}
-              </p>
-            )}
-          </div>
-        </div>
 
-        {/* Coach mode toggle */}
-        <div style={{
-          display: 'flex', gap: 3, background: '#f8fafc',
-          padding: 3, borderRadius: 8, flexShrink: 0,
-        }}>
-          {(['socratic', 'hint'] as CoachMode[]).map((mode) => (
-            <button key={mode} type="button" onClick={() => setCoachMode(mode)} style={{
-              fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6,
-              border: 'none', cursor: 'pointer',
-              background: coachMode === mode ? '#fff' : 'transparent',
-              color:      coachMode === mode ? '#0f172a' : '#94a3b8',
-              boxShadow:  coachMode === mode ? '0 0 0 0.5px #cbd5e1' : 'none',
-              transition: 'all 0.15s',
-            }}>
-              {mode === 'socratic' ? 'Socratic' : 'Hint-first'}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ── Message thread ──────────────────────────────────────────────── */}
       <div style={{
@@ -593,7 +599,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={attachment ? 'Add a message with your photo (optional)…' : "Ask the coach or describe where you're stuck…"}
             style={{
-              flex: 1, resize: 'none', fontSize: 14, lineHeight: 1.55,
+              flex: 1, resize: 'none', fontSize: 13, lineHeight: 1.5,
               padding: '9px 10px', border: 'none', background: 'transparent',
               color: '#0f172a', outline: 'none', minHeight: 40, maxHeight: 120,
               fontFamily: 'inherit',
@@ -612,9 +618,9 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
           </button>
         </div>
 
-        <p style={{ fontSize: 11, color: '#94a3b8', padding: '0 14px 10px' }}>
+        {/* <p style={{ fontSize: 11, color: '#94a3b8', padding: '0 14px 10px' }}>
           ↵ to send · shift+↵ new line · coach gives hints, not answers
-        </p>
+        </p> */}
       </div>
     </div>
   );

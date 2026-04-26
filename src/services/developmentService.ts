@@ -32,6 +32,26 @@ export const developmentService = {
   getAIResourceById: (resourceId: string) =>
     fetchData<any>(`/development/plans/ai-content/${resourceId}`),
 
+  createCoursePlan: (planData: Record<string, unknown>) =>
+    fetchData<Record<string, unknown>>('/development/plans', {
+      method: 'POST',
+      body: JSON.stringify(planData),
+    }),
+
+  createPlan: (planData: {
+    student: string;
+    course: string;
+    title: string;
+    skillCategory: string;
+    targetAttributes?: Array<{ attributeId: string; initialMastery: number }>;
+    description?: string;
+    status?: string;
+  }) =>
+    fetchData<Record<string, unknown>>('/development/plans', {
+      method: 'POST',
+      body: JSON.stringify(planData),
+    }),
+
   activatePlan: (planId: string, teacherNotes?: string) =>
     fetchData<DevelopmentPlan>(`/development/plans/${planId}/activate`, {
       method: 'PUT',

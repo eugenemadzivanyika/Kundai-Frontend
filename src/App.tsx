@@ -13,6 +13,7 @@ import MainLayout from './components/layout/MainLayout';
 import StudentDashboard from './components/student/StudentDashboard';
 import NotFound from './components/pages/NotFound';
 import DevelopmentPage from './pages/DevelopmentPage';
+import DevelopmentPlanCreation from './components/classroom/DevelopmentPlanCreation';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminCourses from './pages/AdminCourses';
 import AdminStudents from './pages/AdminStudents';
@@ -109,6 +110,7 @@ function App() {
             <Route path="calendar" element={<CalendarView />} />
             <Route path="classroom" element={<ClassroomView />} />
             <Route path="development/:studentId" element={<DevelopmentPage />} />
+            <Route path="development/create/:studentId/:courseId" element={<DevelopmentPlanCreation />} />
             <Route path="resources" element={<ResourcesDashboard />} />
             {/* Assessment management */}
             <Route path="teacher/assessments" element={<AssessmentsDashboardPage />} />

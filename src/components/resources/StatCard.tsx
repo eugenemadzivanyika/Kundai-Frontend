@@ -1,25 +1,51 @@
 import React from 'react';
-import { LucideIcon } from 'lucide-react';
-import { clsx } from 'clsx';
 
+// ── Inline SVG helper ─────────────────────────────────────────────────────────
+const Ico: React.FC<{ d: string | string[]; size?: number; color?: string }> = ({ d, size = 14, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ flexShrink: 0 }}>
+    {(Array.isArray(d) ? d : [d]).map((p, i) => <path key={i} d={p} />)}
+  </svg>
+);
+
+// The new StatCard accepts SVG path strings as the icon (matching the HTML design),
+// and an accent hex color for theming.
 interface StatCardProps {
-    icon: LucideIcon;
-    value: string | number;
-    label: string;
-    color: string;
-    isText?: boolean;
+  // SVG path string(s) for the icon
+  iconPaths: string | string[];
+  value: string | number;
+  label: string;
+  accent: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ icon: Icon, value, label, color, isText = false }) => (
-    <div className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 flex items-center gap-2.5">
-        <div className={clsx("w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0", `bg-${color}-100`)}>
-            <Icon size={14} className={`text-${color}-600`} />
-        </div>
-        <div className="min-w-0">
-            <p className={clsx("font-bold text-slate-800 truncate leading-tight", isText ? 'text-xs' : 'text-sm')}>{value}</p>
-            <p className="text-[10px] text-slate-400 truncate">{label}</p>
-        </div>
+const StatCard: React.FC<StatCardProps> = ({ iconPaths, value, label, accent }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+    background: 'white', border: '1px solid #e2e8f0', borderRadius: 9,
+    fontFamily: 'Inter, system-ui, sans-serif',
+  }}>
+    <div style={{
+      width: 28, height: 28, borderRadius: 7, background: accent + '18',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      <Ico d={iconPaths} size={13} color={accent} />
     </div>
+    <div style={{ minWidth: 0 }}>
+      <div style={{
+        fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </div>
+      <div style={{
+        fontSize: 9, fontWeight: 600, color: '#94a3b8',
+        textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2,
+      }}>
+        {label}
+      </div>
+    </div>
+  </div>
 );
 
 export default StatCard;

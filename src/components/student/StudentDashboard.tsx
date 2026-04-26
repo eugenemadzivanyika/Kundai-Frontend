@@ -97,7 +97,7 @@ const isRoutableStudentView = (view: NavItemKey): view is StudentRouteViewKey =>
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 const DashboardSkeleton = () => (
-  <div className="min-h-screen bg-slate-100">
+  <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50/80">
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div className="h-8 w-44 rounded-md bg-slate-200 animate-pulse" />
@@ -114,8 +114,8 @@ const DashboardSkeleton = () => (
         </div>
       </div>
     </header>
-    <main className="w-full bg-white py-6">
-      <div className="max-w-[1400px] mx-auto px-4 space-y-4">
+    <main className="w-full py-4">
+      <div className="max-w-[1400px] mx-auto px-4 space-y-3">
         <section className="w-full border-y border-orange-100 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50">
           <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -767,10 +767,10 @@ const realPlanBySubjectId = useMemo(() => {
       {/* Quick stats (subjects panel only) */}
       {homePanel === 'subjects' && (
         <>
-          <section className="hidden md:grid grid-cols-3 gap-4">
-            <article className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <section className="hidden md:grid grid-cols-3 gap-3">
+            <article className="rounded-xl border border-amber-100/70 bg-white/90 px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2 text-slate-700">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertTriangle className="h-4 w-4 text-red-500" />
                 <p className="text-sm font-semibold">Critical alerts</p>
               </div>
               <p className="mt-2 text-2xl font-bold text-slate-900">{criticalAlertsCount}</p>
@@ -782,7 +782,7 @@ const realPlanBySubjectId = useMemo(() => {
                     : 'No critical alerts.'}
               </p>
             </article>
-            <article className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <article className="rounded-xl border border-amber-100/70 bg-white/90 px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2 text-slate-700">
                 <CalendarClock className="h-4 w-4 text-blue-600" />
                 <p className="text-sm font-semibold">Upcoming deadlines</p>
@@ -792,7 +792,7 @@ const realPlanBySubjectId = useMemo(() => {
                 {nextLiveEvent ? `${nextLiveEvent.title} • ${formatCalendarEventTime(nextLiveEvent.start)}` : 'No upcoming events.'}
               </p>
             </article>
-            <article className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <article className="rounded-xl border border-amber-100/70 bg-white/90 px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2 text-slate-700">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <p className="text-sm font-semibold">Mastery signals</p>
@@ -822,7 +822,7 @@ const realPlanBySubjectId = useMemo(() => {
 
           {/* Mobile mastery card */}
           <section className="md:hidden">
-            <article className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <article className="rounded-xl border border-amber-100/70 bg-white/90 px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2 text-slate-700">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <p className="text-sm font-semibold">Mastery signals</p>
@@ -857,9 +857,9 @@ const realPlanBySubjectId = useMemo(() => {
       )}
 
       {/* Main panel */}
-      <section className="bg-white overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] min-h-[640px]">
-          <aside className="hidden lg:block border-r border-slate-200 p-5">
+      <section className="bg-white/90 backdrop-blur-sm overflow-hidden rounded-xl border border-amber-100/60 shadow-sm">
+        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] min-h-[580px]">
+          <aside className="hidden lg:block border-r border-amber-100/60 p-5 bg-amber-50/30">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">My Stuff</p>
             <button type="button" onClick={() => setHomePanel('subjects')}
               className={`w-full mt-3 text-left rounded-md font-semibold px-4 py-2.5 text-sm ${homePanel === 'subjects' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}>
@@ -1164,10 +1164,10 @@ const realPlanBySubjectId = useMemo(() => {
           onOpenMission={handleOpenMission}
         />
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
-            <BookOpen className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-700 mb-2">No Active Plan</h3>
-            <p className="text-slate-500">No plan available for the selected subject.</p>
+          <div className="bg-white/90 rounded-2xl border border-amber-100/70 p-8 text-center shadow-sm">
+            <BookOpen className="w-14 h-14 text-amber-200 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-700 mb-2">No Active Plan</h3>
+            <p className="text-slate-500 text-sm">No plan available for the selected subject.</p>
           </div>
         );
 
@@ -1192,9 +1192,9 @@ const realPlanBySubjectId = useMemo(() => {
       case 'results': {
         const reportNeedsAttentionCount = reportCardRows.filter((r) => r.masteryPercent < 50).length;
         return (
-          <section className="border border-slate-200 bg-white overflow-hidden">
-            <div className={`grid grid-cols-1 min-h-[680px] ${isResultsSidebarCollapsed ? 'lg:grid-cols-[88px_1fr]' : 'lg:grid-cols-[280px_1fr]'}`}>
-              <aside className="relative border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50 p-4 sm:p-5 space-y-4">
+          <section className="border border-amber-100/60 bg-white/90 overflow-hidden rounded-xl shadow-sm">
+            <div className={`grid grid-cols-1 min-h-[560px] ${isResultsSidebarCollapsed ? 'lg:grid-cols-[88px_1fr]' : 'lg:grid-cols-[280px_1fr]'}`}>
+              <aside className="relative border-b lg:border-b-0 lg:border-r border-amber-100/60 bg-amber-50/30 p-4 sm:p-5 space-y-4">
                 <button type="button" onClick={() => setIsResultsSidebarCollapsed((prev) => !prev)}
                   className="hidden lg:inline-flex absolute top-1/2 -translate-y-1/2 -right-4 z-10 h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
                   aria-label={isResultsSidebarCollapsed ? 'Expand my report panel' : 'Collapse my report panel'}>
@@ -1303,7 +1303,7 @@ const realPlanBySubjectId = useMemo(() => {
 
   return (
     <div
-      className="min-h-screen bg-slate-100"
+      className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50/50 to-amber-50/80"
       style={{ ['--student-header-offset' as string]: isHeaderCompact ? '4.75rem' : '9rem' }}
     >
       {/* ── Header ── */}
@@ -1477,15 +1477,20 @@ const realPlanBySubjectId = useMemo(() => {
       )}
 
       {/* ── Main ── */}
-      <main className={`w-full bg-white h-[calc(100vh-160px)] overflow-hidden ${activeView === 'subjects' ? 'pt-6 pb-0' : 'py-6'}`}>
-        <div className="max-w-[1400px] mx-auto px-4 h-full">
+      {/* Strip the container/padding only when StudentPlanView is actually rendered (plan + activePlan).
+          For the no-plan fallback and every other view, keep the standard max-w container + padding. */}
+      <main
+        className={`w-full overflow-hidden ${activeView === 'subjects' ? 'pt-4 pb-0' : 'py-4'}`}
+        style={{ height: 'calc(100vh - var(--student-header-offset, 9rem))' }}
+      >
+        <div className="h-full max-w-[1400px] mx-auto px-4">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.28, ease: 'easeInOut' }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: 'easeInOut' }}
               className="h-full overflow-y-auto"
             >
               {renderContent()}

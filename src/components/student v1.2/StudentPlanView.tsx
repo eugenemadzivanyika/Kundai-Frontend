@@ -1,14 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DevelopmentPlan, Step } from '../../types';
 import {
   BookOpen,
   CheckCircle,
+  ChevronDown,
+  ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   Edit,
   ExternalLink,
   FileText,
+  Lock,
+  Play,
 } from 'lucide-react';
 import StudentTutor, { TutorStep } from '../student v1.2/StudentTutor';
 import StudentPracticeRunner, { buildMockPracticeQuestions } from './StudentPracticeRunner';
@@ -16,27 +20,6 @@ import StudentPracticeRunner, { buildMockPracticeQuestions } from './StudentPrac
 // ─────────────────────────────────────────────────────────────────────────────
 // BACKEND ADAPTOR
 // ─────────────────────────────────────────────────────────────────────────────
-//
-// Real schema (planModel.js):
-//
-//   plan.missions[]
-//     ├── task          (string)   ← the mission headline shown in the sidebar
-//     ├── objective     (string)   ← used as fallback step content
-//     ├── status        (string)
-//     ├── resourceLink  (string)
-//     └── steps[]
-//           ├── title          (string)
-//           ├── content        (string)  ← theory text / instructions for the AI
-//           ├── type           ('Theory' | 'Interactive_Exercise' | 'Hinted_Practice')
-//           └── exitCheckpoint
-//                 ├── question      (string)
-//                 ├── expectedLogic (string)  ← what the AI checks the student against
-//                 └── isPassed      (boolean)
-//
-// We flatMap missions → steps so the sidebar lists individual steps.
-// Each step carries its parentMissionId so the controller can update it.
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface BackendStep {
   _id?: string;
   title: string;
@@ -68,27 +51,15 @@ interface BackendPlan {
   course?: { _id: string; name?: string; code?: string } | string;
 }
 
-/**
- * Maps a backend step type to the UI step type used by icons / routing logic.
- */
 const backendTypeToUiType = (type?: string): Step['type'] => {
   switch (type) {
-    case 'Theory':                return 'document';
-    case 'Interactive_Exercise':  return 'assignment';
-    case 'Hinted_Practice':       return 'assignment';
-    default:                      return 'document';
+    case 'Theory':               return 'document';
+    case 'Interactive_Exercise': return 'assignment';
+    case 'Hinted_Practice':      return 'assignment';
+    default:                     return 'document';
   }
 };
 
-/**
- * Flattens plan.missions[].steps[] into a single ordered Step array.
- *
- * If a mission has no steps we emit one synthetic step from the mission
- * itself (task + objective) so the sidebar always has something to show.
- *
- * We attach extra fields (missionId, stepId, exitCheckpoint) as non-schema
- * properties so StudentTutor can pass them straight through to the backend.
- */
 export const adaptBackendPlan = (backendPlan: BackendPlan): DevelopmentPlan => {
   const missions = backendPlan.missions ?? [];
   let order = 0;
@@ -96,24 +67,18 @@ export const adaptBackendPlan = (backendPlan: BackendPlan): DevelopmentPlan => {
   const steps: Step[] = missions.flatMap((mission) => {
     if (mission.steps && mission.steps.length > 0) {
       return mission.steps.map((step) => ({
-        // Core Step fields
         title:   step.title,
         type:    backendTypeToUiType(step.type),
         order:   order++,
         link:    mission.resourceLink,
-
-        // Extra fields carried through for the tutor
-        content:          step.content || mission.objective || '',
-        exitCheckpoint:   step.exitCheckpoint,
-        missionId:        mission._id,
-        stepId:           step._id,
+        content:           step.content || mission.objective || '',
+        exitCheckpoint:    step.exitCheckpoint,
+        missionId:         mission._id,
+        stepId:            step._id,
         parentMissionTask: mission.task,
-
         additionalResources: mission.objective ? [mission.objective] : undefined,
       }));
     }
-
-    // Synthetic step for missions that have no nested steps yet
     return [{
       title:   mission.task,
       type:    'document' as Step['type'],
@@ -134,14 +99,30 @@ export const adaptBackendPlan = (backendPlan: BackendPlan): DevelopmentPlan => {
   return {
     id:              backendPlan._id,
     currentProgress: backendPlan.progress ?? 0,
-    plan: {
-      name: backendPlan.title,
-      steps,
-    },
+    plan: { name: backendPlan.title, steps },
   };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+type EnrichedStep = Step & {
+  flatIndex: number;
+  content?: string;
+  exitCheckpoint?: { question?: string; expectedLogic?: string; isPassed?: boolean };
+  missionId?: string;
+  stepId?: string;
+  parentMissionTask?: string;
+};
+
+interface MissionGroup {
+  task: string;
+  missionId?: string;
+  backendStatus?: 'Pending' | 'In Progress' | 'Completed';
+  steps: EnrichedStep[];
+  firstFlatIndex: number;
+}
 
 interface StudentPlanViewProps {
   plan: any;
@@ -158,22 +139,24 @@ const isBackendPlan = (p: any): p is BackendPlan =>
 
 const getStepIcon = (type: string) => {
   switch (type) {
-    case 'document':   return <FileText className="w-4 h-4" />;
-    case 'assignment': return <Edit     className="w-4 h-4" />;
-    case 'quiz':       return <BookOpen className="w-4 h-4" />;
-    default:           return <BookOpen className="w-4 h-4" />;
+    case 'document':   return <FileText className="w-3.5 h-3.5" />;
+    case 'assignment': return <Edit     className="w-3.5 h-3.5" />;
+    case 'quiz':       return <BookOpen className="w-3.5 h-3.5" />;
+    default:           return <BookOpen className="w-3.5 h-3.5" />;
   }
 };
 
 const getProgressColor = (progress: number) => {
-  if (progress >= 80) return 'bg-green-500';
-  if (progress >= 60) return 'bg-blue-600';
-  if (progress >= 40) return 'bg-blue-500';
-  return 'bg-blue-400';
+  if (progress >= 80) return 'bg-emerald-500';
+  if (progress >= 60) return 'bg-amber-500';
+  if (progress >= 40) return 'bg-amber-400';
+  return 'bg-orange-400';
 };
 
 const isPracticeStep = (type: string) => type === 'assignment' || type === 'quiz';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 const StudentPlanView: React.FC<StudentPlanViewProps> = ({
@@ -201,14 +184,74 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
   const [selectedStepIndex,      setSelectedStepIndex]      = useState(0);
   const [isSidebarCollapsed,     setIsSidebarCollapsed]     = useState(false);
   const [completedPracticeSteps, setCompletedPracticeSteps] = useState<Record<number, boolean>>({});
+  const [expandedMissions,       setExpandedMissions]       = useState<Set<number>>(new Set([0]));
+
+  // ── Raw missions from backend (for status lookup) ──────────────────────────
+  const rawMissions: BackendMission[] = useMemo(
+    () => (isBackendPlan(planProp) ? planProp.missions ?? [] : []),
+    [planProp]
+  );
+
+  // ── Group flat steps back into mission buckets for the sidebar ─────────────
+  const missionGroups = useMemo<MissionGroup[]>(() => {
+    const groups: MissionGroup[] = [];
+    const seenKeys = new Map<string, number>();
+
+    sortedSteps.forEach((step: any, flatIndex: number) => {
+      const key = step.missionId || step.parentMissionTask || `step-${flatIndex}`;
+      if (!seenKeys.has(key)) {
+        const backend = rawMissions.find(m => m._id === step.missionId);
+        seenKeys.set(key, groups.length);
+        groups.push({
+          task:          step.parentMissionTask || step.title,
+          missionId:     step.missionId,
+          backendStatus: backend?.status,
+          steps:         [],
+          firstFlatIndex: flatIndex,
+        });
+      }
+      groups[seenKeys.get(key)!].steps.push({ ...step, flatIndex } as EnrichedStep);
+    });
+
+    return groups;
+  }, [sortedSteps, rawMissions]);
+
+  // ── Lock helpers ───────────────────────────────────────────────────────────
+
+  const isStepDone = useCallback((flatIndex: number, step: any): boolean =>
+    Boolean(step.exitCheckpoint?.isPassed)
+    || Boolean(completedPracticeSteps[flatIndex])
+    || flatIndex < completedStepsCount,
+    [completedPracticeSteps, completedStepsCount]
+  );
+
+  const isMissionGroupDone = useCallback((group: MissionGroup): boolean => {
+    if (group.backendStatus === 'Completed') return true;
+    if (group.steps.length === 0) return false;
+    return group.steps.every(s => isStepDone(s.flatIndex, s));
+  }, [isStepDone]);
+
+  const isMissionGroupLocked = useCallback((groupIndex: number): boolean => {
+    if (groupIndex === 0) return false;
+    return !isMissionGroupDone(missionGroups[groupIndex - 1]);
+  }, [missionGroups, isMissionGroupDone]);
+
+  const isStepWithinGroupLocked = useCallback(
+    (groupIndex: number, stepInGroupIndex: number): boolean => {
+      if (isMissionGroupLocked(groupIndex)) return true;
+      if (stepInGroupIndex === 0) return false;
+      const prev = missionGroups[groupIndex].steps[stepInGroupIndex - 1];
+      return !isStepDone(prev.flatIndex, prev);
+    },
+    [missionGroups, isMissionGroupLocked, isStepDone]
+  );
 
   const selectedStep = sortedSteps[selectedStepIndex] || null;
   const nextStep     = selectedStepIndex < totalSteps - 1 ? sortedSteps[selectedStepIndex + 1] : null;
 
-  const sidebarDesktopWidth  = isSidebarCollapsed ? 'md:w-[88px]'  : 'md:w-[300px]';
-  const contentDesktopOffset = isSidebarCollapsed ? 'md:ml-[88px]' : 'md:ml-[300px]';
+  const sidebarDesktopWidth = isSidebarCollapsed ? 'md:w-[72px]' : 'md:w-[280px]';
 
-  // ── Build TutorStep for the current step ───────────────────────────────────
+  // ── TutorStep wiring ───────────────────────────────────────────────────────
   const activeTutorStep = useMemo<TutorStep | null>(() => {
     if (!selectedStep) return null;
     const s = selectedStep as any;
@@ -221,7 +264,6 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
     };
   }, [selectedStep]);
 
-  // All steps as TutorStep for the progress trail in StudentTutor
   const allTutorSteps = useMemo<TutorStep[]>(
     () => sortedSteps.map((s: any) => ({
       title:          s.title,
@@ -233,7 +275,6 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
     [sortedSteps]
   );
 
-  // Prefill message shown in the tutor chat when the step changes
   const prefillMessage = useMemo(() => {
     if (!selectedStep) return undefined;
     return `I'm ready to work on: "${selectedStep.title}". Please guide me.`;
@@ -261,10 +302,26 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
     setCompletedPracticeSteps({});
   }, [plan.id]);
 
-  // ── Checkpoint callback from StudentTutor ──────────────────────────────────
-  // The backend has already updated the DB; we just reflect it in local UI state.
+  // Auto-expand the mission that contains the active/selected step
+  useEffect(() => {
+    const activeMissionIdx = missionGroups.findIndex(g =>
+      g.steps.some(s => s.flatIndex === currentStepIndex || s.flatIndex === selectedStepIndex)
+    );
+    if (activeMissionIdx >= 0) {
+      setExpandedMissions(prev => new Set([...prev, activeMissionIdx]));
+    }
+  }, [currentStepIndex, selectedStepIndex, missionGroups]);
+
   const handleCheckpointPassed = () => {
-    setCompletedPracticeSteps((prev) => ({ ...prev, [selectedStepIndex]: true }));
+    setCompletedPracticeSteps(prev => ({ ...prev, [selectedStepIndex]: true }));
+  };
+
+  const toggleMission = (groupIndex: number) => {
+    setExpandedMissions(prev => {
+      const next = new Set(prev);
+      next.has(groupIndex) ? next.delete(groupIndex) : next.add(groupIndex);
+      return next;
+    });
   };
 
   const selectedStepIsPractice = Boolean(selectedStep && isPracticeStep(selectedStep.type));
@@ -273,112 +330,206 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="flex bg-slate-50"
-      style={{ height: 'calc(100vh - var(--student-header-offset, 9rem))', overflow: 'hidden' }}
-    >
+    <div className="flex h-full overflow-hidden bg-amber-50/30">
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
       <aside
-        className={`fixed left-0 bg-slate-50 border-r border-slate-200 transition-all duration-300 z-30 flex flex-col ${sidebarDesktopWidth}`}
-        style={{
-          top:    'var(--student-header-offset, 9rem)',
-          height: 'calc(100vh - var(--student-header-offset, 9rem))',
-        }}
+        className={`relative flex-shrink-0 bg-white border-r border-amber-100/80 transition-all duration-300 flex flex-col shadow-sm overflow-y-auto ${sidebarDesktopWidth}`}
       >
         {/* Collapse toggle */}
         <button
           type="button"
-          onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-          className="hidden md:inline-flex absolute top-1/2 -translate-y-1/2 -right-4 z-30 h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50"
+          onClick={() => setIsSidebarCollapsed(prev => !prev)}
+          className="hidden md:inline-flex absolute top-1/2 -translate-y-1/2 -right-3.5 z-30 h-7 w-7 items-center justify-center rounded-full border border-amber-200 bg-white text-amber-600 shadow-sm hover:bg-amber-50 transition-colors"
           aria-label={isSidebarCollapsed ? 'Expand panel' : 'Collapse panel'}
         >
           {isSidebarCollapsed
-            ? <ChevronsRight className="w-4 h-4" />
-            : <ChevronsLeft  className="w-4 h-4" />}
+            ? <ChevronsRight className="w-3.5 h-3.5" />
+            : <ChevronsLeft  className="w-3.5 h-3.5" />}
         </button>
 
-        {/* Plan header */}
-        <div className="border-b border-slate-200 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className={`min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isSidebarCollapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'}`}>
-              <h2 className="text-sm font-bold text-slate-900 truncate">{plan.plan.name}</h2>
-              <p className="text-xs text-slate-500">{totalSteps} steps · {safeProgress}% done</p>
-            </div>
+        {/* Plan header — kept the same height as the StepTrail (≈38px) */}
+        <div className="border-b border-amber-100/80 px-3 py-2 bg-gradient-to-r from-amber-50/80 to-orange-50/60 flex items-center gap-2.5">
+          <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <BookOpen className="w-3.5 h-3.5" />
           </div>
-          <div className={`mt-3 h-1.5 rounded-full bg-slate-200 overflow-hidden transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0' : 'opacity-100'}`}>
-            <div
-              className={`${getProgressColor(safeProgress)} h-1.5 transition-all duration-500`}
-              style={{ width: `${safeProgress}%` }}
-            />
+          <div className={`min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-200 ${isSidebarCollapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'}`}>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-bold text-slate-800 truncate flex-1">{plan.plan.name}</h2>
+              <span className="text-[10px] text-slate-400 shrink-0">{safeProgress}%</span>
+            </div>
+            <div className="mt-1 h-1 rounded-full bg-amber-100 overflow-hidden">
+              <div
+                className={`${getProgressColor(safeProgress)} h-1 transition-all duration-500`}
+                style={{ width: `${safeProgress}%` }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Step list */}
+        {/* Mission list */}
         <div className="flex-1 overflow-y-auto">
-          {sortedSteps.map((step: any, index) => {
-            // A step is completed if: exitCheckpoint.isPassed is true, OR we locally recorded it
-            const isCompleted = step.exitCheckpoint?.isPassed
-              || completedPracticeSteps[index]
-              || index < completedStepsCount;
-            const isCurrent  = index === currentStepIndex;
-            const isSelected = index === selectedStepIndex;
+          {missionGroups.map((group, groupIndex) => {
+            const locked    = isMissionGroupLocked(groupIndex);
+            const done      = isMissionGroupDone(group);
+            const expanded  = expandedMissions.has(groupIndex);
+            const hasActive = group.steps.some(s => s.flatIndex === selectedStepIndex);
+            const doneCount = group.steps.filter(s => isStepDone(s.flatIndex, s)).length;
 
             return (
-              <button
-                key={`${step.title}-${index}`}
-                type="button"
-                onClick={() => setSelectedStepIndex(index)}
-                title={`Step ${index + 1}: ${step.title}`}
-                className={`relative w-full min-h-[68px] transition border-b border-slate-200 ${
-                  isSelected
-                    ? 'bg-blue-50 border-l-4 border-l-blue-600 pl-3'
-                    : 'hover:bg-slate-100'
-                } ${isSidebarCollapsed ? 'px-2 py-3 flex justify-center' : 'text-left px-4 py-3'}`}
-              >
-                <div className={`flex items-start gap-3 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-                    isCompleted
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : isCurrent
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-slate-100 text-slate-600'
+              <div key={group.missionId || groupIndex} className="border-b border-slate-100/80 last:border-0">
+
+                {/* ── Mission row ── */}
+                <button
+                  type="button"
+                  onClick={() => !locked && (isSidebarCollapsed
+                    ? setSelectedStepIndex(group.firstFlatIndex)
+                    : toggleMission(groupIndex)
+                  )}
+                  disabled={locked}
+                  title={isSidebarCollapsed ? group.task : undefined}
+                  className={`w-full transition-colors ${
+                    isSidebarCollapsed
+                      ? 'flex justify-center items-center py-4 px-2'
+                      : 'flex items-center gap-2.5 px-3 py-3 text-left'
+                  } ${locked
+                    ? 'opacity-50 cursor-not-allowed bg-slate-50/60'
+                    : hasActive
+                      ? 'bg-amber-50/70 hover:bg-amber-50'
+                      : 'hover:bg-slate-50/80 cursor-pointer'
+                  }`}
+                >
+                  {/* Status icon */}
+                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                    locked
+                      ? 'bg-slate-100 text-slate-400'
+                      : done
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : hasActive
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-500'
                   }`}>
-                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : index + 1}
+                    {locked
+                      ? <Lock className="w-3.5 h-3.5" />
+                      : done
+                        ? <CheckCircle className="w-3.5 h-3.5" />
+                        : hasActive
+                          ? <Play className="w-3.5 h-3.5" />
+                          : groupIndex + 1}
                   </div>
 
-                  <div className={`min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isSidebarCollapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'}`}>
-                    {/* Show parent mission task as group label */}
-                    {step.parentMissionTask && (
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold truncate">
-                        {step.parentMissionTask}
-                      </p>
-                    )}
-                    <p className="text-sm font-semibold text-slate-800 truncate">{step.title}</p>
-                    <p className="text-xs text-slate-500 capitalize flex items-center gap-1 mt-0.5">
-                      {isCompleted ? 'Completed' : isCurrent ? 'In progress' : 'Not started'}
-                      <span className="text-slate-300">·</span>
-                      {getStepIcon(step.type)}
-                      {step.type}
+                  {/* Mission name + meta (hidden when collapsed) */}
+                  <div className={`flex-1 min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${
+                    isSidebarCollapsed ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'
+                  }`}>
+                    <p className={`text-xs font-bold truncate leading-tight ${
+                      locked ? 'text-slate-400' : done ? 'text-emerald-700' : 'text-slate-800'
+                    }`}>
+                      {group.task}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {locked
+                        ? 'Complete previous mission first'
+                        : done
+                          ? 'Completed'
+                          : `${doneCount} / ${group.steps.length} steps done`}
                     </p>
                   </div>
-                </div>
-              </button>
+
+                  {/* Expand chevron (only when not collapsed and not locked) */}
+                  {!isSidebarCollapsed && !locked && (
+                    <div className="shrink-0 text-slate-400 ml-auto">
+                      {expanded
+                        ? <ChevronDown  className="w-3.5 h-3.5" />
+                        : <ChevronRight className="w-3.5 h-3.5" />}
+                    </div>
+                  )}
+                </button>
+
+                {/* ── Steps (expanded, not collapsed sidebar) ── */}
+                <AnimatePresence initial={false}>
+                  {expanded && !locked && !isSidebarCollapsed && (
+                    <motion.div
+                      key="steps"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden bg-slate-50/60"
+                    >
+                      {group.steps.map((step, stepInGroupIndex) => {
+                        const stepLocked   = isStepWithinGroupLocked(groupIndex, stepInGroupIndex);
+                        const stepDone     = isStepDone(step.flatIndex, step);
+                        const isSelected   = step.flatIndex === selectedStepIndex;
+                        const isCurrent    = step.flatIndex === currentStepIndex;
+
+                        return (
+                          <button
+                            key={step.stepId || `${groupIndex}-${stepInGroupIndex}`}
+                            type="button"
+                            disabled={stepLocked}
+                            onClick={() => !stepLocked && setSelectedStepIndex(step.flatIndex)}
+                            className={`w-full flex items-center gap-2.5 pl-9 pr-3 py-2.5 text-left border-b border-slate-100/60 last:border-0 transition-colors ${
+                              stepLocked
+                                ? 'cursor-not-allowed opacity-40'
+                                : isSelected
+                                  ? 'bg-amber-100/60 border-l-[3px] border-l-amber-500 cursor-pointer'
+                                  : 'hover:bg-white/80 cursor-pointer'
+                            }`}
+                          >
+                            {/* Step status dot */}
+                            <div className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                              stepLocked
+                                ? 'bg-slate-200 text-slate-400'
+                                : stepDone
+                                  ? 'bg-emerald-100 text-emerald-600'
+                                  : isCurrent
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-200 text-slate-500'
+                            }`}>
+                              {stepLocked
+                                ? <Lock className="w-2.5 h-2.5" />
+                                : stepDone
+                                  ? <CheckCircle className="w-3 h-3" />
+                                  : step.flatIndex + 1}
+                            </div>
+
+                            {/* Step info */}
+                            <div className="min-w-0 flex-1">
+                              <p className={`text-xs font-semibold truncate leading-tight ${
+                                stepLocked  ? 'text-slate-400' :
+                                isSelected  ? 'text-amber-800' :
+                                stepDone    ? 'text-emerald-700' :
+                                             'text-slate-700'
+                              }`}>
+                                {step.title}
+                              </p>
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                {getStepIcon(step.type)}
+                                <span className="capitalize">
+                                  {stepLocked ? 'Locked' : stepDone ? 'Done' : isCurrent ? 'Active' : step.type}
+                                </span>
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             );
           })}
         </div>
       </aside>
 
       {/* ── MAIN CONTENT ──────────────────────────────────────────────────── */}
-      <main className={`flex-1 transition-all duration-300 ${contentDesktopOffset} flex flex-col overflow-hidden`}>
+      <main className="flex-1 transition-all duration-300 flex flex-col overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={selectedStepIndex}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
@@ -399,10 +550,10 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
 
             {/* Quiz step */}
             {selectedStep && selectedStep.type === 'quiz' && !completedPracticeSteps[selectedStepIndex] && (
-              <div className="flex-1 p-8 bg-white overflow-y-auto">
-                <header className="mb-8 pb-6 border-b border-slate-100">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-blue-500 mb-2">Final Assessment</p>
-                  <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic leading-none">
+              <div className="flex-1 p-6 bg-white overflow-y-auto">
+                <header className="mb-6 pb-5 border-b border-amber-100">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1.5">Final Assessment</p>
+                  <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight italic leading-none">
                     Mastery Check
                   </h2>
                   <p className="text-slate-500 mt-2 text-sm max-w-lg">
@@ -418,15 +569,15 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
                   subtitle="Answer each question carefully. You must complete the quiz to unlock the next step."
                   questions={buildMockPracticeQuestions(selectedStep.title, 'quiz')}
                   onComplete={() =>
-                    setCompletedPracticeSteps((prev) => ({ ...prev, [selectedStepIndex]: true }))
+                    setCompletedPracticeSteps(prev => ({ ...prev, [selectedStepIndex]: true }))
                   }
                 />
 
                 {selectedStep.link && (
-                  <div className="mt-8 pt-6 border-t border-slate-100">
+                  <div className="mt-6 pt-5 border-t border-slate-100">
                     <button
                       onClick={() => onOpenMission(selectedStep.link!)}
-                      className="inline-flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-600 transition-all"
+                      className="inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-amber-600 transition-all"
                     >
                       Open External Assessment
                       <ExternalLink className="w-4 h-4" />
@@ -436,24 +587,24 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
               </div>
             )}
 
-            {/* Quiz completed state */}
+            {/* Quiz completed */}
             {selectedStep && selectedStep.type === 'quiz' && completedPracticeSteps[selectedStepIndex] && (
               <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white text-center">
-                <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mb-6">
-                  <CheckCircle className="w-10 h-10 text-emerald-600" />
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5">
+                  <CheckCircle className="w-8 h-8 text-emerald-600" />
                 </div>
-                <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">
+                <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight italic">
                   Mission Stage Complete
                 </h2>
-                <p className="text-slate-500 mt-3 max-w-sm">
+                <p className="text-slate-500 mt-2 max-w-sm text-sm">
                   You've passed the mastery check for{' '}
                   <span className="font-semibold text-slate-700">{selectedStep.title}</span>.
                 </p>
                 {nextStep && (
                   <button
                     type="button"
-                    onClick={() => setSelectedStepIndex((prev) => Math.min(prev + 1, totalSteps - 1))}
-                    className="mt-8 inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all"
+                    onClick={() => setSelectedStepIndex(prev => Math.min(prev + 1, totalSteps - 1))}
+                    className="mt-6 inline-flex items-center gap-2 bg-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-amber-600 transition-all"
                   >
                     Continue to: {nextStep.title}
                   </button>
@@ -465,11 +616,11 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
 
         {/* Up-next footer */}
         {showUpNextFooter && selectedStep?.type === 'quiz' && completedPracticeSteps[selectedStepIndex] && nextStep && (
-          <footer className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 flex justify-end">
+          <footer className="shrink-0 border-t border-amber-100 bg-white px-5 py-3 flex justify-end">
             <button
               type="button"
-              onClick={() => setSelectedStepIndex((prev) => Math.min(prev + 1, totalSteps - 1))}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 transition-all"
+              onClick={() => setSelectedStepIndex(prev => Math.min(prev + 1, totalSteps - 1))}
+              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2 text-sm font-bold text-white hover:bg-amber-600 transition-all"
             >
               Up next: {nextStep.title}
             </button>

@@ -185,6 +185,9 @@ export interface StudentSkillProgress {
   lastUpdated: Date;
 }
 
+// StudentAttributes — keyed map used by the planning service payload builder
+export type StudentAttributes = Record<string, any>;
+
 // StudentAttributes Interface - Represents aggregated attributes for a student
 // This is transformed from an array of StudentAttribute documents into a key-value pair object
 export interface StudentAttribute {

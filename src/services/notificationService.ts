@@ -55,4 +55,18 @@ export const notificationService = {
   markAllAsRead: async (_recipientId?: string): Promise<void> => {
     await fetchData('/notifications/read-all', { method: 'PUT' });
   },
+
+  createNotification: async (notification: {
+    recipient: string;
+    title: string;
+    message: string;
+    notifType?: string;
+    data?: Record<string, unknown>;
+    priority?: string;
+  }): Promise<NotificationItem> => {
+    return fetchData<NotificationItem>('/notifications', {
+      method: 'POST',
+      body: JSON.stringify(notification),
+    });
+  },
 };

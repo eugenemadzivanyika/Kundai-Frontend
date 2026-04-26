@@ -224,6 +224,17 @@ const GradingDashboard: React.FC = () => {
     );
   }
 
+  if (showReviewModal && selectedSubmission) {
+  return (
+    <SubmissionReviewModal
+      isOpen={true}
+      onClose={() => { setShowReviewModal(false); setSelectedSubmission(null); }}
+      submissionId={selectedSubmission}
+      onReviewComplete={fetchData}
+    />
+  );
+}
+
   return (
     <div className="h-[calc(100vh-160px)]" style={{ display: 'flex', flexDirection: 'column', padding: '14px 18px', gap: 10, fontFamily: 'Inter, system-ui, sans-serif', background: '#f8fafc', overflow: 'hidden' }}>
       <style>{`
