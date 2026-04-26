@@ -9,15 +9,9 @@ export const authService = {
         method: 'POST',
         body: JSON.stringify({ email, password })
       });
-      
-      // DEBUG LOG 1: response is the actual object { token, user }
-      console.log('RAW SERVER RESPONSE:', response);
 
       if (response.token) {
         localStorage.setItem('token', response.token);
-        
-        // DEBUG LOG 2
-        console.log('DATA BEING SAVED TO LOCALSTORAGE:', response.user);
         
         localStorage.setItem('user', JSON.stringify(response.user)); 
       }

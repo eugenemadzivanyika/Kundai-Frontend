@@ -138,10 +138,10 @@ const toResultItem = (item: any): ResultItem | null => {
 
   return {
     id: item.assignmentId,
-    expectedMark: item.maxScore || 100,
+    expectedMark: item.maxScore ?? null,
     actualMark: actualMark,
-    grade: item.grade || (actualMark >= 50 ? 'Pass' : 'Review'), // Auto-generate grade if missing
-    feedback: item.feedback || "Automated check complete.",
+    grade: item.grade ?? null,
+    feedback: item.feedback ?? null,
     submittedDate: item.submittedAt,
   };
 };
@@ -473,16 +473,12 @@ const reviewQuestions = useMemo(() => {
       prompt: questionRef.text || "Question text unavailable",
       studentAnswer: ans.studentAnswer || "No answer",
       
-      // Reveal awarded marks only if Released
-      awardedMarks: isReleased ? (ans.pointsEarned ?? 0) : 0,
-      maxMarks: questionRef.maxPoints || 0,
-      
-      // Reveal Answer Key only if Released
-      expectedMarkingPoints: isReleased 
-        ? [questionRef.correctAnswer || "No marking scheme provided"] 
-        : ["Marking scheme hidden until grade is released"],
-        
-      feedback: isReleased ? (ans.feedback || "Correct") : "Feedback pending review.",
+      awardedMarks: isReleased ? (ans.pointsEarned ?? null) : null,
+      maxMarks: questionRef.maxPoints ?? null,
+      expectedMarkingPoints: isReleased
+        ? (questionRef.correctAnswer ? [questionRef.correctAnswer] : [])
+        : [],
+      feedback: isReleased ? (ans.feedback ?? null) : null,
       order: index + 1
     };
   });
@@ -1320,23 +1316,23 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
             </p>
           </div>
 
-                              <div className="rounded-md border border-slate-200 bg-white p-2">
-                                <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Expected Answer</p>
-                                {question.expectedMarkingPoints && question.expectedMarkingPoints.length > 0 ? (
+                              {question.expectedMarkingPoints && question.expectedMarkingPoints.length > 0 && (
+                                <div className="rounded-md border border-slate-200 bg-white p-2">
+                                  <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Expected Answer</p>
                                   <ul className="mt-1 list-disc pl-5 space-y-1 text-sm text-slate-700">
                                     {question.expectedMarkingPoints.map((point, pointIndex) => (
                                       <li key={`${question.assessmentQuestionId || index}-${pointIndex}`}>{point}</li>
                                     ))}
                                   </ul>
-                                ) : (
-                                  <p className="mt-1 text-sm text-slate-500">No expected points were provided.</p>
-                                )}
-                              </div>
+                                </div>
+                              )}
 
-                              <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900">
-                                <p className="font-semibold">Feedback</p>
-                                <p className="mt-1">{question.feedback || 'No per-question feedback yet.'}</p>
-                              </div>
+                              {question.feedback && (
+                                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900">
+                                  <p className="font-semibold">Feedback</p>
+                                  <p className="mt-1">{question.feedback}</p>
+                                </div>
+                              )}
                             </article>
                           ))}
                         </div>
@@ -1347,32 +1343,34 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
     </div>
                       )}
 
-                      {!!selectedReviewEntry.result && (
+                      {activeResult?.status === 'Released' && (
                         <>
                           <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
                             <p>
-                              Expected mark: <span className="font-semibold">{selectedReviewEntry.result.expectedMark ?? 'N/A'}</span>
+                              Max score: <span className="font-semibold">{activeResult.assessment?.totalPoints ?? selectedReviewEntry.assessment?.maxScore ?? 'N/A'}</span>
                             </p>
                             <p>
-                              Actual mark: <span className="font-semibold">{selectedReviewEntry.result.actualMark ?? 'N/A'}</span>
+                              Actual mark: <span className="font-semibold">{activeResult.actualMark ?? 'N/A'}</span>
                             </p>
-                            <p>
-                              Grade: <span className="font-semibold">{selectedReviewEntry.result.grade || 'N/A'}</span>
-                            </p>
+                            {activeResult.grade && (
+                              <p>Grade: <span className="font-semibold">{activeResult.grade}</span></p>
+                            )}
                           </div>
-                          <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                            <p className="font-semibold">Overall Feedback</p>
-                            <p className="mt-1">{selectedReviewEntry.result.feedback || 'No feedback provided.'}</p>
-                          </div>
+                          {activeResult.teacherFeedback && (
+                            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                              <p className="font-semibold">Overall Feedback</p>
+                              <p className="mt-1">{activeResult.teacherFeedback}</p>
+                            </div>
+                          )}
                         </>
                       )}
 
-                      {onOpenTutor && selectedReviewEntry.result && (
+                      {onOpenTutor && activeResult?.status === 'Released' && (
                         <button
                           type="button"
                           onClick={() =>
                             onOpenTutor(
-                              `Review my performance on "${selectedReviewEntry.assessmentName}". Feedback: ${selectedReviewEntry.result?.feedback || 'No feedback provided'}. Help me fix the gaps.`
+                              `Review my performance on "${selectedReviewEntry.assessmentName}". Feedback: ${activeResult?.teacherFeedback || 'No feedback provided'}. Help me fix the gaps.`
                             )
                           }
                           className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"

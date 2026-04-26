@@ -12,3 +12,4 @@ export * from './notificationService';
 export * from './submissionService';
 export * from './resourceService';
 export * from './aiService';
+export * from './staffMessageService';

@@ -1,3 +1,80 @@
+// Inbox message (mock/staff messages)
+export interface Message {
+  id: string;
+  sender: string;
+  title: string;
+  preview: string;
+  time: string;
+  read: boolean;
+  fullContent?: string;
+}
+
+// Upcoming activity item for dashboard
+export interface UpcomingActivity {
+  id: string;
+  course: string;
+  title: string;
+  time: string;
+  link: string;
+}
+
+// Quick access file item
+export interface QuickAccessItem {
+  id: string;
+  name: string;
+  class: string;
+}
+
+// Analytics summary data
+export interface AnalyticsData {
+  totalResources: number;
+  averageDownloads: number;
+  mostPopularResource: string;
+  topClassEngagement: string;
+}
+
+// Staff inbox message (teacher ↔ admin ↔ staff)
+export interface StaffMessage {
+  _id: string;
+  sender: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  };
+  recipient: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  };
+  subject: string;
+  body: string;
+  read: boolean;
+  readAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Unread message count per student
+export interface UnreadChatCount {
+  studentId: string;
+  studentName: string;
+  unreadCount: number;
+}
+
+// Conversation entry in the staffroom student chat list
+export interface ChatConversation {
+  studentId: string;
+  studentName: string;
+  lastMessage: {
+    content: string;
+    timestamp: Date;
+    senderRole: string;
+  } | null;
+  unreadCount: number;
+}
+
 // Enums or Union Types for clarity
 export type ResourceType = 'document' | 'image' | 'video' | 'other';
 export type PlanStatus = 'Active' | 'Completed' | 'On Hold' | 'Cancelled';

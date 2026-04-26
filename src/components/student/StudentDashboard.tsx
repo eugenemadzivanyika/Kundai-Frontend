@@ -227,6 +227,7 @@ const StudentDashboard: React.FC = () => {
   const notificationMenuRef = useRef<HTMLDivElement | null>(null);
   const viewSwitchTimerRef = useRef<number | null>(null);
   const hasInitializedDefaultSubjectRef = useRef(false);
+  const lastProcessedPathnameRef = useRef('');
   const [activeMissionResource, setActiveMissionResource] = useState<any | null>(null);
   const [isMissionOverlayOpen, setIsMissionOverlayOpen] = useState(false);
 
@@ -437,7 +438,7 @@ const realPlanBySubjectId = useMemo(() => {
         const studentData = await studentService.getStudent(currentUser.studentId);
         setStudent(studentData);
 
-        const allSubjects = await courseService.getSubjects().catch(() => []);
+        const allSubjects = await courseService.getCourses().catch(() => []);
         const studentSubjectIds = (studentData?.subjects || [])
           .map((s: any) => (typeof s === 'string' ? s : s?.id))
           .filter(Boolean) as string[];
@@ -446,7 +447,7 @@ const realPlanBySubjectId = useMemo(() => {
         if (studentSubjectIds.length > 0) {
           const byId = new Map(allSubjects.map((s) => [s.id, s]));
           const missingIds = studentSubjectIds.filter((id) => !byId.has(id));
-          const missing = await Promise.all(missingIds.map((id) => courseService.getSubjectById(id).catch(() => null)));
+          const missing = await Promise.all(missingIds.map((id) => courseService.getCourseById(id).catch(() => null)));
           missing.filter(Boolean).forEach((s) => byId.set((s as Subject).id, s as Subject));
           fetchedSubjects = studentSubjectIds.map((id) => byId.get(id)).filter(Boolean) as Subject[];
         } else {
@@ -600,6 +601,10 @@ const realPlanBySubjectId = useMemo(() => {
   useEffect(() => {
     const routeView = getRouteViewFromPathname(location.pathname);
     if (!routeView || routeView === activeView) return;
+    // If the URL hasn't changed but activeView switched to a non-routable view
+    // (e.g. 'messages'), don't override it back to the URL-derived view.
+    if (location.pathname === lastProcessedPathnameRef.current && !isRoutableStudentView(activeView)) return;
+    lastProcessedPathnameRef.current = location.pathname;
     if (viewSwitchTimerRef.current !== null) window.clearTimeout(viewSwitchTimerRef.current);
     setLoadingTargetView(routeView); setViewLoading(true);
     viewSwitchTimerRef.current = window.setTimeout(() => { setActiveView(routeView); setViewLoading(false); viewSwitchTimerRef.current = null; }, 180);
@@ -721,7 +726,7 @@ const realPlanBySubjectId = useMemo(() => {
     { key: 'results',     label: 'My Report',    icon: BarChart2 },
     // { key: 'stats',       label: 'Statistics',   icon: TrendingUp },
     // { key: 'mastery',     label: 'Mastery Gaps', icon: Brain },
-    // { key: 'messages',    label: 'Messages',     icon: MessageCircle },
+    { key: 'messages',    label: 'Messages',     icon: MessageCircle },
     // { key: 'peer-study',  label: 'Peer Study',   icon: Users },
     // { key: 'tutor',       label: 'AI Coach',     icon: Brain },
   ];
@@ -1117,26 +1122,10 @@ const realPlanBySubjectId = useMemo(() => {
         </div>
       </div>
     );
-    if (view === 'stats') return (
-      <div className="border border-slate-200 bg-white overflow-hidden animate-pulse p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="border border-slate-200 rounded-lg p-5 space-y-3"><div className="h-6 w-40 rounded bg-slate-200" /><div className="grid grid-cols-2 gap-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded bg-slate-200" />)}</div></div>
-          </div>
-          <div className="lg:col-span-3 border border-slate-200 rounded-lg p-5 space-y-3"><div className="h-6 w-32 rounded bg-slate-200" />{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-4 rounded bg-slate-200" />)}</div>
-        </div>
-      </div>
-    );
     if (view === 'messages') return (
       <div className="bg-white rounded-lg border border-slate-200 p-6 animate-pulse">
         <div className="h-6 w-44 bg-slate-200 rounded mb-4" />
         {Array.from({ length: 4 }).map((_, i) => <div key={i} className={`flex mb-3 ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}><div className="w-2/3 h-12 bg-slate-200 rounded-lg" /></div>)}
-      </div>
-    );
-    if (view === 'mastery') return (
-      <div className="border border-slate-200 bg-white overflow-hidden animate-pulse p-6 space-y-4">
-        <div className="h-7 w-48 rounded bg-slate-200" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-40 rounded-lg border border-slate-200 bg-slate-50" />)}</div>
       </div>
     );
     if (view === 'peer-study') return (
@@ -1488,8 +1477,8 @@ const realPlanBySubjectId = useMemo(() => {
       )}
 
       {/* ── Main ── */}
-      <main className={`w-full bg-white ${activeView === 'subjects' ? 'pt-6 pb-0' : 'py-6'}`}>
-        <div className="max-w-[1400px] mx-auto px-4">
+      <main className={`w-full bg-white h-[calc(100vh-160px)] overflow-hidden ${activeView === 'subjects' ? 'pt-6 pb-0' : 'py-6'}`}>
+        <div className="max-w-[1400px] mx-auto px-4 h-full">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeView}
@@ -1497,6 +1486,7 @@ const realPlanBySubjectId = useMemo(() => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.28, ease: 'easeInOut' }}
+              className="h-full overflow-y-auto"
             >
               {renderContent()}
             </motion.div>
