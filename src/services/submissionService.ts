@@ -1,5 +1,30 @@
 import { API_URL, fetchData } from './apiClient';
-import { SubmissionPayload } from '../types';
+
+export interface SubmissionReviewQuestionDetail {
+  assessmentQuestionId?: string;
+  prompt?: string;
+  studentAnswer?: string;
+  partAnswers?: string[];
+  parts?: Array<{ text?: string; correctAnswer?: string; maxPoints?: number }>;
+  awardedMarks?: number | null;
+  maxMarks?: number | null;
+  expectedMarkingPoints?: string[];
+  feedback?: string | null;
+  order?: number;
+}
+
+export interface SubmissionReviewDetail {
+  _id: string;
+  status?: string;
+  answers?: Array<{
+    questionId?: any;
+    studentAnswer?: string;
+    partAnswers?: string[];
+    pointsEarned?: number;
+    isCorrect?: boolean;
+    feedback?: string;
+  }>;
+}
 
 export const submissionService = {
   // Method 1: For File/Text submissions (Existing endpoint)
@@ -25,7 +50,7 @@ export const submissionService = {
     assessmentId: string;
     studentId: string;
     submissionType: string;
-    answers: Array<{ questionId: string; studentAnswer: string; isCorrect?: boolean }>;
+    answers: Array<{ questionId: string; studentAnswer: string; isCorrect?: boolean; partAnswers?: string[] }>;
   }) => {
     // Your controller handles raw JSON too. Since we aren't uploading a file here,
     // we use fetchData which defaults to application/json.

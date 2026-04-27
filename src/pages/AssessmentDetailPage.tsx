@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Edit2, FileText, List, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { assessmentService, courseService, submissionService } from '../services/api';
-import { Assessment } from '../types';
+import { Assessment, QuestionPart } from '../types';
 import TablePagination from '../components/ui/TablePagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { getQuestionTypeInfo } from '../utils/questionTypeLabel';
@@ -51,7 +51,28 @@ const fmtDT = (v?: string | null) => {
 const studentName = (s: ResultRecord['student']) => {
   if (!s) return 'Unknown';
   if (typeof s === 'string') return s;
-  return `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim() || s._id;
+
+  const anyS = s as any;
+
+  // Top-level common fields
+  const byFull = anyS.fullName ?? anyS.name;
+  if (typeof byFull === 'string' && byFull.trim()) return byFull.trim();
+
+  const byParts = `${anyS.firstName ?? ''} ${anyS.lastName ?? ''}`.trim();
+  if (byParts) return byParts;
+
+  // Some responses wrap user info under `user`
+  const user = anyS.user;
+  if (user) {
+    const uFull = user.fullName ?? user.name;
+    if (typeof uFull === 'string' && uFull.trim()) return uFull.trim();
+    const uParts = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
+    if (uParts) return uParts;
+    return user._id ?? user.id ?? anyS.id ?? anyS._id ?? 'Unknown';
+  }
+
+  // fallback ids
+  return anyS.id ?? anyS._id ?? 'Unknown';
 };
 
 const AssessmentDetailPage: React.FC = () => {
@@ -313,12 +334,54 @@ const AssessmentDetailPage: React.FC = () => {
                             ))}
                           </div>
                         )}
-                        {q.correctAnswer && (!q.options || q.options.length === 0) && (
+                        {q.correctAnswer && (!q.options || q.options.length === 0) && (!q.parts || q.parts.length === 0) && (
                           <div
                             className="text-[11px] px-2 py-1 rounded-md leading-relaxed"
                             style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}
                           >
                             <span className="font-bold">Model: </span><MathText text={q.correctAnswer} />
+                          </div>
+                        )}
+                        {/* Multipart sub-parts */}
+                        {q.parts?.length > 0 && (
+                          <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-blue-100">
+                            {q.parts.map((part: QuestionPart, pi: number) => (
+                              <div key={pi} className="pt-1">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <span className="text-[10px] font-bold text-blue-600">({String.fromCharCode(97 + pi)})</span>
+                                  <span className="text-[10px] text-slate-400">{part.maxPoints}pt</span>
+                                </div>
+                                <QuestionText
+                                  text={part.text}
+                                  manifest={part.diagram_manifest}
+                                  textClassName="text-[11px] text-slate-600 leading-relaxed"
+                                  diagramWidth={180}
+                                />
+                                {(part.options?.length ?? 0) > 0 && (
+                                  <div className="mt-0.5 space-y-0.5">
+                                    {(part.options ?? []).map((opt: string, oi: number) => (
+                                      <div
+                                        key={oi}
+                                        className="text-[10px] px-2 py-0.5 rounded"
+                                        style={{
+                                          background: opt === part.correctAnswer ? '#ecfdf5' : 'transparent',
+                                          color: opt === part.correctAnswer ? '#065f46' : '#64748b',
+                                          fontWeight: opt === part.correctAnswer ? 600 : 400,
+                                          border: `1px solid ${opt === part.correctAnswer ? '#bbf7d0' : 'transparent'}`,
+                                        }}
+                                      >
+                                        {String.fromCharCode(65 + oi)}. <MathText text={opt} /> {opt === part.correctAnswer && '✓'}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {part.correctAnswer && (!part.options || part.options.length === 0) && (
+                                  <div className="text-[10px] mt-0.5 px-2 py-0.5 rounded" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #bbf7d0' }}>
+                                    <MathText text={part.correctAnswer} />
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                         {q.primaryAttributeId && (

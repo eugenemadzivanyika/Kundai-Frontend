@@ -67,6 +67,7 @@ export interface UnreadChatCount {
 export interface ChatConversation {
   studentId: string;
   studentName: string;
+  userId?: string; // student's user._id — used for socket presence tracking
   lastMessage: {
     content: string;
     timestamp: Date;
@@ -239,6 +240,18 @@ export interface StudentDevelopment {
   }[];
   hasActivePlan: boolean;
 }
+// A single sub-part of a multipart question (a, b, c…)
+export interface QuestionPart {
+  _id?: string;
+  text: string;
+  type?: QuestionType;
+  options?: string[];
+  correctAnswer?: string;
+  maxPoints: number;
+  diagram_manifest?: DiagramManifest | null;
+  solution_schema?: { steps: string[]; final_answer: string };
+}
+
 // Question Interface - Represents a single question in an assessment
 export interface Question {
   _id?: string;
@@ -261,6 +274,8 @@ export interface Question {
   // Geometric/coordinate data for SVG diagram rendering. Null = no diagram.
   diagram_manifest?: DiagramManifest | null;
   solution_schema?: { steps: string[]; final_answer: string };
+  // Sub-parts for multipart questions. Empty array = single question.
+  parts?: QuestionPart[];
 }
 
 // DiagramManifest mirrors the backend assessmentModel question.diagram_manifest shape

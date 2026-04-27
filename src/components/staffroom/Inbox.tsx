@@ -311,6 +311,7 @@ const Inbox: React.FC = () => {
   const [compSubj, setCompSubj] = useState('');
   const [compBody, setCompBody] = useState('');
   const [sendingCompose, setSendingCompose] = useState(false);
+  const [staffList, setStaffList] = useState<Array<{ _id: string; firstName: string; lastName: string; role: string }>>([]);
 
   // ── Chat state ──
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -329,6 +330,9 @@ const Inbox: React.FC = () => {
   // ── Quick replies state (NEW) ──
   const [showQuick, setShowQuick] = useState(false);
 
+  // ── Online presence state ──
+  const [onlineStudents, setOnlineStudents] = useState<Set<string>>(new Set());
+
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentUser = authService.getCurrentUser();
@@ -345,8 +349,20 @@ const Inbox: React.FC = () => {
 
   // ── Inbox effects ──
   useEffect(() => {
-    if (activeTab === 'inbox') loadInbox();
+    if (activeTab === 'inbox') {
+      loadInbox();
+      if (staffList.length === 0) loadStaff();
+    }
   }, [activeTab]);
+
+  async function loadStaff() {
+    try {
+      const data = await staffMessageService.getStaff();
+      setStaffList(data);
+    } catch (err) {
+      console.error('Failed to load staff list:', err);
+    }
+  }
 
   async function loadInbox() {
     setLoadingInbox(true);
@@ -441,6 +457,16 @@ const Inbox: React.FC = () => {
 
     const socket = io(SOCKET_URL);
     socketRef.current = socket;
+
+    socket.on('presence_update', ({ userId, online }: { userId: string; online: boolean }) => {
+      setOnlineStudents(prev => {
+        const next = new Set(prev);
+        if (online) next.add(userId);
+        else next.delete(userId);
+        return next;
+      });
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
@@ -527,17 +553,17 @@ const Inbox: React.FC = () => {
    * (chatService.startConversation(studentId) — new method needed)
    */
   async function handleStartNewChat(student: Student) {
-    const exists = conversations.find(c => c.studentId === student._id);
+    const exists = conversations.find(c => c.studentId === student.id);
     if (!exists) {
       try {
-        const newConv = await chatService.startConversation(student._id);
+        const newConv = await chatService.startConversation(student.id);
         setConversations(prev => [newConv, ...prev]);
       } catch (err) {
         console.error('Failed to start conversation:', err);
         return;
       }
     }
-    handleSelectStudent(student._id);
+    handleSelectStudent(student.id);
   }
 
   async function handleSendChat(e: React.FormEvent) {
@@ -574,9 +600,9 @@ const Inbox: React.FC = () => {
   const unreadInboxCount = inboxMessages.filter(m => !m.read).length;
   const totalUnreadChat = conversations.reduce((a, c) => a + c.unreadCount, 0);
 
-  // Students not yet in a conversation (for picker)
+  // Students not yet in a conversation (for picker) — compare by custom school ID
   const newChatStudents = allStudents.filter(
-    s => !conversations.find(c => c.studentId === s._id)
+    s => !conversations.find(c => c.studentId === s.id)
   );
 
   return (
@@ -817,7 +843,11 @@ const Inbox: React.FC = () => {
                   }}
                 >
                   <option value="">Select recipient…</option>
-                  {/* TODO: map staff list here once GET /api/staff is implemented */}
+                  {staffList.map(s => (
+                    <option key={s._id} value={s._id}>
+                      {s.firstName} {s.lastName} ({s.role})
+                    </option>
+                  ))}
                 </select>
               </div>
               {/* Subject */}
@@ -1065,11 +1095,13 @@ const Inbox: React.FC = () => {
                   <span style={{ fontSize: 13, fontWeight: 800, color: '#18181b' }}>
                     {selectedConv?.studentName}
                   </span>
-                  {/* Online indicator — driven by socket presence in a real app */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-                    <span style={{ fontSize: 9, color: '#71717a', fontWeight: 600 }}>Online</span>
-                  </div>
+                  {/* Online indicator — driven by socket presence */}
+                  {selectedConv?.userId && onlineStudents.has(selectedConv.userId) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                      <span style={{ fontSize: 9, color: '#71717a', fontWeight: 600 }}>Online</span>
+                    </div>
+                  )}
                 </div>
                 <span style={{ fontSize: 10, color: '#a1a1aa', fontWeight: 500 }}>Student</span>
               </div>
@@ -1105,7 +1137,7 @@ const Inbox: React.FC = () => {
                           maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}
                       >
-                        {(selectedStudentProfile.activePlan as any).plan?.name ?? 'Active Plan'}
+                        {(selectedStudentProfile.activePlan as any).title ?? 'Active Plan'}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
                         <div
@@ -1117,13 +1149,13 @@ const Inbox: React.FC = () => {
                           <div
                             style={{
                               height: '100%',
-                              width: `${(selectedStudentProfile.activePlan as any).currentProgress ?? 0}%`,
+                              width: `${(selectedStudentProfile.activePlan as any).progress ?? 0}%`,
                               background: '#0d9488', borderRadius: 99,
                             }}
                           />
                         </div>
                         <span style={{ fontSize: 9, fontWeight: 800, color: '#0d9488' }}>
-                          {(selectedStudentProfile.activePlan as any).currentProgress ?? 0}%
+                          {(selectedStudentProfile.activePlan as any).progress ?? 0}%
                         </span>
                       </div>
                     </div>

@@ -2,6 +2,10 @@ import { fetchData } from './apiClient';
 import { StaffMessage } from '../types';
 
 export const staffMessageService = {
+  getStaff: async (): Promise<Array<{ _id: string; firstName: string; lastName: string; role: string }>> => {
+    return fetchData('/staff');
+  },
+
   getInbox: async (): Promise<StaffMessage[]> => {
     return fetchData<StaffMessage[]>('/staff-messages');
   },

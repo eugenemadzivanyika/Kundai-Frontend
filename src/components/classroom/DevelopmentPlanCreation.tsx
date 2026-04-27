@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { studentService, developmentService, notificationService } from '../../services/api';
+import { studentService, developmentService } from '../../services/api';
 import { useToast } from "@/components/ui/use-toast";
-import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Check, Zap, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 // ── Backend response shapes ────────────────────────────────────────────────────
-// The actual shape returned by GET /students/:id (user is populated)
 interface BackendStudent {
   _id: string;
   id?: string;
@@ -21,7 +19,6 @@ interface BackendStudent {
   email?: string;
 }
 
-// Individual StudentAttribute document (attribute is populated)
 interface BackendAttribute {
   _id: string;
   currentMastery: number;
@@ -81,7 +78,6 @@ function studentInitials(s: BackendStudent): string {
   return `${f}${l}`.toUpperCase();
 }
 
-// Maps raw studentAttributes array into skill cards grouped by parent_unit
 function buildSkills(rawAttributes: BackendAttribute[]): PlanSkill[] {
   const unitMap = new Map<string, BackendAttribute[]>();
   (rawAttributes ?? []).forEach(attr => {
@@ -131,8 +127,6 @@ const DevelopmentPlanCreation: React.FC<DevelopmentPlanCreationProps> = ({
   }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  // Keep a stable ref so the data-loading effect doesn't re-run when toast's
-  // function identity changes on each render (which would cause an infinite loop).
   const toastRef = useRef(toast);
   toastRef.current = toast;
   const { selectedCourse } = useAuth();
@@ -252,33 +246,18 @@ const DevelopmentPlanCreation: React.FC<DevelopmentPlanCreationProps> = ({
         });
       });
 
-      const createdPlan = await developmentService.createPlan({
+      await developmentService.createTeacherInitiatedPlan({
         student: selectedStudent._id,
         course: initialCourseId,
         title: planName,
         skillCategory,
         targetAttributes,
         description: planDescription,
-        status: 'Draft',
       });
 
       const sName = studentDisplayName(selectedStudent);
-      const focusAreas = skills
-        .filter(s => selectedSkills.has(s.id) || s.subskills.some(sub => selectedSubskills.has(sub.id)))
-        .map(s => s.name);
 
-      await notificationService.createNotification({
-        recipient: selectedStudent._id,
-        title: `New Development Plan: ${planName}`,
-        message:
-          `A new development plan "${planName}" has been created for ${sName}.\n\n` +
-          (focusAreas.length > 0 ? `Focus areas: ${focusAreas.join(', ')}.\n\n` : '') +
-          `Please check your plans section to get started.`,
-        notifType: 'development_plan',
-        data: { planId: (createdPlan as { _id?: string })._id ?? '' },
-      });
-
-      toast.success(`Plan created — ${sName} has been notified.`);
+      toast.success(`Plan created for ${sName}. Missions are being generated — it will be ready to review shortly.`);
       navigate(`/development/${selectedStudent._id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create plan.';
@@ -291,155 +270,291 @@ const DevelopmentPlanCreation: React.FC<DevelopmentPlanCreationProps> = ({
   // ── Guards ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500" />
+      <div className="flex items-center justify-center h-[calc(100vh-160px)]">
+        <div className="flex items-center gap-2 text-sm text-gray-500 font-bold">
+          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-teal-500" />
+          Loading Plan Builder...
+        </div>
       </div>
     );
   }
-  if (error) return <div className="p-4 text-red-500">{error}</div>;
+  if (error) return <div className="p-4 text-red-500 text-sm font-bold border border-red-100 bg-red-50 rounded-lg">{error}</div>;
 
   const canCreate =
     !isCreating &&
     planName.trim().length > 0 &&
     (selectedSkills.size > 0 || selectedSubskills.size > 0);
 
+  const totalSelected = selectedSkills.size + selectedSubskills.size;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex flex-col md:flex-row gap-6">
+    <div className="flex gap-3 h-[calc(100vh-160px)] px-4 min-h-0">
 
-        {/* ── Main content ── */}
-        <div className="flex-1">
+      {/* ── LEFT: Student Roster ── */}
+      <div className="w-56 shrink-0 bg-white rounded-lg shadow border border-slate-100 flex flex-col min-h-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-3 py-2.5 border-b border-slate-100 shrink-0">
+          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1">
+            Students
+            <span className="ml-auto text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">
+              {allStudents.length}
+            </span>
+          </p>
+        </div>
+        {/* List */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+          {allStudents.map(student => {
+            const name = studentDisplayName(student);
+            const isActive = student._id === selectedStudent?._id;
+            const ovr = student.overall ?? 0;
+            const perf = student.performance ?? performanceLabel(ovr);
+            return (
+              <div
+                key={student._id}
+                className={`p-2.5 rounded-lg cursor-pointer transition-all duration-150 border ${
+                  isActive
+                    ? 'bg-teal-50 border-teal-200 ring-1 ring-teal-400'
+                    : 'bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200'
+                }`}
+                onClick={() => navigate(`/development/create/${student._id}/${initialCourseId}`)}
+              >
+                <div className="flex items-center gap-2">
+                  {/* Avatar */}
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black shrink-0 ${
+                    isActive ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {studentInitials(student)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[10px] font-bold truncate leading-tight ${isActive ? 'text-teal-800' : 'text-slate-800'}`}>
+                      {name}
+                    </p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className={`text-[8px] font-black px-1 py-px rounded-full border ${scoreBadgeClass(ovr)}`}>
+                        {ovr}%
+                      </span>
+                      <span className="text-[8px] text-slate-400 truncate">{perf}</span>
+                    </div>
+                  </div>
+                  {(perf === 'Excellent' || ovr >= 90) && (
+                    <span className="text-amber-400 text-xs shrink-0">★</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* Header */}
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold">Create Development Plan</h1>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => window.history.back()}>Cancel</Button>
-              <Button onClick={handleCreatePlan} disabled={!canCreate}>
-                {isCreating ? 'Creating…' : 'Create Plan'}
-              </Button>
+      {/* ── CENTRE: Plan Builder ── */}
+      <div className="flex-1 bg-white rounded-lg shadow border border-slate-100 flex flex-col min-h-0 overflow-hidden">
+
+        {/* ── Top bar ── */}
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.history.back()}
+              className="text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div>
+              <h1 className="text-sm font-black text-slate-800 leading-tight">Create Development Plan</h1>
+              {selectedStudent && (
+                <p className="text-[10px] text-slate-400 font-semibold">
+                  {studentDisplayName(selectedStudent)} · OVR {selectedStudent.overall ?? 'N/A'}%
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Plan Name */}
-          <div className="mb-4">
-            <label htmlFor="planName" className="block text-sm font-semibold text-gray-700 mb-1">
-              Plan Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="planName"
-              type="text"
-              className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-400"
-              placeholder="e.g. Real Numbers Mastery Boost"
-              value={planName}
-              onChange={e => setPlanName(e.target.value)}
-            />
-          </div>
-
-          {/* Skill Category */}
-          <div className="mb-4">
-            <label htmlFor="skillCategory" className="block text-sm font-semibold text-gray-700 mb-1">
-              Skill Category <span className="text-red-500">*</span>
-            </label>
-            <select
-              id="skillCategory"
-              className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
-              value={skillCategory}
-              onChange={e => setSkillCategory(e.target.value)}
+          <div className="flex items-center gap-2">
+            {totalSelected > 0 && (
+              <span className="text-[9px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+                {totalSelected} focus area{totalSelected !== 1 ? 's' : ''} selected
+              </span>
+            )}
+            <button
+              onClick={handleCreatePlan}
+              disabled={!canCreate}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                canCreate
+                  ? 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
             >
-              {SKILL_CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+              <Zap className="w-3 h-3" />
+              {isCreating ? 'Creating…' : 'Create Plan'}
+            </button>
           </div>
+        </div>
 
-          {/* Description */}
-          <div className="mb-6">
-            <label htmlFor="planDesc" className="block text-sm font-semibold text-gray-700 mb-1">
-              Description{' '}
-              <span className="text-gray-400 font-normal text-xs">(optional)</span>
-            </label>
-            <textarea
-              id="planDesc"
-              rows={2}
-              className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-teal-400 resize-none"
-              placeholder="Brief note for the student about this plan's goals…"
-              value={planDescription}
-              onChange={e => setPlanDescription(e.target.value)}
-            />
-          </div>
+        {/* ── Body: two columns ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Student info */}
-          {selectedStudent && (
-            <div className="mb-6">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Student</p>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-md border">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-teal-100 text-teal-800 font-bold text-sm shrink-0">
+          {/* Plan config — left pane */}
+          <div className="w-64 shrink-0 border-r border-slate-100 flex flex-col overflow-y-auto p-4 space-y-4">
+
+            {/* Student chip */}
+            {selectedStudent && (
+              <div className="flex items-center gap-2.5 p-2.5 bg-teal-50 border border-teal-100 rounded-lg">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-teal-100 text-teal-800 font-black text-xs shrink-0">
                   {studentInitials(selectedStudent)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{studentDisplayName(selectedStudent)}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs font-black text-slate-800 truncate">{studentDisplayName(selectedStudent)}</p>
+                  <p className="text-[9px] text-slate-500 truncate">
                     {selectedStudent.user?.email ?? selectedStudent.email ?? selectedStudent.id}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[10px] text-gray-400">Overall</p>
-                  <p className="font-black text-teal-700">{selectedStudent.overall ?? 'N/A'}%</p>
+                  <p className="text-[8px] text-slate-400 uppercase font-bold">OVR</p>
+                  <p className="text-xs font-black text-teal-700">{selectedStudent.overall ?? 'N/A'}%</p>
                 </div>
               </div>
+            )}
+
+            {/* Plan Name */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
+                Plan Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                className="w-full px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent placeholder-slate-300"
+                placeholder="e.g. Real Numbers Mastery Boost"
+                value={planName}
+                onChange={e => setPlanName(e.target.value)}
+              />
             </div>
-          )}
 
-          {/* Focus area selection */}
-          <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-              Select Focus Areas
-            </p>
+            {/* Skill Category */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
+                Skill Category <span className="text-red-400">*</span>
+              </label>
+              <select
+                className="w-full px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 bg-white"
+                value={skillCategory}
+                onChange={e => setSkillCategory(e.target.value)}
+              >
+                {SKILL_CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
 
-            {skills.length > 0 ? (
-              <div className="space-y-2">
-                {skills.map((skill, skillIndex) => {
+            {/* Description */}
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">
+                Description{' '}
+                <span className="text-slate-300 font-normal normal-case tracking-normal">optional</span>
+              </label>
+              <textarea
+                rows={4}
+                className="w-full px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 resize-none placeholder-slate-300"
+                placeholder="Brief note for the student about this plan's goals…"
+                value={planDescription}
+                onChange={e => setPlanDescription(e.target.value)}
+              />
+            </div>
+
+            {/* Summary of selections */}
+            {totalSelected > 0 && (
+              <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
+                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1.5">Selected Focus Areas</p>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from(selectedSkills).map(id => {
+                    const s = skills.find(sk => sk.id === id);
+                    if (!s) return null;
+                    return (
+                      <span key={id} className="text-[8px] font-bold bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">
+                        {s.name}
+                      </span>
+                    );
+                  })}
+                  {Array.from(selectedSubskills).map(id => {
+                    let subName = '';
+                    skills.forEach(sk => {
+                      const sub = sk.subskills.find(s => s.id === id);
+                      if (sub) subName = sub.name;
+                    });
+                    return subName ? (
+                      <span key={id} className="text-[8px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                        {subName}
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Focus area selector — right pane */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="px-4 pt-3 pb-2 shrink-0">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center">
+                Select Focus Areas
+                <span className="ml-2 flex-1 h-px bg-slate-100" />
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+              {skills.length > 0 ? (
+                skills.map((skill, skillIndex) => {
                   const isSkillChecked = selectedSkills.has(skill.id);
                   const hasCheckedSubs = skill.subskills.some(sub => selectedSubskills.has(sub.id));
                   const isExpanded = expandedSkill.skillIndex === skillIndex;
+                  const checkedSubCount = skill.subskills.filter(sub => selectedSubskills.has(sub.id)).length;
 
                   return (
-                    <div key={skill.id} className="overflow-hidden border rounded-lg">
+                    <div
+                      key={skill.id}
+                      className={`rounded-lg border overflow-hidden transition-all duration-150 ${
+                        isSkillChecked || hasCheckedSubs
+                          ? 'border-teal-200 shadow-sm'
+                          : 'border-slate-100'
+                      }`}
+                    >
+                      {/* Skill row */}
                       <div
-                        className={`p-3 cursor-pointer transition-colors ${
-                          isSkillChecked || hasCheckedSubs ? 'bg-teal-50' : 'hover:bg-gray-50'
+                        className={`px-3 py-2.5 cursor-pointer transition-colors ${
+                          isSkillChecked || hasCheckedSubs ? 'bg-teal-50' : 'bg-white hover:bg-slate-50'
                         }`}
                         onClick={() => toggleSkill(skillIndex)}
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5">
+                            {/* Checkbox */}
                             <button
                               onClick={e => { e.stopPropagation(); toggleSkillSelection(skill.id); }}
-                              className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                              className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
                                 isSkillChecked || hasCheckedSubs
                                   ? 'bg-teal-500 border-teal-500 text-white'
-                                  : 'border-gray-300 hover:border-teal-400'
+                                  : 'border-slate-300 hover:border-teal-400'
                               }`}
                             >
-                              {(isSkillChecked || hasCheckedSubs) && <Check className="w-3 h-3" />}
+                              {(isSkillChecked || hasCheckedSubs) && <Check className="w-2.5 h-2.5" />}
                             </button>
-                            <span className="text-sm font-semibold">{skill.name}</span>
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${scoreBadgeClass(skill.score)}`}>
+                            <span className="text-xs font-bold text-slate-800">{skill.name}</span>
+                            <span className={`text-[9px] font-black px-1.5 py-px rounded-full border ${scoreBadgeClass(skill.score)}`}>
                               {skill.score}%
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-400">
-                              {skill.subskills.filter(sub => selectedSubskills.has(sub.id)).length}/{skill.subskills.length}
-                            </span>
+                            {checkedSubCount > 0 && (
+                              <span className="text-[8px] font-black text-teal-600 bg-teal-100 px-1.5 py-px rounded-full">
+                                {checkedSubCount}/{skill.subskills.length}
+                              </span>
+                            )}
                             {isExpanded
-                              ? <ChevronDown className="w-4 h-4 text-gray-400" />
-                              : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                              ? <ChevronDown className="w-3 h-3 text-slate-400" />
+                              : <ChevronRight className="w-3 h-3 text-slate-400" />}
                           </div>
                         </div>
-                        <div className="mt-2 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                        {/* Score bar */}
+                        <div className="mt-2 h-1 rounded-full bg-slate-100 overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all"
                             style={{ width: `${skill.score}%`, backgroundColor: scoreBarColor(skill.score) }}
@@ -447,50 +562,55 @@ const DevelopmentPlanCreation: React.FC<DevelopmentPlanCreationProps> = ({
                         </div>
                       </div>
 
+                      {/* Subskills */}
                       {isExpanded && skill.subskills.length > 0 && (
-                        <div className="border-t">
+                        <div className="border-t border-slate-100">
                           {skill.subskills.map((sub, subIndex) => {
                             const isSubChecked = selectedSubskills.has(sub.id);
                             const isSubExpanded = expandedSkill.subskillIndex === subIndex;
                             return (
-                              <div key={sub.id} className="border-b last:border-b-0">
+                              <div key={sub.id} className="border-b border-slate-50 last:border-b-0">
                                 <div
-                                  className="p-3 pl-10 pr-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+                                  className={`px-3 py-2 pl-9 flex justify-between items-center cursor-pointer transition-colors ${
+                                    isSubChecked ? 'bg-teal-50/60' : 'hover:bg-slate-50'
+                                  }`}
                                   onClick={() => toggleSubskill(skillIndex, subIndex)}
                                 >
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2">
                                     <button
                                       onClick={e => toggleSubskillSelection(skill.id, sub.id, e)}
-                                      className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
                                         isSubChecked
                                           ? 'bg-teal-500 border-teal-500 text-white'
-                                          : 'border-gray-300 hover:border-teal-400'
+                                          : 'border-slate-300 hover:border-teal-400'
                                       }`}
                                     >
-                                      {isSubChecked && <Check className="w-3 h-3" />}
+                                      {isSubChecked && <Check className="w-2 h-2" />}
                                     </button>
-                                    <span className="text-sm">{sub.name}</span>
-                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${scoreBadgeClass(sub.score)}`}>
+                                    <span className="text-[10px] font-semibold text-slate-700">{sub.name}</span>
+                                    <span className={`text-[8px] font-black px-1 py-px rounded-full border ${scoreBadgeClass(sub.score)}`}>
                                       {sub.score}%
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-2 shrink-0">
-                                    <div className="w-20 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                    <div className="w-16 h-1 rounded-full bg-slate-100 overflow-hidden">
                                       <div
-                                        className="h-full rounded-full transition-all"
+                                        className="h-full rounded-full"
                                         style={{ width: `${sub.score}%`, backgroundColor: scoreBarColor(sub.score) }}
                                       />
                                     </div>
                                     {isSubExpanded
-                                      ? <ChevronDown className="w-4 h-4 text-gray-400" />
-                                      : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                                      ? <ChevronDown className="w-3 h-3 text-slate-400" />
+                                      : <ChevronRight className="w-3 h-3 text-slate-400" />}
                                   </div>
                                 </div>
 
                                 {isSubExpanded && (
-                                  <div className="bg-gray-50 px-4 py-3 pl-16 text-sm text-gray-600 border-t">
-                                    <p className="mb-2">{sub.description ?? 'No description available.'}</p>
-                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${scoreBadgeClass(sub.score)}`}>
+                                  <div className="bg-slate-50 px-3 py-2.5 pl-14 border-t border-slate-100">
+                                    <p className="text-[10px] text-slate-500 leading-relaxed mb-1.5">
+                                      {sub.description ?? 'No description available.'}
+                                    </p>
+                                    <span className={`text-[8px] font-black px-1.5 py-px rounded-full border ${scoreBadgeClass(sub.score)}`}>
                                       {performanceLabel(sub.score)}
                                     </span>
                                   </div>
@@ -502,60 +622,19 @@ const DevelopmentPlanCreation: React.FC<DevelopmentPlanCreationProps> = ({
                       )}
                     </div>
                   );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-10 text-gray-400 border rounded-lg bg-gray-50">
-                <p className="font-medium">No skills data available for this student.</p>
-                <p className="text-xs mt-1">Mastery records haven't been loaded yet.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Sidebar: student list ── */}
-        <div className="w-72 shrink-0">
-          <div className="sticky top-4">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Students</p>
-            <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-1">
-              {allStudents.map(student => {
-                const name = studentDisplayName(student);
-                const isActive = student._id === selectedStudent?._id;
-                const ovr = student.overall ?? 0;
-                const perf = student.performance ?? performanceLabel(ovr);
-                return (
-                  <div
-                    key={student._id}
-                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      isActive ? 'ring-2 ring-teal-500 bg-teal-50' : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => navigate(`/development/create/${student._id}/${initialCourseId}`)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black shrink-0 bg-teal-100 text-teal-800">
-                        {studentInitials(student)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{name}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-bold ${scoreBadgeClass(ovr)}`}>
-                            {perf}
-                          </span>
-                          <span className="text-[10px] text-gray-400">OVR: {ovr}%</span>
-                        </div>
-                      </div>
-                      {(perf === 'Excellent' || ovr >= 90) && (
-                        <span className="text-amber-400 text-sm shrink-0">★</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50">
+                  <p className="text-xs font-bold">No skills data available</p>
+                  <p className="text-[10px] mt-1 text-slate-300">Mastery records haven't been loaded yet.</p>
+                </div>
+              )}
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
+
     </div>
   );
 };

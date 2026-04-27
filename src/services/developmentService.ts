@@ -52,11 +52,28 @@ export const developmentService = {
       body: JSON.stringify(planData),
     }),
 
+  // Teacher manually selects attributes → triggers full AI mission + content generation
+  createTeacherInitiatedPlan: (planData: {
+    student: string;
+    course: string;
+    title: string;
+    skillCategory: string;
+    targetAttributes: Array<{ attributeId: string; initialMastery: number }>;
+    description?: string;
+  }) =>
+    fetchData<Record<string, unknown>>('/development/plans/teacher-initiated', {
+      method: 'POST',
+      body: JSON.stringify(planData),
+    }),
+
   activatePlan: (planId: string, teacherNotes?: string) =>
     fetchData<DevelopmentPlan>(`/development/plans/${planId}/activate`, {
       method: 'PUT',
       body: JSON.stringify({ teacherNotes }),
     }),
+
+  deletePlan: (planId: string) =>
+    fetchData<{ message: string }>(`/development/plans/${planId}`, { method: 'DELETE' }),
 
   // ── Mastery signals ──────────────────────────────────────────────────────────
 

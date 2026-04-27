@@ -5,10 +5,15 @@ import { Loader2, Plus, Trash2, Save, ArrowLeft, Sparkles, X, ChevronLeft, Chevr
 import { assessmentService, courseService, aiService } from '../services/api';
 import { Question } from '../types';
 
+interface RawQPart {
+  text?: string; type?: string; options?: string[];
+  correctAnswer?: string; maxPoints?: number;
+}
 interface RawQ {
   _id?: string; text?: string; questionType?: string;
   options?: string[]; correctAnswer?: string;
   maxPoints?: number; primaryAttributeId?: string; tags?: string[];
+  parts?: RawQPart[];
 }
 interface RawA {
   name?: string; type?: string; difficulty?: string; totalPoints?: number;
@@ -20,6 +25,14 @@ interface RawA {
 
 type QType = 'multiple_choice' | 'true_false' | 'short_answer' | 'essay';
 
+interface EditPart {
+  text: string;
+  type: QType;
+  options: string[];
+  correctAnswer: string;
+  maxPoints: number;
+}
+
 interface EditQuestion {
   _id?: string;
   text: string;
@@ -29,10 +42,15 @@ interface EditQuestion {
   maxPoints: number;
   primaryAttributeId: string;
   tags: string[];
+  parts: EditPart[];
 }
 
+const EMPTY_PART = (): EditPart => ({
+  text: '', type: 'short_answer', options: [], correctAnswer: '', maxPoints: 1,
+});
+
 const EMPTY_QUESTION = (): EditQuestion => ({
-  text: '', type: 'multiple_choice', options: ['', '', '', ''], correctAnswer: '', maxPoints: 1, primaryAttributeId: '', tags: [],
+  text: '', type: 'multiple_choice', options: ['', '', '', ''], correctAnswer: '', maxPoints: 1, primaryAttributeId: '', tags: [], parts: [],
 });
 
 const TYPE_META: Record<QType, { label: string; short: string; chipCls: string }> = {
@@ -63,8 +81,13 @@ const QuestionPill: React.FC<{
           {q.text || 'Untitled question'}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${meta.chipCls}`}>{meta.short}</span>
-          <span className="text-[10px] text-slate-400">{q.maxPoints} pt{q.maxPoints !== 1 ? 's' : ''}</span>
+          {q.parts.length > 0
+            ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">MP·{q.parts.length}</span>
+            : <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${meta.chipCls}`}>{meta.short}</span>
+          }
+          <span className="text-[10px] text-slate-400">
+            {q.parts.length > 0 ? q.parts.reduce((s, p) => s + p.maxPoints, 0) : q.maxPoints} pt{(q.parts.length > 0 ? q.parts.reduce((s, p) => s + p.maxPoints, 0) : q.maxPoints) !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
       <button
@@ -134,6 +157,13 @@ const AiGeneratePanel: React.FC<{
         options:            Array.isArray(q.options) ? q.options.map((o) => o.text) : (q.type === 'true_false' ? ['True', 'False'] : []),
         correctAnswer:      Array.isArray(q.correctAnswer) ? (q.correctAnswer[0] ?? '') : (q.correctAnswer ?? ''),
         maxPoints:          q.maxPoints ?? q.points ?? 1,
+        parts:              Array.isArray(q.parts) ? q.parts.map((p) => ({
+          text:          p.text ?? '',
+          type:          (['multiple_choice', 'true_false', 'short_answer', 'essay'].includes(p.type ?? '') ? p.type : 'short_answer') as QType,
+          options:       Array.isArray(p.options) ? p.options : [],
+          correctAnswer: p.correctAnswer ?? '',
+          maxPoints:     p.maxPoints ?? 1,
+        })) : [],
         primaryAttributeId: '',
         tags:               [],
       }));
@@ -283,6 +313,124 @@ const AiGeneratePanel: React.FC<{
   );
 };
 
+// ─── Part Editor (used inside QuestionEditor for multipart questions) ─────────
+const PartEditor: React.FC<{
+  part: EditPart; partIndex: number;
+  onChangePart: (patch: Partial<EditPart>) => void;
+  onDeletePart: () => void; canDelete: boolean;
+}> = ({ part, partIndex, onChangePart, onDeletePart, canDelete }) => {
+  const label = String.fromCharCode(97 + partIndex);
+
+  const handleTypeChange = (t: QType) => {
+    onChangePart({
+      type: t,
+      options: t === 'true_false' ? ['True', 'False'] : t === 'multiple_choice' ? (part.options.length >= 2 ? part.options : ['', '', '', '']) : [],
+      correctAnswer: '',
+    });
+  };
+
+  const handleOptionChange = (oi: number, val: string) => {
+    const opts = [...part.options];
+    const old = opts[oi];
+    opts[oi] = val;
+    onChangePart({ options: opts, correctAnswer: part.correctAnswer === old ? val : part.correctAnswer });
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      {/* Part header row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full shrink-0">({label})</span>
+        <select
+          value={part.type}
+          onChange={(e) => handleTypeChange(e.target.value as QType)}
+          className="h-7 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600"
+        >
+          {(Object.entries(TYPE_META) as [QType, typeof TYPE_META[QType]][]).map(([v, m]) => (
+            <option key={v} value={v}>{m.label}</option>
+          ))}
+        </select>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-slate-400">pts</span>
+          <input
+            type="number" min="1" value={part.maxPoints}
+            onChange={(e) => onChangePart({ maxPoints: Number(e.target.value) || 1 })}
+            className="w-12 h-7 rounded-md border border-slate-200 bg-white px-2 text-xs text-center"
+          />
+        </div>
+        {canDelete && (
+          <button onClick={onDeletePart} className="ml-auto text-slate-300 hover:text-red-400 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Part question text */}
+      <textarea
+        value={part.text}
+        onChange={(e) => onChangePart({ text: e.target.value })}
+        placeholder={`Part (${label}) question text…`}
+        rows={2}
+        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all leading-relaxed"
+      />
+
+      {/* Part answer */}
+      {part.type === 'multiple_choice' && (
+        <div className="space-y-1.5">
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Options — <span className="text-emerald-600 normal-case font-medium">click ✓ to mark correct</span>
+          </label>
+          {(part.options.length > 0 ? part.options : ['', '', '', '']).map((opt, oi) => (
+            <div key={oi} className="flex items-center gap-2">
+              <div className={`w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[10px] font-bold border ${
+                part.correctAnswer === opt && opt ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-400'
+              }`}>
+                {String.fromCharCode(65 + oi)}
+              </div>
+              <input
+                value={opt}
+                onChange={(e) => handleOptionChange(oi, e.target.value)}
+                placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                className="flex-1 h-8 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
+              />
+              <button
+                onClick={() => onChangePart({ correctAnswer: opt })}
+                className={`shrink-0 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                  part.correctAnswer === opt && opt ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                }`}
+              >✓</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {part.type === 'true_false' && (
+        <div className="flex gap-2">
+          {['True', 'False'].map((v) => (
+            <button
+              key={v}
+              onClick={() => onChangePart({ correctAnswer: v })}
+              className={`flex-1 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+                part.correctAnswer === v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+              }`}
+            >{v}</button>
+          ))}
+        </div>
+      )}
+
+      {(part.type === 'short_answer' || part.type === 'essay') && (
+        <textarea
+          value={part.correctAnswer}
+          onChange={(e) => onChangePart({ correctAnswer: e.target.value })}
+          placeholder="Model answer / marking guide…"
+          rows={2}
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 resize-none focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
+        />
+      )}
+    </div>
+  );
+};
+
 // ─── Question Editor Panel ────────────────────────────────────────────────────
 const QuestionEditor: React.FC<{
   q: EditQuestion; index: number; total: number;
@@ -294,7 +442,6 @@ const QuestionEditor: React.FC<{
   difficulty: string;
   assessmentType: string;
 }> = ({ q, index, total, onChange, onDelete, onPrev, onNext, attributes, assessmentName, courseId, difficulty, assessmentType }) => {
-  const meta = TYPE_META[q.type];
   const regenRef = useRef<HTMLDivElement>(null);
 
   const [regenOpen, setRegenOpen]           = useState(false);
@@ -398,11 +545,17 @@ const QuestionEditor: React.FC<{
           {/* Points */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-slate-400">pts</span>
-            <input
-              type="number" min="1" value={q.maxPoints}
-              onChange={(e) => onChange({ maxPoints: Number(e.target.value) || 1 })}
-              className="w-14 h-7 rounded-md border border-slate-200 bg-white px-2 text-xs text-center"
-            />
+            {q.parts.length > 0 ? (
+              <span className="w-14 h-7 inline-flex items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-xs text-slate-500 font-semibold">
+                {q.parts.reduce((s, p) => s + p.maxPoints, 0)}
+              </span>
+            ) : (
+              <input
+                type="number" min="1" value={q.maxPoints}
+                onChange={(e) => onChange({ maxPoints: Number(e.target.value) || 1 })}
+                className="w-14 h-7 rounded-md border border-slate-200 bg-white px-2 text-xs text-center"
+              />
+            )}
           </div>
 
           {/* Attribute */}
@@ -512,105 +665,141 @@ const QuestionEditor: React.FC<{
             />
           </div>
 
-          {/* Answer section */}
+          {/* Answer / Parts section */}
           <div>
-            {q.type === 'multiple_choice' && (
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Answer options — <span className="text-emerald-600 normal-case font-medium">click ✓ to mark correct</span>
-                </label>
-                <div className="space-y-2">
-                  {q.options.map((opt, oi) => (
-                    <div key={oi} className="flex items-center gap-2">
-                      <div className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-xs font-bold border transition-colors ${
-                        q.correctAnswer === opt && opt
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
-                          : 'bg-slate-100 border-slate-200 text-slate-400'
-                      }`}>
-                        {String.fromCharCode(65 + oi)}
+            {/* Multipart toggle */}
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                {q.parts.length > 0 ? `Parts (${q.parts.length})` : 'Answer'}
+              </label>
+              <button
+                onClick={() => {
+                  if (q.parts.length > 0) {
+                    onChange({ parts: [], correctAnswer: '' });
+                  } else {
+                    onChange({ parts: [EMPTY_PART()], options: [], correctAnswer: '' });
+                  }
+                }}
+                className="text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors"
+                style={q.parts.length > 0
+                  ? { borderColor: '#e2e8f0', color: '#64748b' }
+                  : { borderColor: '#bfdbfe', color: '#2563eb' }
+                }
+              >
+                {q.parts.length > 0 ? 'Remove parts' : '+ Split into parts'}
+              </button>
+            </div>
+
+            {q.parts.length > 0 ? (
+              /* ── Multipart editor ── */
+              <div className="space-y-3">
+                {q.parts.map((part, pi) => (
+                  <PartEditor
+                    key={pi}
+                    part={part}
+                    partIndex={pi}
+                    onChangePart={(patch) => {
+                      const updated = q.parts.map((p, j) => j === pi ? { ...p, ...patch } : p);
+                      onChange({ parts: updated });
+                    }}
+                    onDeletePart={() => onChange({ parts: q.parts.filter((_, j) => j !== pi) })}
+                    canDelete={q.parts.length > 1}
+                  />
+                ))}
+                <button
+                  onClick={() => onChange({ parts: [...q.parts, EMPTY_PART()] })}
+                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  <Plus className="w-3 h-3" /> Add part
+                </button>
+              </div>
+            ) : (
+              /* ── Single-question answer ── */
+              <>
+                {q.type === 'multiple_choice' && (
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                      Answer options — <span className="text-emerald-600 normal-case font-medium">click ✓ to mark correct</span>
+                    </label>
+                    {q.options.map((opt, oi) => (
+                      <div key={oi} className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-xs font-bold border transition-colors ${
+                          q.correctAnswer === opt && opt ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-slate-100 border-slate-200 text-slate-400'
+                        }`}>
+                          {String.fromCharCode(65 + oi)}
+                        </div>
+                        <input
+                          value={opt}
+                          onChange={(e) => handleOptionChange(oi, e.target.value)}
+                          placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                          className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
+                        />
+                        <button
+                          onClick={() => onChange({ correctAnswer: opt })}
+                          className={`shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                            q.correctAnswer === opt && opt ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
+                          }`}
+                        >✓ Correct</button>
+                        {q.options.length > 2 && (
+                          <button onClick={() => removeOption(oi)} className="text-slate-300 hover:text-red-400 transition-colors">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <input
-                        value={opt}
-                        onChange={(e) => handleOptionChange(oi, e.target.value)}
-                        placeholder={`Option ${String.fromCharCode(65 + oi)}`}
-                        className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
-                      />
-                      <button
-                        onClick={() => onChange({ correctAnswer: opt })}
-                        className={`shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                          q.correctAnswer === opt && opt
-                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                            : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300'
-                        }`}
-                      >
-                        ✓ Correct
-                      </button>
-                      {q.options.length > 2 && (
-                        <button onClick={() => removeOption(oi)} className="text-slate-300 hover:text-red-400 transition-colors">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => onChange({ options: [...q.options, ''] })}
-                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add option
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {q.type === 'true_false' && (
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Correct answer
-                </label>
-                <div className="flex gap-3">
-                  {['True', 'False'].map((v) => (
+                    ))}
                     <button
-                      key={v}
-                      onClick={() => onChange({ correctAnswer: v })}
-                      className={`flex-1 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                        q.correctAnswer === v
-                          ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
-                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
-                      }`}
+                      onClick={() => onChange({ options: [...q.options, ''] })}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium mt-1"
                     >
-                      {v}
+                      <Plus className="w-3 h-3" /> Add option
                     </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {(q.type === 'short_answer' || q.type === 'essay') && (
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Expected / model answer
-                </label>
-                <textarea
-                  value={q.correctAnswer}
-                  onChange={(e) => onChange({ correctAnswer: e.target.value })}
-                  placeholder="Enter the expected answer or marking guide…"
-                  className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 resize-y focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all leading-relaxed ${
-                    q.type === 'essay' ? 'min-h-[160px]' : 'min-h-[100px]'
-                  }`}
-                />
-              </div>
+                {q.type === 'true_false' && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Correct answer</label>
+                    <div className="flex gap-3">
+                      {['True', 'False'].map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => onChange({ correctAnswer: v })}
+                          className={`flex-1 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                            q.correctAnswer === v ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                          }`}
+                        >{v}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(q.type === 'short_answer' || q.type === 'essay') && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Expected / model answer</label>
+                    <textarea
+                      value={q.correctAnswer}
+                      onChange={(e) => onChange({ correctAnswer: e.target.value })}
+                      placeholder="Enter the expected answer or marking guide…"
+                      className={`w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 resize-y focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all leading-relaxed ${q.type === 'essay' ? 'min-h-[160px]' : 'min-h-[100px]'}`}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* Completion hint */}
           {q.text && (
             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs ${
-              q.correctAnswer
+              (q.parts.length > 0 ? q.parts.every((p) => p.text && p.correctAnswer) : !!q.correctAnswer)
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                 : 'bg-amber-50 border-amber-200 text-amber-700'
             }`}>
               <Check className="w-3.5 h-3.5 shrink-0" />
-              {q.correctAnswer ? 'Question complete — answer marked.' : 'Add a correct answer to complete this question.'}
+              {q.parts.length > 0
+                ? q.parts.every((p) => p.text && p.correctAnswer) ? 'All parts complete.' : 'Complete each part to finish this question.'
+                : q.correctAnswer ? 'Question complete — answer marked.' : 'Add a correct answer to complete this question.'
+              }
             </div>
           )}
         </div>
@@ -656,8 +845,12 @@ const EditAssessmentPage: React.FC = () => {
   });
   const [questions, setQuestions] = useState<EditQuestion[]>([]);
 
-  const totalPts       = questions.reduce((s, q) => s + (q.maxPoints || 0), 0);
-  const completedCount = questions.filter((q) => q.text && q.correctAnswer).length;
+  const totalPts       = questions.reduce((s, q) => s + (q.parts.length > 0 ? q.parts.reduce((ps, p) => ps + p.maxPoints, 0) : (q.maxPoints || 0)), 0);
+  const completedCount = questions.filter((q) =>
+    q.parts.length > 0
+      ? q.text && q.parts.length > 0 && q.parts.every((p) => p.text && p.correctAnswer)
+      : q.text && q.correctAnswer
+  ).length;
 
   useEffect(() => {
     if (!id) return;
@@ -682,6 +875,13 @@ const EditAssessmentPage: React.FC = () => {
           maxPoints:          q.maxPoints ?? 1,
           primaryAttributeId: q.primaryAttributeId ?? '',
           tags:               Array.isArray(q.tags) ? q.tags : [],
+          parts:              Array.isArray(q.parts) ? q.parts.map((p) => ({
+            text:          p.text ?? '',
+            type:          (p.type as QType) ?? 'short_answer',
+            options:       Array.isArray(p.options) ? p.options : [],
+            correctAnswer: p.correctAnswer ?? '',
+            maxPoints:     p.maxPoints ?? 1,
+          })) : [],
         }));
         setQuestions(qs);
         originalQuestionsRef.current = JSON.stringify(qs);
@@ -711,15 +911,25 @@ const EditAssessmentPage: React.FC = () => {
     setActiveIdx((prev) => Math.min(prev, Math.max(0, questions.length - 2)));
   };
 
+  const qMaxPoints = (q: EditQuestion): number =>
+    q.parts.length > 0 ? q.parts.reduce((s, p) => s + p.maxPoints, 0) : q.maxPoints;
+
   const buildQuestionsPayload = () =>
     questions.map((q) => ({
       _id:                q._id,
       text:               q.text,
-      options:            q.options.filter(Boolean),
-      correctAnswer:      q.correctAnswer,
-      maxPoints:          q.maxPoints,
+      options:            q.parts.length > 0 ? [] : q.options.filter(Boolean),
+      correctAnswer:      q.parts.length > 0 ? '' : q.correctAnswer,
+      maxPoints:          qMaxPoints(q),
       primaryAttributeId: q.primaryAttributeId,
       tags:               q.tags,
+      parts:              q.parts.map((p) => ({
+        text:          p.text,
+        type:          p.type,
+        options:       p.options.filter(Boolean),
+        correctAnswer: p.correctAnswer,
+        maxPoints:     p.maxPoints,
+      })),
     }));
 
   const confirm = (message: string, sub: string) => {

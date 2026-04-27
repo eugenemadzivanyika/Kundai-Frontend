@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import type { Question, QuestionOption } from '@/types';
+import type { Question, QuestionOption, QuestionPart } from '@/types';
 import { 
   RefreshCw, 
   Trash2, 
@@ -266,6 +266,8 @@ const renderQuestionContent = (question: Question) => {
     }
 
     // --- UPDATED VIEW MODE ---
+    const hasParts = Array.isArray(question.parts) && question.parts.length > 0;
+
     return (
       <div className="space-y-3">
         <div className="flex items-start justify-between">
@@ -283,23 +285,62 @@ const renderQuestionContent = (question: Question) => {
             <Eye className="w-4 h-4" />
           </button>
         </div>
-        
-        {question.options && (
+
+        {/* Multipart: render each sub-part */}
+        {hasParts && (
+          <div className="space-y-2 pl-3 border-l-2 border-blue-200">
+            {(question.parts as QuestionPart[]).map((part, pi) => (
+              <div key={pi} className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-blue-700 uppercase">
+                    ({String.fromCharCode(97 + pi)})
+                  </span>
+                  <Badge className={`text-[10px] h-4 px-1.5 ${getQuestionTypeColor(part.type || 'short_answer')}`}>
+                    {getQuestionTypeLabel(part.type || 'short_answer', mathPaperType)}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-white ml-auto">
+                    {part.maxPoints} {part.maxPoints === 1 ? 'mark' : 'marks'}
+                  </Badge>
+                </div>
+                <MathText text={part.text} />
+                {part.correctAnswer && isExpanded && (
+                  <div className="mt-1 text-xs text-green-800 bg-green-50 border border-green-200 rounded px-2 py-1">
+                    <span className="font-semibold">Answer: </span>{part.correctAnswer}
+                  </div>
+                )}
+                {part.options && part.options.length > 0 && (
+                  <div className="space-y-1 mt-1">
+                    {part.options.map((opt, oi) => (
+                      <div key={oi} className={`flex items-center gap-2 rounded px-2 py-1 text-xs ${opt === part.correctAnswer ? 'bg-green-50 border border-green-200 text-green-800 font-semibold' : 'text-gray-700'}`}>
+                        <span className="font-bold text-gray-400">{String.fromCharCode(65 + oi)}.</span>
+                        <MathText text={opt} />
+                        {opt === part.correctAnswer && <Badge className="ml-auto bg-green-600 text-white text-[10px] h-4 px-1 uppercase font-black">Answer</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Single question: show options (MCQ/T-F) */}
+        {!hasParts && question.options && (
           <div className="space-y-2">
             {question.options.slice(0, isExpanded ? undefined : 2).map((option, idx) => {
               // Handle both String (DB) and Object (UI State) formats
               const optionText = typeof option === 'string' ? option : (option as any).text;
-              
+
               // If the option is missing data, don't break the UI
-              if (!optionText) return null; 
+              if (!optionText) return null;
 
               // Check if this option matches the correct answer
               const isCorrect = optionText === question.correctAnswer;
-              
+
               return (
                 <div key={idx} className={`p-3 rounded-lg border transition-all ${
-                  isCorrect 
-                    ? 'border-green-200 bg-green-50 shadow-sm' 
+                  isCorrect
+                    ? 'border-green-200 bg-green-50 shadow-sm'
                     : 'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2">
@@ -318,7 +359,7 @@ const renderQuestionContent = (question: Question) => {
                 </div>
               );
               })}
-              
+
               {!isExpanded && question.options.length > 2 && (
                 <button
                   onClick={() => setExpandedQuestionId(question._id || null)}
@@ -330,7 +371,7 @@ const renderQuestionContent = (question: Question) => {
               )}
             </div>
           )}
-          
+
           {question.explanation && isExpanded && (
             <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
               <div className="flex items-center gap-2 mb-1">
@@ -451,15 +492,20 @@ const renderQuestionContent = (question: Question) => {
                     <span className="text-sm font-bold text-white">{index + 1}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={`text-xs ${getQuestionTypeColor(question.type)}`}>
-                      {getQuestionTypeLabel(question.type, mathPaperType)}
-                    </Badge>
+                    {Array.isArray(question.parts) && question.parts.length > 0 ? (
+                      <Badge className="text-xs bg-blue-100 text-blue-800">
+                        MP·{question.parts.length}
+                      </Badge>
+                    ) : (
+                      <Badge className={`text-xs ${getQuestionTypeColor(question.type)}`}>
+                        {getQuestionTypeLabel(question.type, mathPaperType)}
+                      </Badge>
+                    )}
                     <Badge className={`text-xs ${getDifficultyColor(question.difficulty || 'medium')}`}>
                       {question.difficulty || 'Medium'}
                     </Badge>
                     <Badge variant="outline" className="text-xs font-bold bg-white">
-                      {/* Priority check for maxPoints which comes from your DB/Schema */}
-                      {question.maxPoints || question.points || 1} 
+                      {question.maxPoints || question.points || 1}
                       {' '}
                       {(question.maxPoints || question.points || 1) === 1 ? 'mark' : 'marks'}
                     </Badge>

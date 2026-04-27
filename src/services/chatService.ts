@@ -23,6 +23,13 @@ export const chatService = {
     });
   },
 
+  startConversation: async (studentId: string): Promise<ChatConversation> => {
+    return fetchData<ChatConversation>('/chats', {
+      method: 'POST',
+      body: JSON.stringify({ studentId }),
+    });
+  },
+
   getUnreadCounts: async (): Promise<UnreadChatCount[]> => {
     return fetchData<UnreadChatCount[]>('/chat/unread');
   },

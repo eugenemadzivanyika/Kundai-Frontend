@@ -35,6 +35,16 @@ type StatusFilterKey = 'all' | 'pending' | 'submitted' | 'graded' | 'overdue';
 type AssignmentStatusKey = Exclude<StatusFilterKey, 'all'>;
 type SubmissionMode = 'questions' | 'text' | 'file';
 
+interface AssessmentQuestionPart {
+  id?: string;
+  text: string;
+  type?: string;
+  options?: string[];
+  correctAnswer?: string;
+  maxPoints?: number;
+  diagram_manifest?: import('@/types').DiagramManifest | null;
+}
+
 interface AssessmentQuestionItem {
   id: string;
   assessmentQuestionId?: string;
@@ -44,6 +54,7 @@ interface AssessmentQuestionItem {
   correctAnswer?: string;
   points?: number;
   diagram_manifest?: import('@/types').DiagramManifest | null;
+  parts?: AssessmentQuestionPart[];
 }
 interface AssessmentWithQuestionsItem {
   id: string;
@@ -347,6 +358,12 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
       points: question.maxPoints,
       correctAnswer: question.correctAnswer,
       diagram_manifest: question.diagram_manifest ?? null,
+      parts: Array.isArray(question.parts) ? question.parts.map((p: any, pi: number) => ({
+        ...p,
+        id: p._id || String(pi),
+        text: p.text || '',
+        options: Array.isArray(p.options) ? p.options : [],
+      })) : [],
     }));
 
     const mergedAssessment: AssessmentWithQuestionsItem = {
@@ -461,25 +478,26 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
 
 const reviewQuestions = useMemo(() => {
   const rawAnswers = (reviewSubmissionDetail as any)?.answers || [];
-  
-  // Use the Result status as the guard
   const isReleased = activeResult?.status === 'Released';
 
   return rawAnswers.map((ans: any, index: number) => {
     const questionRef = ans.questionId || {};
-    
+    const partAnswers: string[] | undefined =
+      Array.isArray(ans.partAnswers) && ans.partAnswers.length > 0 ? ans.partAnswers : undefined;
+
     return {
       assessmentQuestionId: questionRef._id || ans.questionId,
-      prompt: questionRef.text || "Question text unavailable",
-      studentAnswer: ans.studentAnswer || "No answer",
-      
+      prompt: questionRef.text || 'Question text unavailable',
+      studentAnswer: partAnswers ? undefined : (ans.studentAnswer || 'No answer'),
+      partAnswers,
+      parts: Array.isArray(questionRef.parts) ? questionRef.parts : [],
       awardedMarks: isReleased ? (ans.pointsEarned ?? null) : null,
       maxMarks: questionRef.maxPoints ?? null,
       expectedMarkingPoints: isReleased
         ? (questionRef.correctAnswer ? [questionRef.correctAnswer] : [])
         : [],
       feedback: isReleased ? (ans.feedback ?? null) : null,
-      order: index + 1
+      order: index + 1,
     };
   });
 }, [reviewSubmissionDetail, activeResult]);
@@ -573,21 +591,29 @@ useEffect(() => {
 const submitQuestionAnswers = async (entry: AssignmentEntry) => {
   const questions = entry.assessment?.questions || [];
   const answers = questions.map(q => {
-    const draft = (answerDrafts[`${entry.assessmentId}:${q.id}`] || "").trim();
-    
-    // UPDATED: Check the direct 'options' array from your JSON response
     const rawQuestion = q as any;
+    const parts: AssessmentQuestionPart[] = Array.isArray(rawQuestion.parts) ? rawQuestion.parts : [];
+    const isMultipart = parts.length > 0;
+
+    if (isMultipart) {
+      const partAnswers = parts.map((_: AssessmentQuestionPart, pi: number) =>
+        (answerDrafts[`${entry.assessmentId}:${q.id}:p${pi}`] || '').trim()
+      );
+      const hasAny = partAnswers.some((a: string) => a !== '');
+      if (!hasAny) return null;
+      return {
+        questionId: q.id,
+        studentAnswer: partAnswers.filter((a: string) => a).join(' | '),
+        partAnswers,
+        isCorrect: undefined as boolean | undefined,
+      };
+    }
+
+    const draft = (answerDrafts[`${entry.assessmentId}:${q.id}`] || '').trim();
     const isMcq = Array.isArray(rawQuestion.options) && rawQuestion.options.length > 0;
-
-    // If it's an MCQ, calculate isCorrect immediately for the BKT update
     const isCorrect = isMcq ? (draft === rawQuestion.correctAnswer) : undefined;
-
-    return { 
-      questionId: q.id, 
-      studentAnswer: draft, 
-      isCorrect 
-    };
-  }).filter(a => a.studentAnswer !== "");
+    return { questionId: q.id, studentAnswer: draft, isCorrect };
+  }).filter((a): a is NonNullable<typeof a> => a !== null && a.studentAnswer !== '');
 
   if (answers.length === 0) {
     toast.error('Please answer at least one question.');
@@ -914,16 +940,22 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                               .slice()
                               .sort((a, b) => (a.sequenceIndex || 0) - (b.sequenceIndex || 0))
                               .map((question, index) => {
-                                const options = Array.isArray((question as any).options)
-                                  ? (question as any).options
+                                const options: string[] = Array.isArray((question as any).options)
+                                  ? (question as any).options as string[]
                                   : [];
                                 const questionId = resolveAssessmentQuestionId(question);
                                 const currentAnswer = getAnswerDraft(entry.assessmentId, questionId);
 
+                                const qParts: AssessmentQuestionPart[] = Array.isArray((question as any).parts) ? (question as any).parts : [];
+                                const isMultipart = qParts.length > 0;
+
                                 return (
                                   <div key={questionId} className="rounded-md border border-slate-200 bg-slate-50 p-4 space-y-3">
                                     <div>
-                                      <p className="text-sm font-semibold text-slate-900">Question {index + 1}</p>
+                                      <p className="text-sm font-semibold text-slate-900">
+                                        Question {index + 1}
+                                        {isMultipart && <span className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{qParts.length} parts</span>}
+                                      </p>
                                       <QuestionText
                                         text={question.stem}
                                         manifest={question.diagram_manifest}
@@ -931,7 +963,51 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                                       />
                                     </div>
 
-                                    {options.length > 0 ? (
+                                    {isMultipart ? (
+                                      <div className="space-y-3">
+                                        {qParts.map((part, pi) => {
+                                          const partKey = `${entry.assessmentId}:${questionId}:p${pi}`;
+                                          const partAnswer = answerDrafts[partKey] || '';
+                                          const partOptions = Array.isArray(part.options) ? part.options : [];
+                                          return (
+                                            <div key={pi} className="pl-3 border-l-2 border-blue-100 space-y-2">
+                                              <p className="text-xs font-bold text-blue-700">
+                                                ({String.fromCharCode(97 + pi)}) {part.maxPoints != null ? `· ${part.maxPoints} pt${part.maxPoints !== 1 ? 's' : ''}` : ''}
+                                              </p>
+                                              <QuestionText
+                                                text={part.text}
+                                                manifest={part.diagram_manifest}
+                                                textClassName="text-sm text-slate-700"
+                                              />
+                                              {partOptions.length > 0 ? (
+                                                <div className="space-y-1.5">
+                                                  {partOptions.map((opt) => (
+                                                    <label key={`${questionId}-p${pi}-${opt}`} className="flex items-center gap-2 text-sm text-slate-700">
+                                                      <input
+                                                        type="radio"
+                                                        name={`q-${questionId}-p${pi}`}
+                                                        checked={partAnswer === opt}
+                                                        onChange={() => setAnswerDrafts((prev) => ({ ...prev, [partKey]: opt }))}
+                                                        className="h-4 w-4"
+                                                      />
+                                                      <span>{opt}</span>
+                                                    </label>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <textarea
+                                                  rows={2}
+                                                  value={partAnswer}
+                                                  onChange={(e) => setAnswerDrafts((prev) => ({ ...prev, [partKey]: e.target.value }))}
+                                                  placeholder={`Answer for part (${String.fromCharCode(97 + pi)})`}
+                                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : options.length > 0 ? (
                                       <div className="space-y-2">
                                         {options.map((option) => (
                                           <label key={`${questionId}-${option}`} className="flex items-center gap-2 text-sm text-slate-700">
@@ -1273,20 +1349,31 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                             <p className="text-sm text-slate-500">Loading submission detail...</p>
                           ) : reviewQuestions.length > 0 ? (
                             <div className="space-y-3">
-                              {reviewQuestions.map((question: SubmissionReviewQuestionDetail, index) => (
+                              {reviewQuestions.map((question: SubmissionReviewQuestionDetail, index: number) => (
                                 <article
                                   key={question.assessmentQuestionId || `${question.order || index}-${index}`}
                                   className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2"
                                 >
                                   <p className="text-sm font-semibold text-slate-900">Question {question.order || index + 1}</p>
                                   <p className="text-sm text-slate-700">{question.prompt || 'Prompt not available.'}</p>
-                                  <div className="rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-700">
-                                    {question.studentAnswer ? (
-                                      <pre className="whitespace-pre-wrap break-words font-sans">{question.studentAnswer}</pre>
-                                    ) : (
-                                      <p className="text-slate-500">No answer submitted for this question.</p>
-                                    )}
-                                  </div>
+                                  {question.partAnswers && question.partAnswers.length > 0 ? (
+                                    <div className="space-y-1.5">
+                                      {question.partAnswers.map((partAns, pi) => (
+                                        <div key={pi} className="rounded-md border border-slate-200 bg-white p-2">
+                                          <p className="text-[10px] font-bold text-blue-600 mb-0.5">({String.fromCharCode(97 + pi)})</p>
+                                          <p className="text-sm text-slate-700">{partAns || <span className="text-slate-400">No answer</span>}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-700">
+                                      {question.studentAnswer ? (
+                                        <pre className="whitespace-pre-wrap break-words font-sans">{question.studentAnswer}</pre>
+                                      ) : (
+                                        <p className="text-slate-500">No answer submitted for this question.</p>
+                                      )}
+                                    </div>
+                                  )}
                                 </article>
                               ))}
                             </div>
@@ -1306,7 +1393,7 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
     <p className="text-sm text-slate-500">Loading feedback...</p>
   ) : (activeResult?.status === 'Released') && reviewQuestions.length > 0 ? ( // <-- CHANGE THIS LINE
     <div className="space-y-3">
-      {reviewQuestions.map((question, index) => (
+      {reviewQuestions.map((question: SubmissionReviewQuestionDetail, index: number) => (
         <article key={`${question.assessmentQuestionId}-feedback`} className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-slate-900">Question {question.order || index + 1}</p>
@@ -1320,7 +1407,7 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                                 <div className="rounded-md border border-slate-200 bg-white p-2">
                                   <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Expected Answer</p>
                                   <ul className="mt-1 list-disc pl-5 space-y-1 text-sm text-slate-700">
-                                    {question.expectedMarkingPoints.map((point, pointIndex) => (
+                                    {question.expectedMarkingPoints.map((point: string, pointIndex: number) => (
                                       <li key={`${question.assessmentQuestionId || index}-${pointIndex}`}>{point}</li>
                                     ))}
                                   </ul>

@@ -2,11 +2,80 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DevelopmentPlan, Student, SkillColor } from '../../types';
 import { studentService, developmentService } from '../../services/api';
-import { Activity, Plus, ChevronDown, Zap, Check } from 'lucide-react';
+import { Activity, Plus, ChevronDown, Zap, Check, MoreVertical, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DevelopmentViewProps {
   studentId?: string;
 }
+
+type StepDoc = {
+  title: string;
+  type?: string;
+  exitCheckpoint?: { isPassed?: boolean };
+};
+
+type MissionDoc = {
+  _id?: string;
+  task: string;
+  objective?: string;
+  status: string;
+  completedAt?: Date;
+  steps?: StepDoc[];
+};
+
+type SubskillDoc = { name: string; score: number };
+
+type SkillDoc = {
+  id?: string;
+  name: string;
+  score: number;
+  subskills?: SubskillDoc[];
+  color?: SkillColor;
+};
+
+type TargetAttrDoc = { attributeId?: string; initialMastery?: number; name?: string };
+
+type PlanDoc = {
+  _id: string;
+  status?: string;
+  title?: string;
+  name?: string;
+  description?: string;
+  performance?: string;
+  skillCategory?: string;
+  eta?: number;
+  currentProgress?: number;
+  progress?: number;
+  missions?: MissionDoc[];
+  steps?: MissionDoc[];
+  skills?: SkillDoc[];
+  targetAttributes?: TargetAttrDoc[];
+  student?: string | { _id: string };
+  plan?: {
+    name?: string;
+    title?: string;
+    missions?: MissionDoc[];
+    steps?: MissionDoc[];
+    skills?: SkillDoc[];
+    description?: string;
+    performance?: string;
+    skillCategory?: string;
+    eta?: number;
+  };
+};
+
+type StudentDoc = {
+  _id: string;
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  overall?: number;
+  performance?: string;
+  user?: { firstName?: string; lastName?: string };
+  courses?: string[];
+  course?: string;
+};
 
 // ── Score helpers ─────────────────────────────────────────────────────────────
 function scoreColor(score: number): string {
@@ -49,7 +118,7 @@ const ScoreBar: React.FC<{ score: number; active?: boolean }> = ({ score, active
 };
 
 // ── Skill card ─────────────────────────────────────────────────────────────────
-const SkillCard: React.FC<{ skill: any; expanded: boolean; onToggle: () => void }> = ({ skill, expanded, onToggle }) => (
+const SkillCard: React.FC<{ skill: SkillDoc; expanded: boolean; onToggle: () => void }> = ({ skill, expanded, onToggle }) => (
   <div
     onClick={onToggle}
     style={{
@@ -80,7 +149,7 @@ const SkillCard: React.FC<{ skill: any; expanded: boolean; onToggle: () => void 
     {/* Subskills */}
     <div style={{ maxHeight: expanded ? 300 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
       <div style={{ borderTop: '1px solid #ccfbf1', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {skill.subskills?.map((sub: any, i: number) => (
+        {skill.subskills?.map((sub: SubskillDoc, i: number) => (
           <div key={i}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.name}</span>
@@ -95,7 +164,7 @@ const SkillCard: React.FC<{ skill: any; expanded: boolean; onToggle: () => void 
 );
 
 // ── Mission row ────────────────────────────────────────────────────────────────
-const MissionRow: React.FC<{ mission: any; index: number }> = ({ mission, index }) => {
+const MissionRow: React.FC<{ mission: MissionDoc; index: number }> = ({ mission, index }) => {
   const [open, setOpen] = useState(mission.status === 'In Progress');
   const isDone = mission.status === 'Completed';
   const isActive = mission.status === 'In Progress';
@@ -134,7 +203,7 @@ const MissionRow: React.FC<{ mission: any; index: number }> = ({ mission, index 
           )}
         </div>
         <StatusPill status={mission.status} />
-        {mission.steps?.length > 0 && (
+        {(mission.steps?.length ?? 0) > 0 && (
           <ChevronDown
             size={11}
             style={{ color: '#a1a1aa', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}
@@ -143,9 +212,9 @@ const MissionRow: React.FC<{ mission: any; index: number }> = ({ mission, index 
       </button>
 
       {/* Steps */}
-      {mission.steps?.length > 0 && open && (
+      {(mission.steps?.length ?? 0) > 0 && open && (
         <div style={{ borderTop: `1px solid ${isActive ? '#ccfbf1' : '#f4f4f5'}`, padding: '6px 12px 8px 42px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {mission.steps.map((step: any, si: number) => {
+          {(mission.steps ?? []).map((step: StepDoc, si: number) => {
             const passed = step.exitCheckpoint?.isPassed;
             return (
               <div key={si} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9 }}>
@@ -179,23 +248,35 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
   const [error, setError] = useState<string | null>(null);
   const [expandedSkill, setExpandedSkill] = useState<number | null>(null);
   const [isActivating, setIsActivating] = useState(false);
+  const [openKebabId, setOpenKebabId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
-  const getStudentName = (s: any): string => {
-    if (s?.user?.firstName) return `${s.user.firstName} ${s.user.lastName}`;
-    if (s?.firstName) return `${s.firstName} ${s.lastName}`;
+  const asDoc = (dp: DevelopmentPlan | null): PlanDoc | null =>
+    dp as unknown as PlanDoc | null;
+
+  const asStudent = (s: Student): StudentDoc =>
+    s as unknown as StudentDoc;
+
+  const getStudentName = (s: Student): string => {
+    const d = asStudent(s);
+    if (d.user?.firstName) return `${d.user.firstName} ${d.user.lastName ?? ''}`;
+    if (d.firstName) return `${d.firstName} ${d.lastName ?? ''}`;
     return 'Unknown';
   };
 
-  const getPlanData = (dp: DevelopmentPlan | null): any => {
-    if (!dp) return null;
-    if ((dp as any).plan?.name) return (dp as any).plan;
-    return dp as any;
+  const getPlanData = (dp: DevelopmentPlan | null): PlanDoc | null => {
+    const doc = asDoc(dp);
+    if (!doc) return null;
+    if (doc.plan?.name) return doc.plan as PlanDoc;
+    return doc;
   };
 
   const getPlanProgress = (dp: DevelopmentPlan | null): number => {
-    if (!dp) return 0;
-    return (dp as any).currentProgress ?? (dp as any).progress ?? 0;
+    const doc = asDoc(dp);
+    if (!doc) return 0;
+    return doc.currentProgress ?? doc.progress ?? 0;
   };
 
   const getPlanName = (dp: DevelopmentPlan | null): string => {
@@ -204,24 +285,20 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
     return d?.title ?? d?.name ?? 'Unnamed Plan';
   };
 
-  const getPlanMissions = (dp: DevelopmentPlan | null): any[] => {
+  const getPlanMissions = (dp: DevelopmentPlan | null): MissionDoc[] => {
     if (!dp) return [];
     const d = getPlanData(dp);
     return d?.missions ?? d?.steps ?? [];
   };
 
-  const getPlanSkills = (dp: DevelopmentPlan | null): any[] => {
+  const getPlanSkills = (dp: DevelopmentPlan | null): SkillDoc[] => {
     if (!dp) return [];
     const d = getPlanData(dp);
     const skills = d?.skills ?? [];
     if (skills.length > 0) return skills;
-    // Fallback: surface targetAttributes as minimal skill entries so score bars render
-    type TargetAttr = { attributeId?: string; initialMastery?: number };
-    const targetAttrs: TargetAttr[] =
-      ((dp as unknown as Record<string, unknown>).targetAttributes as TargetAttr[] | undefined) ?? [];
-    return targetAttrs.map(ta => ({
+    return (d?.targetAttributes ?? []).map(ta => ({
       id: ta.attributeId,
-      name: ta.attributeId ?? 'Attribute',
+      name: ta.name ?? ta.attributeId ?? 'Attribute',
       score: Math.round((ta.initialMastery ?? 0) * 100),
       subskills: [],
     }));
@@ -242,10 +319,10 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
         setSelectedStudent(studentData);
         const plansData = await developmentService.getAllPlansForStudent(initialStudentId);
         setAllStudentDevelopmentPlans(plansData);
-        const activePlan = plansData.find((p: any) => p.status === 'Active');
+        const activePlan = plansData.find(p => asDoc(p)?.status === 'Active');
         setCurrentDisplayPlan(activePlan || plansData[0] || null);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load student development data.');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to load student development data.');
       } finally {
         setLoading(false);
       }
@@ -261,10 +338,10 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
       setSelectedStudent(studentData);
       const plansData = await developmentService.getAllPlansForStudent(newStudentId);
       setAllStudentDevelopmentPlans(plansData);
-      const activePlan = plansData.find((p: any) => p.status === 'Active');
+      const activePlan = plansData.find(p => asDoc(p)?.status === 'Active');
       setCurrentDisplayPlan(activePlan || plansData[0] || null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load data for selected student.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load data for selected student.');
     } finally {
       setLoading(false);
     }
@@ -277,8 +354,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
 
   const handleCreatePlan = () => {
     if (!selectedStudent) return;
-    type StudentDoc = { _id?: string; courses?: string[]; course?: string };
-    const s = selectedStudent as unknown as StudentDoc;
+    const s = asStudent(selectedStudent);
     const courseId = s.courses?.[0] ?? s.course ?? '';
     navigate(`/development/create/${s._id}/${courseId}`);
   };
@@ -287,10 +363,10 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
     if (!currentDisplayPlan) return;
     setIsActivating(true);
     try {
-      const updated = await developmentService.activatePlan((currentDisplayPlan as any)._id);
+      const updated = await developmentService.activatePlan(asDoc(currentDisplayPlan)!._id);
       setCurrentDisplayPlan(updated);
       setAllStudentDevelopmentPlans(prev =>
-        prev.map(p => (p as any)._id === (updated as any)._id ? updated : p)
+        prev.map(p => asDoc(p)?._id === asDoc(updated)?._id ? updated : p)
       );
     } catch (err) {
       console.error('Failed to activate plan:', err);
@@ -299,14 +375,37 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
     }
   };
 
-  const getCurrentSkills = (): any[] =>
-    getPlanSkills(currentDisplayPlan).map((skill: any) => ({
+  const handleDeletePlan = (planId: string, planName: string) => {
+    setOpenKebabId(null);
+    setDeleteTarget({ id: planId, name: planName });
+  };
+
+  const confirmDeletePlan = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await developmentService.deletePlan(deleteTarget.id);
+      setAllStudentDevelopmentPlans(prev => prev.filter(p => (p as unknown as { _id: string })._id !== deleteTarget.id));
+      if ((currentDisplayPlan as unknown as { _id: string })?._id === deleteTarget.id) {
+        setCurrentDisplayPlan(null);
+      }
+      toast.success(`"${deleteTarget.name}" has been deleted.`);
+      setDeleteTarget(null);
+    } catch {
+      toast.error('Failed to delete plan. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const getCurrentSkills = (): SkillDoc[] =>
+    getPlanSkills(currentDisplayPlan).map((skill: SkillDoc) => ({
       ...skill,
-      score: (skill.score as number) || 0,
-      subskills: (skill.subskills || []).map((sub: any) => ({
+      score: skill.score || 0,
+      subskills: (skill.subskills || []).map((sub: SubskillDoc) => ({
         ...sub,
-        score: (sub.score as number) || 0,
-        color: ((sub.score as number) || 0) > 70 ? ('teal' as SkillColor) : ('amber' as SkillColor),
+        score: sub.score || 0,
+        color: (sub.score || 0) > 70 ? ('teal' as SkillColor) : ('amber' as SkillColor),
       })),
     }));
 
@@ -348,6 +447,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
   const DIVIDER_STYLE: React.CSSProperties = { flex: 1, height: 1, background: '#f4f4f5' };
 
   return (
+    <>
     <div style={{
       height: 'calc(100vh - 160px)',
       display: 'grid',
@@ -373,7 +473,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
               {fullName}
             </div>
             <div style={{ fontSize: 9, color: '#a1a1aa', fontWeight: 700, letterSpacing: '0.08em', marginTop: 1, fontFamily: 'monospace' }}>
-              {(selectedStudent as any).id || ''}
+              {asStudent(selectedStudent).id || ''}
             </div>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 2 }}>
               <span style={{ fontSize: 26, fontWeight: 900, color: '#0d9488', lineHeight: 1 }}>{selectedStudent.overall}</span>
@@ -389,39 +489,69 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
             <p style={{ fontSize: 9, color: '#a1a1aa', fontStyle: 'italic', padding: '4px 2px' }}>No plans yet.</p>
           )}
           {allStudentDevelopmentPlans.map((planItem) => {
-            const isSelected = (planItem as any)._id === (currentDisplayPlan as any)?._id;
+            const planId = (planItem as unknown as { _id: string })._id;
+            const isSelected = planId === (currentDisplayPlan as unknown as { _id: string })?._id;
             const progress = getPlanProgress(planItem);
+            const kebabOpen = openKebabId === planId;
             return (
-              <button
-                key={(planItem as any)._id}
-                onClick={() => handlePlanSelect(planItem)}
-                style={{
-                  width: '100%', padding: '9px 10px', borderRadius: 9,
-                  border: `1.5px solid ${isSelected ? '#5eead4' : '#e4e4e7'}`,
-                  background: isSelected ? '#f0fdfa' : '#fafafa',
-                  cursor: 'pointer', textAlign: 'left',
-                  display: 'flex', flexDirection: 'column', gap: 5,
-                  transition: 'all 0.12s',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: isSelected ? '#0f766e' : '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                    {getPlanName(planItem)}
-                  </span>
-                  <StatusPill status={planItem.status || 'Draft'} />
-                </div>
-                {progress > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ flex: 1, height: 3, background: isSelected ? '#99f6e4' : '#e4e4e7', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${progress}%`, background: isSelected ? '#0d9488' : '#a1a1aa', borderRadius: 99 }} />
+              <div key={planId} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => handlePlanSelect(planItem)}
+                  style={{
+                    width: '100%', padding: '9px 10px', borderRadius: 9,
+                    border: `1.5px solid ${isSelected ? '#5eead4' : '#e4e4e7'}`,
+                    background: isSelected ? '#f0fdfa' : '#fafafa',
+                    cursor: 'pointer', textAlign: 'left',
+                    display: 'flex', flexDirection: 'column', gap: 5,
+                    transition: 'all 0.12s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: isSelected ? '#0f766e' : '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {getPlanName(planItem)}
+                    </span>
+                    <StatusPill status={planItem.status || 'Draft'} />
+                    <button
+                      onClick={e => { e.stopPropagation(); setOpenKebabId(kebabOpen ? null : planId); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#a1a1aa', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                    >
+                      <MoreVertical size={12} />
+                    </button>
+                  </div>
+                  {progress > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ flex: 1, height: 3, background: isSelected ? '#99f6e4' : '#e4e4e7', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${progress}%`, background: isSelected ? '#0d9488' : '#a1a1aa', borderRadius: 99 }} />
+                      </div>
+                      <span style={{ fontSize: 8, fontWeight: 800, color: isSelected ? '#0d9488' : '#a1a1aa' }}>{progress}%</span>
                     </div>
-                    <span style={{ fontSize: 8, fontWeight: 800, color: isSelected ? '#0d9488' : '#a1a1aa' }}>{progress}%</span>
+                  )}
+                  {progress === 0 && (planItem.status as string) === 'Draft' && (
+                    <span style={{ fontSize: 8, color: '#a1a1aa', fontStyle: 'italic' }}>Not yet activated</span>
+                  )}
+                </button>
+                {kebabOpen && (
+                  <div style={{
+                    position: 'absolute', right: 0, top: '100%', zIndex: 50,
+                    background: 'white', border: '1.5px solid #e4e4e7', borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)', minWidth: 120, overflow: 'hidden',
+                  }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDeletePlan(planId, getPlanName(planItem)); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 7,
+                        padding: '8px 12px', background: 'none', border: 'none',
+                        cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#ef4444',
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#fef2f2')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
                   </div>
                 )}
-                {progress === 0 && planItem.status === 'Draft' && (
-                  <span style={{ fontSize: 8, color: '#a1a1aa', fontStyle: 'italic' }}>Not yet activated</span>
-                )}
-              </button>
+              </div>
             );
           })}
         </div>
@@ -540,7 +670,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
                 <div>
                   <div style={SECTION_STYLE}>Missions<div style={DIVIDER_STYLE} /></div>
                   <ol style={{ display: 'flex', flexDirection: 'column', gap: 6, listStyle: 'none', padding: 0, margin: 0 }}>
-                    {planMissions.map((mission: any, i: number) => (
+                    {planMissions.map((mission: MissionDoc, i: number) => (
                       <MissionRow key={mission._id ?? i} mission={mission} index={i} />
                     ))}
                   </ol>
@@ -582,16 +712,18 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
         <div style={{ flex: 1, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
           {allStudents.map((s) => {
             const sName = getStudentName(s);
-            const isActive = (s as any)._id === (selectedStudent as any)?._id;
-            const studentPlan = allStudentDevelopmentPlans.find(
-              (p: any) => p.student === (s as any)._id || p.student?._id === (s as any)._id
-            );
+            const sid = asStudent(s)._id;
+            const isActive = sid === asStudent(selectedStudent)._id;
+            const studentPlan = allStudentDevelopmentPlans.find(p => {
+              const pd = asDoc(p);
+              return pd?.student === sid || (pd?.student as { _id: string } | undefined)?._id === sid;
+            });
             const sPlanProgress = getPlanProgress(studentPlan ?? null);
 
             return (
               <div
-                key={(s as any)._id}
-                onClick={() => handleStudentSelect((s as any)._id)}
+                key={sid}
+                onClick={() => handleStudentSelect(sid)}
                 style={{
                   borderRadius: 10,
                   border: `1.5px solid ${isActive ? '#5eead4' : '#e4e4e7'}`,
@@ -642,6 +774,48 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
       </div>
 
     </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {deleteTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 14, padding: '28px 28px 22px', maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Trash2 size={18} color="#ef4444" />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Delete plan</div>
+                <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
+                  Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{deleteTarget.name}"</strong>? This will permanently remove the plan. This action cannot be undone.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: 'white', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer', fontFamily: 'inherit', opacity: deleting ? 0.5 : 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={confirmDeletePlan}
+                style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: deleting ? '#fca5a5' : '#ef4444', fontSize: 13, fontWeight: 600, color: 'white', cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', minWidth: 80 }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
