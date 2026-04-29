@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle, Calendar, CheckCircle, Clock, FileText, Loader2, Upload, X, Eye } from 'lucide-react';
-import { Assessment, Result, Submission } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { AlertCircle, Calendar, CheckCircle, Clock, FileText, Loader2, X, Eye, PenLine } from 'lucide-react';
+import { Assessment, Question, Result, Submission } from '../../types';
 import { Dialog } from '@headlessui/react';
 import { assessmentService, studentService, submissionService } from '../../services/api';
+import { submissionService as submissionServiceDirect } from '../../services/submissionService';
 import { externalAssessmentService } from '../../services/externalAssessmentService';
+import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
 
 interface StudentAssignmentsProps {
   studentId: string;
@@ -24,15 +26,15 @@ interface AssignmentWithResult extends Assessment {
 }
 
 const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, selectedCourseId }) => {
-  const [assignments, setAssignments] = useState<AssignmentWithResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
-  const [textSubmission, setTextSubmission] = useState('');
-  const [submissionType, setSubmissionType] = useState<'file' | 'text'>('file');
-  const [activeAssignment, setActiveAssignment] = useState<string | null>(null);
+  const [assignments,       setAssignments]       = useState<AssignmentWithResult[]>([]);
+  const [loading,           setLoading]           = useState(true);
+  const [submitting,        setSubmitting]         = useState<string | null>(null);
+  const [isDetailsOpen,     setIsDetailsOpen]     = useState(false);
+  const [selectedFeedback,  setSelectedFeedback]  = useState<any>(null);
+  // Handwritten submission flow
+  const [ocrAssignmentId,   setOcrAssignmentId]   = useState<string | null>(null);
+  const [ocrInitialFiles,   setOcrInitialFiles]   = useState<File[]>([]);
+  const handwrittenInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     console.log('--- Fetching Student Assignments ---');
@@ -181,35 +183,45 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
     }
   }, [studentId, selectedCourseId]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, assignmentId: string) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+  const openHandwrittenPicker = (assignmentId: string) => {
+    setOcrAssignmentId(assignmentId);
+    handwrittenInputRef.current?.click();
+  };
+
+  const handleHandwrittenFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length && ocrAssignmentId) {
+      setOcrInitialFiles(files);
     }
   };
 
-  const handleSubmitAssignment = async (assignmentId: string) => {
-    console.log(`DEBUG: Attempting to submit assignment ${assignmentId} with type: ${submissionType}`);
+  const handleOcrSubmit = async (compiled: CompiledSubmission) => {
+    if (!ocrAssignmentId) return;
+    await handleSubmitAssignment(ocrAssignmentId, compiled.fullText);
+    setOcrAssignmentId(null);
+    setOcrInitialFiles([]);
+  };
+
+  const handleSubmitAssignment = async (assignmentId: string, extractedText: string) => {
+    console.log(`DEBUG: Attempting to submit assignment ${assignmentId} (handwritten)`);
     setSubmitting(assignmentId);
-  
+
     try {
       const assignment = assignments.find(a => a._id === assignmentId);
       if (!assignment) {
         throw new Error('Assignment not found');
       }
-  
-      // The moduleName should be derived from the assignment's associated course
-      const moduleName = 'Operating Systems'; 
-  
-      // Step 1: Trigger external assessment first
+
+      const moduleName = 'Operating Systems';
+
+      // Step 1: Assess the OCR-extracted text
       let assessmentResult;
-      if (submissionType === 'file' && selectedFile) {
-        console.log('DEBUG: Assessing file submission with external service');
-        assessmentResult = await externalAssessmentService.assessDocument(selectedFile, moduleName);
-      } else if (submissionType === 'text' && textSubmission.trim()) {
-        console.log('DEBUG: Assessing text submission with external service');
-        assessmentResult = await externalAssessmentService.assessText(textSubmission.trim(), moduleName);
+      if (extractedText.trim()) {
+        console.log('DEBUG: Assessing handwritten submission text');
+        assessmentResult = await externalAssessmentService.assessText(extractedText.trim(), moduleName);
       } else {
-        throw new Error('No valid submission content found');
+        throw new Error('No extracted text found');
       }
   
       // Check for success and data before proceeding
@@ -217,7 +229,7 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
         throw new Error(assessmentResult.error || 'Assessment failed to return data');
       }
   
-      const { assessment, module: assessedModule } = assessmentResult.data;
+      const { assessment } = assessmentResult.data;
       const totalPossibleMarks = assessment?.total_possible_marks || assignment.maxScore;
       const marksAchieved = assessment?.marks_achieved || 0;
       const percentage = assessment?.marks_percentage || 0;
@@ -246,47 +258,35 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
       const resultResponse = await assessmentService.addResult(assignmentId, resultData);
       console.log('DEBUG: Result created:', resultResponse);
   
-      // Step 4: Prepare the submission payload with correct field names
-      const submissionPayload: SubmissionPayload = {
+      // Step 4: Build answers from the assessment's questions so the controller
+      // can store them and run BKT updates. Each question gets the full OCR text
+      // as studentAnswer. No isCorrect → controller marks as 'Pending AI Grading'.
+      const questions = Array.isArray(assignment.questions)
+        ? (assignment.questions as Question[])
+        : [];
+
+      const answers = questions
+        .filter((q): q is Question & { _id: string } => Boolean(q._id))
+        .map(q => ({ questionId: q._id, studentAnswer: extractedText }));
+
+      if (answers.length === 0) throw new Error('Assessment has no questions');
+
+      // Step 5: Submit via JSON (not FormData) so questionId is preserved
+      const submissionResponse = await submissionServiceDirect.submitAnswers({
         assessmentId: assignmentId,
-        studentId: studentId,  // Correct field name
-        submissionType,
-        result: resultResponse._id, // Link to the created result
-        externalAssessmentData: assessmentResult.data,
-        // Add file-specific fields if it's a file submission
-        ...(submissionType === 'file' && selectedFile ? { 
-          file: selectedFile,
-          originalFilename: selectedFile.name,
-          fileType: selectedFile.type
-        } : {}),
-        // Add text content if it's a text submission
-        ...(submissionType === 'text' ? { 
-          textContent: textSubmission 
-        } : {}),
-      };
-  
-      // Step 5: Submit the assignment
-      const submissionResponse = await submissionService.submitAssignment(submissionPayload);
+        studentId: studentId,
+        submissionType: 'text',
+        answers,
+      });
       console.log('DEBUG: Submission created:', submissionResponse);
-  
-      // Step 6: Update the local state
-      setAssignments(prev => prev.map(a => 
-        a._id === assignmentId 
-          ? { 
-            ...a, 
-            isSubmitted: true, 
-            result: {
-              ...resultResponse,
-              assessment: assignmentId,
-            }
-          }
+
+      // Step 6: Update local state
+      setAssignments(prev => prev.map(a =>
+        a._id === assignmentId
+          ? { ...a, isSubmitted: true, result: { ...resultResponse, assessment: assignmentId } }
           : a
       ));
-  
-      // Reset form state
-      setSelectedFile(null);
-      setTextSubmission('');
-      setActiveAssignment(null);
+
       
       alert(`Assignment submitted and graded successfully!\nScore: ${resultData.actualMark}/${assignment.maxScore}\nGrade: ${resultData.grade}`);
   
@@ -466,96 +466,21 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
 
             {!assignment.isSubmitted && (
               <div className="border-t pt-4">
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setSubmissionType('file'); setActiveAssignment(assignment._id); }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        submissionType === 'file' && activeAssignment === assignment._id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      File Upload
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setSubmissionType('text'); setActiveAssignment(assignment._id); }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        submissionType === 'text' && activeAssignment === assignment._id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      Text Submission
-                    </button>
-                  </div>
-
-                  {submissionType === 'file' && activeAssignment === assignment._id && (
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1">
-                        <label className="block">
-                          <input
-                            type="file"
-                            onChange={(e) => handleFileSelect(e, assignment._id)}
-                            className="hidden"
-                            accept=".pdf,.doc,.docx,.txt,.zip"
-                          />
-                          <div className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
-                            <Upload className="w-5 h-5 text-gray-400" />
-                            <span className="text-gray-600">
-                              {selectedFile ? selectedFile.name : 'Choose file to upload'}
-                            </span>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
+                <button
+                  type="button"
+                  onClick={() => openHandwrittenPicker(assignment._id)}
+                  disabled={submitting === assignment._id}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {submitting === assignment._id ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Submitting & Grading…</>
+                  ) : (
+                    <><PenLine className="w-4 h-4" /> Handwritten Submission</>
                   )}
-
-                  {submissionType === 'text' && activeAssignment === assignment._id && (
-                    <div>
-                      <textarea
-                        value={textSubmission}
-                        onChange={(e) => setTextSubmission(e.target.value)}
-                        placeholder="Enter your assignment submission here..."
-                        className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[200px]"
-                        rows={8}
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => handleSubmitAssignment(assignment._id)}
-                      disabled={
-                        (submissionType === 'file' && (!selectedFile || activeAssignment !== assignment._id)) ||
-                        (submissionType === 'text' && !textSubmission.trim()) ||
-                        submitting === assignment._id
-                      }
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {submitting === assignment._id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Submitting & Grading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          Submit Assignment
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  
-                  <p className="text-xs text-gray-500">
-                    {submissionType === 'file' 
-                      ? 'Accepted formats: PDF, DOC, DOCX, TXT, ZIP (Max size: 10MB)'
-                      : 'Your submission will be automatically graded using AI'
-                    }
-                  </p>
-                </div>
+                </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  Upload photos or scans of your handwritten work — we'll extract the text and grade it automatically.
+                </p>
               </div>
             )}
 
@@ -773,6 +698,49 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
           </Dialog.Panel>
         </div>
       </Dialog>
+
+      {/* Hidden file input for handwritten image selection */}
+      <input
+        ref={handwrittenInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        multiple
+        className="hidden"
+        onChange={handleHandwrittenFileSelect}
+      />
+
+      {/* OCR Review overlay — shown after files are selected */}
+      {ocrInitialFiles.length > 0 && ocrAssignmentId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-stretch p-4">
+          <div className="flex-1 bg-white rounded-2xl overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-white flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-800">Handwritten Submission</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Review the extracted text, correct any errors, then submit.
+                </p>
+              </div>
+              <button
+                onClick={() => { setOcrInitialFiles([]); setOcrAssignmentId(null); }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* OCR component fills remaining space */}
+            <div className="flex-1 overflow-hidden">
+              <OcrReviewComponent
+                mode="student-submit"
+                initialFiles={ocrInitialFiles}
+                onSubmit={handleOcrSubmit}
+                onCancel={() => { setOcrInitialFiles([]); setOcrAssignmentId(null); }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

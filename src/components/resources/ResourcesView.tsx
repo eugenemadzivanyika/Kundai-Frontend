@@ -21,6 +21,7 @@ import axios from 'axios';
 import ResourceItem from './ResourceItem';
 import UploadModal from './UploadModal';
 import FilePreviewModal from './FilePreviewModal';
+import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
 
 // Define types for our components
 interface ViewModeToggleProps {
@@ -133,6 +134,9 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const [showOcrReview, setShowOcrReview] = useState(false);
+  const [ocrSourceFile, setOcrSourceFile] = useState<File | null>(null);
 
 
   const detectFileType = (data: {
@@ -424,6 +428,24 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
     setShowUploadModal(true);
   };
 
+  const handleOcrUpload = (file: File) => {
+    setOcrSourceFile(file);
+    setShowUploadModal(false);
+    setShowOcrReview(true);
+  };
+
+  const handleOcrSubmit = async ({ fullText }: CompiledSubmission) => {
+    const baseName = ocrSourceFile?.name.replace(/\.[^.]+$/, '') ?? 'ocr-document';
+    const textFile = new File(
+      [new Blob([fullText], { type: 'text/plain' })],
+      `${baseName}-extracted.txt`,
+      { type: 'text/plain' },
+    );
+    setShowOcrReview(false);
+    setOcrSourceFile(null);
+    await handleFileUpload(textFile);
+  };
+
   const handleResourceClick = useCallback(async (resource: Resource) => {
     setSelectedResourceForPreview(resource);
     setShowPreviewModal(true);
@@ -604,11 +626,25 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
         )}
       </div>
 
+      {showOcrReview && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ width: '100%', maxWidth: 1400, height: 'calc(100vh - 80px)' }}>
+            <OcrReviewComponent
+              mode="resource-upload"
+              initialFiles={ocrSourceFile ? [ocrSourceFile] : undefined}
+              onSubmit={handleOcrSubmit}
+              onCancel={() => { setShowOcrReview(false); setOcrSourceFile(null); }}
+            />
+          </div>
+        </div>
+      )}
+
       {showUploadModal && (
         <UploadModal
           isOpen={showUploadModal}
           onClose={() => setShowUploadModal(false)}
           onFileSelect={handleFileUpload}
+          onOcrUpload={handleOcrUpload}
           courses={courseInfo ? [{
             _id: classId || '',
             id: classId || '',

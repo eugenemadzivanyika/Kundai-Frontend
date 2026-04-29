@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ResourcesView from './ResourcesView';
 import CoverageView from './CoverageView';
 import { AIAssessmentModal } from '../assessments/AIAssessmentModal';
-import { resourceService, courseService } from '../../services/api';
+import { resourceService, courseService, API_URL } from '../../services/api';
 import type { SyllabusAttribute, LinkedFile } from './CoverageView';
 import { LEGEND_ITEMS } from './CoverageView';
 
@@ -188,17 +187,42 @@ const UploadModal: React.FC<{
   const [file, setFile] = useState<File | null>(null);
   const [selCourse, setSelCourse] = useState<Course | null>(selectedCourse);
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => { setSelCourse(selectedCourse); }, [selectedCourse]);
 
   if (!isOpen) return null;
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!file || !selCourse) return;
-    if (selCourse) onCourseSelect(selCourse);
-    onUploadSuccess?.();
-    setFile(null);
-    onClose();
+    setIsUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('courseId', selCourse._id);
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/resources/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || `Upload failed (${response.status})`);
+      }
+
+      onCourseSelect(selCourse);
+      setFile(null);
+      onUploadSuccess?.();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -296,16 +320,16 @@ const UploadModal: React.FC<{
           }}>Cancel</button>
           <button
             onClick={handleUpload}
-            disabled={!file || !selCourse}
+            disabled={!file || !selCourse || isUploading}
             style={{
               padding: '8px 18px', borderRadius: 8, border: 'none',
-              background: !file || !selCourse ? '#cbd5e1' : '#2563eb',
-              fontSize: 12, fontWeight: 800, color: 'white', cursor: !file || !selCourse ? 'not-allowed' : 'pointer',
+              background: !file || !selCourse || isUploading ? '#cbd5e1' : '#2563eb',
+              fontSize: 12, fontWeight: 800, color: 'white', cursor: !file || !selCourse || isUploading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
             }}
           >
             <Ico d={I.upload} size={12} color="white" />
-            Upload
+            {isUploading ? 'Uploading…' : 'Upload'}
           </button>
         </div>
       </motion.div>
@@ -315,8 +339,6 @@ const UploadModal: React.FC<{
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const ResourcesDashboard: React.FC = () => {
-  const navigate = useNavigate();
-
   const [courses, setCourses] = useState<Course[]>([]);
   const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([]);
   const [selectedClass, setSelectedClass] = useState<Course | null>(null);

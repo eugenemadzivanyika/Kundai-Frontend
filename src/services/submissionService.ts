@@ -65,6 +65,10 @@ export const submissionService = {
   },
 
   // Get history for the Digital Twin mastery bars
+  getStudentSubmissions: async (studentId: string) => {
+    return fetchData(`/submissions/student/${studentId}`);
+  },
+
   getStudentHistory: async (studentId: string) => {
     return fetchData(`/submissions/student/${studentId}`);
   },

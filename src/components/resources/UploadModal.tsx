@@ -33,12 +33,13 @@ interface UploadModalProps {
   courses: Course[];
   onCourseSelect: (course: Course) => void;
   onFileSelect?: (file: File) => void;
+  onOcrUpload?: (file: File) => void;
   isUploading?: boolean;
   uploadProgress?: number;
 }
 
 const UploadModal: React.FC<UploadModalProps> = ({
-  isOpen, onClose, onUploadSuccess, selectedCourse, courses, onCourseSelect, onFileSelect, isUploading = false, uploadProgress = 0,
+  isOpen, onClose, onUploadSuccess, selectedCourse, courses, onCourseSelect, onFileSelect, onOcrUpload, isUploading = false, uploadProgress = 0,
 }) => {
   const [dragging, setDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -198,6 +199,19 @@ const UploadModal: React.FC<UploadModalProps> = ({
             >
               Cancel
             </button>
+            {onOcrUpload && selectedFile && selCourse && (selectedFile.type.startsWith('image/') || selectedFile.type === 'application/pdf') && (
+              <button
+                onClick={() => { onOcrUpload(selectedFile); handleClose(); }}
+                disabled={isUploading}
+                style={{
+                  padding: '8px 14px', borderRadius: 8, border: '1.5px solid #7c3aed',
+                  background: '#f5f3ff', fontSize: 12, fontWeight: 700, color: '#6d28d9',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <Ico d={I.doc} size={12} color="#6d28d9" /> Extract Text (OCR)
+              </button>
+            )}
             <button
               onClick={handleUpload}
               disabled={!selectedFile || !selCourse || isUploading}

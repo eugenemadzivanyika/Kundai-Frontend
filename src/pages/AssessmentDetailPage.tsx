@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { QuestionText, MathText } from '../components/ui/DiagramRenderer';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Edit2, FileText, List, Loader2, Users } from 'lucide-react';
+import { ArrowLeft, Check, Edit2, FileText, List, Loader2, ScanLine, Users } from 'lucide-react';
+import OcrReviewComponent, { CompiledSubmission } from '../components/ocr/OcrReviewComponent';
 import { toast } from 'sonner';
 import { assessmentService, courseService, submissionService } from '../services/api';
 import { Assessment, QuestionPart } from '../types';
@@ -92,6 +93,8 @@ const AssessmentDetailPage: React.FC = () => {
 
   const [submissionDetail, setSubmissionDetail] = useState<any>(null);
   const [submissionLoading, setSubmissionLoading] = useState(false);
+
+  const [ocrMarkResultId, setOcrMarkResultId] = useState<string | null>(null);
 
   const { paginatedItems: paginatedResults, currentPage, pageSize, totalPages, totalItems, rangeStart, rangeEnd, setCurrentPage, setPageSize } =
     useClientPagination(results, { initialPageSize: 10, resetKey: `${id}|${results.length}` });
@@ -640,12 +643,21 @@ const AssessmentDetailPage: React.FC = () => {
                               <span className="text-[12px] text-slate-500 truncate block">{r.teacherFeedback || '—'}</span>
                             </td>
                             <td className="px-3.5 py-2.5 text-right">
-                              <button
-                                onClick={() => { setSelectedResultId(r._id); setTab('questions'); }}
-                                className="text-[12px] font-semibold text-blue-600 hover:text-blue-700"
-                              >
-                                Review
-                              </button>
+                              <div className="flex items-center justify-end gap-3">
+                                <button
+                                  onClick={() => { setSelectedResultId(r._id); setTab('questions'); }}
+                                  className="text-[12px] font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  Review
+                                </button>
+                                <button
+                                  onClick={() => setOcrMarkResultId(r._id)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-600 hover:text-violet-800 border border-violet-200 rounded-md px-2 py-0.5 bg-violet-50 hover:bg-violet-100 transition-colors"
+                                  title="Upload and OCR a physical paper submission to mark it"
+                                >
+                                  <ScanLine size={11} /> Mark with OCR
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -768,6 +780,27 @@ const AssessmentDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {ocrMarkResultId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ width: '100%', maxWidth: 1400, height: 'calc(100vh - 80px)' }}>
+            <OcrReviewComponent
+              mode="teacher-mark"
+              assessmentId={id}
+              studentId={typeof results.find(r => r._id === ocrMarkResultId)?.student === 'string'
+                ? results.find(r => r._id === ocrMarkResultId)?.student as string
+                : (results.find(r => r._id === ocrMarkResultId)?.student as any)?._id}
+              onSubmit={({ fullText }: CompiledSubmission) => {
+                setEditFeedback(prev => prev ? `${prev}\n\n[OCR Extracted]\n${fullText}` : `[OCR Extracted]\n${fullText}`);
+                setSelectedResultId(ocrMarkResultId);
+                setTab('questions');
+                setOcrMarkResultId(null);
+              }}
+              onCancel={() => setOcrMarkResultId(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

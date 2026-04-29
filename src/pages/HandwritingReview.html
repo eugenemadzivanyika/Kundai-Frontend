@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Handwriting Review</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Kalam:wght@300;400;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background: #f1f5f9; color: #0f172a; }
+  button { cursor: pointer; font-family: inherit; border: none; background: none; }
+  textarea, input { font-family: inherit; outline: none; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+  .fade { animation: fadeUp 0.15s ease; }
+  .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .region-overlay { position:absolute; border-radius:3px; pointer-events:none; transition:opacity 0.15s; }
+  .drag-over { border-color: #3b82f6 !important; background: #eff6ff !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useCallback, useEffect } = React;
+
+// ── Region color palette ───────────────────────────────────────────────────
+const PALETTE = [
+  { fill:'rgba(59,130,246,0.15)',  border:'#3b82f6', text:'#1d4ed8',  bg:'#eff6ff',  border2:'#bfdbfe' },
+  { fill:'rgba(16,185,129,0.15)', border:'#10b981', text:'#047857',  bg:'#ecfdf5',  border2:'#a7f3d0' },
+  { fill:'rgba(245,158,11,0.15)', border:'#f59e0b', text:'#b45309',  bg:'#fffbeb',  border2:'#fde68a' },
+  { fill:'rgba(139,92,246,0.15)', border:'#8b5cf6', text:'#6d28d9',  bg:'#f5f3ff',  border2:'#ddd6fe' },
+  { fill:'rgba(239,68,68,0.15)',  border:'#ef4444', text:'#b91c1c',  bg:'#fef2f2',  border2:'#fecaca' },
+  { fill:'rgba(20,184,166,0.15)', border:'#14b8a6', text:'#0f766e',  bg:'#f0fdfa',  border2:'#99f6e4' },
+];
+
+// ── Mock pages ─────────────────────────────────────────────────────────────
+const MOCK_PAGES = [
+  {
+    id:'pg1', name:'Page 1',
+    studentName:'Rudo Ncube', studentId:'S2021003',
+    regions:[
+      { id:'r1', label:'Q1 — Simplification', colorIdx:0,
+        bounds:{ x:12, y:10, w:76, h:14 },
+        lines:[
+          { text:'3a + 5b', confidence:0.97 },
+          { text:'= 5a + 2a + 7b - 3b + b', confidence:0.91 },
+          { text:'= 3a + 5b ✓', confidence:0.95 },
+        ],
+        corrected:false,
+      },
+      { id:'r2', label:'Q2 — Solving equation', colorIdx:1,
+        bounds:{ x:12, y:28, w:76, h:20 },
+        lines:[
+          { text:'let Farais age = x', confidence:0.88 },
+          { text:'Father = 3x', confidence:0.93 },
+          { text:'x + 3x = 48', confidence:0.96 },
+          { text:'4x = 48', confidence:0.98 },
+          { text:'x = 12', confidence:0.99 },
+          { text:'Farai is 12 years old', confidence:0.94 },
+        ],
+        corrected:false,
+      },
+      { id:'r3', label:'Q3 — Index notation', colorIdx:2,
+        bounds:{ x:12, y:52, w:76, h:22 },
+        lines:[
+          { text:'(a)  10 000 = 10^4', confidence:0.96 },
+          { text:'(b)  1 000 000 = 107', confidence:0.52, error:'Misread superscript — should be 10^7 or 10^6' },
+          { text:'(c)  0.001 =', confidence:0.61, error:'Incomplete — student may have left blank' },
+          { text:'(d)  2^5 = 32', confidence:0.94 },
+          { text:'(e)  7^-2 =', confidence:0.58, error:'Answer missing or illegible' },
+        ],
+        corrected:false,
+      },
+      { id:'r4', label:'Q4 — Inequality', colorIdx:3,
+        bounds:{ x:12, y:78, w:76, h:12 },
+        lines:[
+          { text:'(a)  x < 5', confidence:0.89, error:'OCR may have reversed — original writes x > 5 or 5 < x ≤ 12' },
+          { text:'(b)  -3 ≤ x < 8', confidence:0.91 },
+        ],
+        corrected:false,
+      },
+    ],
+  },
+  {
+    id:'pg2', name:'Page 2',
+    studentName:'Rudo Ncube', studentId:'S2021003',
+    regions:[
+      { id:'r5', label:'Q5 — Graphs', colorIdx:0,
+        bounds:{ x:12, y:8, w:76, h:18 },
+        lines:[
+          { text:'y = 2x + 3', confidence:0.97 },
+          { text:'gradient = 2, y-intercept = 3', confidence:0.93 },
+          { text:'when x=0, y=3', confidence:0.96 },
+          { text:'when y=0, x = -1.5', confidence:0.91 },
+        ],
+        corrected:false,
+      },
+      { id:'r6', label:'Q6 — Probability', colorIdx:1,
+        bounds:{ x:12, y:30, w:76, h:20 },
+        lines:[
+          { text:'P(red) = 3/8', confidence:0.95 },
+          { text:'P(blue) = 5/8', confidence:0.94 },
+          { text:'P(red and blue) = 3/8 × 5/8', confidence:0.88 },
+          { text:'= 15/64', confidence:0.92 },
+          { text:'These are independent events', confidence:0.87 },
+        ],
+        corrected:false,
+      },
+    ],
+  },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const confColor = (c) => c >= 0.9 ? '#16a34a' : c >= 0.7 ? '#d97706' : '#dc2626';
+const confLabel = (c) => c >= 0.9 ? 'High' : c >= 0.7 ? 'Medium' : 'Low';
+
+// ── SVG Icons ──────────────────────────────────────────────────────────────
+const Ico = ({ d, size=14, color='currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+    {(Array.isArray(d) ? d : [d]).map((p,i) => <path key={i} d={p} />)}
+  </svg>
+);
+const I = {
+  upload:  ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4','M17 8l-5-5-5 5','M12 3v12'],
+  plus:    ['M12 5v14','M5 12h14'],
+  check:   ['M20 6L9 17l-5-5'],
+  edit:    ['M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7','M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'],
+  x:       ['M18 6L6 18','M6 6l12 12'],
+  alert:   ['M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z','M12 9v4','M12 17h.01'],
+  doc:     ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z','M14 2v6h6','M16 13H8','M16 17H8','M10 9H8'],
+  layers:  ['M12 2L2 7l10 5 10-5-10-5z','M2 17l10 5 10-5','M2 12l10 5 10-5'],
+  eye:     ['M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z','M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+  drag:    ['M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2','M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2','M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2'],
+  send:    ['M22 2L11 13','M22 2l-7 20-4-9-9-4 20-7z'],
+  zoom:    ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z','M21 21l-4.35-4.35','M11 8v6','M8 11h6'],
+  zoomOut: ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z','M21 21l-4.35-4.35','M8 11h6'],
+};
+
+// ── Notebook page SVG renderer ─────────────────────────────────────────────
+function NotebookPage({ page, hoveredRegion, onHoverRegion, onClickRegion, selectedRegion }) {
+  const W = 595, H = 842; // A4 proportions
+  const lineH = 28, marginX = 60;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width:'100%', height:'100%', display:'block' }}>
+      {/* Page bg */}
+      <rect width={W} height={H} fill="white" />
+      {/* Ruled lines */}
+      {Array.from({ length: Math.floor(H/lineH) }, (_, i) => (
+        <line key={i} x1={0} y1={(i+1)*lineH} x2={W} y2={(i+1)*lineH} stroke="#dbeafe" strokeWidth="0.8" />
+      ))}
+      {/* Margin */}
+      <line x1={marginX} y1={0} x2={marginX} y2={H} stroke="#fca5a5" strokeWidth="1.2" />
+
+      {/* Hole punches */}
+      {[H*0.2, H*0.5, H*0.8].map((y,i) => (
+        <circle key={i} cx={20} cy={y} r={8} fill="#f1f5f9" stroke="#e2e8f0" strokeWidth="1" />
+      ))}
+
+      {/* Student name header */}
+      <text x={marginX+10} y={22} fontFamily="Kalam, cursive" fontSize="13" fill="#64748b">
+        Name: {page.studentName}   ID: {page.studentId}
+      </text>
+
+      {/* Region overlays */}
+      {page.regions.map(region => {
+        const c = PALETTE[region.colorIdx];
+        const isHov = hoveredRegion === region.id;
+        const isSel = selectedRegion === region.id;
+        const x = region.bounds.x / 100 * W;
+        const y = region.bounds.y / 100 * H;
+        const w = region.bounds.w / 100 * W;
+        const h = region.bounds.h / 100 * H;
+        return (
+          <g key={region.id} style={{ cursor:'pointer' }}
+            onClick={() => onClickRegion(region.id)}
+            onMouseEnter={() => onHoverRegion(region.id)}
+            onMouseLeave={() => onHoverRegion(null)}>
+            <rect x={x} y={y} width={w} height={h} rx={4}
+              fill={isHov || isSel ? c.fill.replace('0.15','0.28') : c.fill}
+              stroke={c.border} strokeWidth={isHov || isSel ? 2 : 1}
+              strokeDasharray={isSel ? 'none' : '4 2'}
+            />
+            {/* Label tag */}
+            <rect x={x} y={y-14} width={Math.min(region.label.length * 6 + 10, 160)} height={14} rx={3} fill={c.border} />
+            <text x={x+5} y={y-4} fontFamily="Inter, sans-serif" fontSize="8" fontWeight="700" fill="white">
+              {region.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Handwritten text per region */}
+      {page.regions.map(region => {
+        const x = region.bounds.x / 100 * W + 8;
+        const startY = region.bounds.y / 100 * H + 18;
+        return region.lines.map((line, li) => (
+          <text key={`${region.id}-${li}`}
+            x={x} y={startY + li * 20}
+            fontFamily="Kalam, cursive" fontSize="14"
+            fill={line.error ? '#dc2626' : '#1e293b'}
+            opacity={line.confidence < 0.7 ? 0.65 : 1}>
+            {line.text}
+          </text>
+        ));
+      })}
+    </svg>
+  );
+}
+
+// ── Filmstrip thumbnail ────────────────────────────────────────────────────
+function PageThumb({ page, active, pageNum, onClick, onDragStart, onDragOver, onDrop }) {
+  const corrCount = page.regions.filter(r => r.corrected).length;
+  const errCount  = page.regions.reduce((a,r) => a + r.lines.filter(l => l.error).length, 0);
+  return (
+    <div draggable onDragStart={onDragStart} onDragOver={e => { e.preventDefault(); onDragOver(); }} onDrop={onDrop}
+      onClick={onClick} style={{
+        borderRadius:8, border:`2px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
+        background: active ? '#eff6ff' : 'white', cursor:'pointer', padding:6, transition:'all 0.12s', position:'relative'
+      }}>
+      {/* Mini page preview */}
+      <div style={{ width:'100%', aspectRatio:'0.707', background:'white', border:'1px solid #f1f5f9', borderRadius:4, overflow:'hidden', position:'relative' }}>
+        <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', gap:3, padding:'6px 4px 4px 8px' }}>
+          {/* Margin line */}
+          <div style={{ position:'absolute', left:10, top:0, bottom:0, width:1, background:'#fca5a5', opacity:0.5 }} />
+          {/* Ruled lines */}
+          {Array.from({length:10},(_,i)=>(
+            <div key={i} style={{ height:1, background:'#dbeafe', opacity:0.7, flexShrink:0 }} />
+          ))}
+          {/* Region color bars */}
+          {page.regions.map((r,i) => {
+            const c = PALETTE[r.colorIdx];
+            return <div key={r.id} style={{ position:'absolute', left:`${r.bounds.x*0.6}%`, top:`${r.bounds.y*0.5}%`, width:`${r.bounds.w*0.6}%`, height:`${r.bounds.h*0.5}%`, background:c.fill, border:`1px solid ${c.border}`, borderRadius:2, opacity:0.7 }} />;
+          })}
+        </div>
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:4 }}>
+        <span style={{ fontSize:9, fontWeight:700, color: active ? '#1d4ed8' : '#64748b' }}>Pg {pageNum}</span>
+        <div style={{ display:'flex', gap:3 }}>
+          {corrCount > 0 && <span style={{ fontSize:8, fontWeight:800, background:'#dcfce7', color:'#15803d', padding:'1px 4px', borderRadius:8 }}>{corrCount}✓</span>}
+          {errCount  > 0 && <span style={{ fontSize:8, fontWeight:800, background:'#fef2f2', color:'#dc2626', padding:'1px 4px', borderRadius:8 }}>{errCount}!</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Region card (extraction panel) ────────────────────────────────────────
+function RegionCard({ region, hovered, selected, onHover, onSelect, onCorrect, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(region.lines.map(l => l.text).join('\n'));
+  const c = PALETTE[region.colorIdx];
+  const avgConf = region.lines.reduce((a,l) => a+l.confidence,0) / region.lines.length;
+  const hasErrors = region.lines.some(l => l.error);
+  const isActive = hovered || selected;
+
+  return (
+    <div className="fade" onClick={() => onSelect(region.id)}
+      onMouseEnter={() => onHover(region.id)} onMouseLeave={() => onHover(null)}
+      style={{ border:`1.5px solid ${isActive ? c.border : '#e2e8f0'}`, borderRadius:10, overflow:'hidden',
+        background: isActive ? c.bg : 'white', transition:'all 0.12s', cursor:'pointer' }}>
+
+      {/* Card header */}
+      <div style={{ padding:'8px 12px', borderBottom:`1px solid ${isActive ? c.border2 : '#f1f5f9'}`, display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ width:10, height:10, borderRadius:3, background:c.border, flexShrink:0 }} />
+        <span style={{ fontSize:11, fontWeight:800, color: isActive ? c.text : '#334155', flex:1 }}>{region.label}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          {region.corrected && <span style={{ fontSize:8, fontWeight:800, background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'1px 6px', borderRadius:10 }}>Corrected</span>}
+          {hasErrors && !region.corrected && <span style={{ fontSize:8, fontWeight:800, background:'#fef2f2', color:'#dc2626', border:'1px solid #fca5a5', padding:'1px 6px', borderRadius:10 }}>Review</span>}
+          <span style={{ fontSize:8, fontWeight:700, color:confColor(avgConf) }}>{Math.round(avgConf*100)}%</span>
+        </div>
+      </div>
+
+      {/* Lines */}
+      {!editing && (
+        <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:4 }}>
+          {region.lines.map((line, li) => (
+            <div key={li} style={{ display:'flex', alignItems:'flex-start', gap:6 }}>
+              <div style={{ width:4, height:4, borderRadius:'50%', background:confColor(line.confidence), flexShrink:0, marginTop:5 }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <span style={{ fontSize:12, fontFamily:'Kalam, cursive', color: line.error ? '#dc2626' : '#1e293b', lineHeight:1.5 }}>
+                  {line.correctedText || line.text}
+                </span>
+                {line.error && (
+                  <div style={{ fontSize:9, color:'#dc2626', marginTop:2, background:'#fef2f2', padding:'2px 6px', borderRadius:5, lineHeight:1.4 }}>
+                    ⚠ {line.error}
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize:8, fontWeight:700, color:confColor(line.confidence), flexShrink:0, marginTop:3 }}>{Math.round(line.confidence*100)}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Edit mode */}
+      {editing && (
+        <div style={{ padding:'10px 12px' }}>
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={region.lines.length + 1}
+            style={{ width:'100%', border:'1.5px solid #bfdbfe', borderRadius:8, padding:'8px 10px',
+              fontFamily:'Kalam, cursive', fontSize:13, color:'#1e293b', lineHeight:1.7, resize:'vertical', background:'#fafafa' }}
+            autoFocus />
+        </div>
+      )}
+
+      {/* Actions */}
+      {(isActive || editing) && (
+        <div style={{ padding:'6px 12px 8px', display:'flex', gap:6, borderTop:`1px solid ${isActive ? c.border2 : '#f1f5f9'}` }}>
+          {editing ? (
+            <>
+              <button onClick={e => { e.stopPropagation(); onSave(region.id, draft); setEditing(false); }} style={{
+                display:'flex', alignItems:'center', gap:4, fontSize:10, fontWeight:800, color:'white',
+                background:'#16a34a', border:'none', borderRadius:7, padding:'5px 12px'
+              }}>
+                <Ico d={I.check} size={11} color="white" /> Save correction
+              </button>
+              <button onClick={e => { e.stopPropagation(); setEditing(false); setDraft(region.lines.map(l=>l.text).join('\n')); }} style={{
+                fontSize:10, fontWeight:700, color:'#64748b', border:'1px solid #e2e8f0', borderRadius:7, padding:'5px 10px'
+              }}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={e => { e.stopPropagation(); setDraft(region.lines.map(l=>l.correctedText||l.text).join('\n')); setEditing(true); }} style={{
+              display:'flex', alignItems:'center', gap:4, fontSize:10, fontWeight:700,
+              color:c.text, background:c.bg, border:`1px solid ${c.border2}`, borderRadius:7, padding:'5px 10px'
+            }}>
+              <Ico d={I.edit} size={11} color={c.text} /> Edit
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Compile document view ──────────────────────────────────────────────────
+function CompileView({ pages, onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+      <div className="fade" onClick={e=>e.stopPropagation()} style={{ background:'white', borderRadius:14, width:680, maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        <div style={{ padding:'14px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <Ico d={I.layers} size={16} color="#3b82f6" />
+            <span style={{ fontSize:14, fontWeight:800, color:'#0f172a' }}>Compiled Submission</span>
+            <span style={{ fontSize:10, color:'#94a3b8', fontWeight:600 }}>{pages.length} pages · {pages.reduce((a,p)=>a+p.regions.length,0)} regions</span>
+          </div>
+          <button onClick={onClose}><Ico d={I.x} size={16} color="#94a3b8" /></button>
+        </div>
+        <div style={{ flex:1, overflowY:'auto', padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+          {pages.map((page, pi) => (
+            <div key={page.id}>
+              <div style={{ fontSize:10, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+                Page {pi+1} — {page.name}
+                <div style={{ flex:1, height:1, background:'#f1f5f9' }} />
+              </div>
+              {page.regions.map(region => {
+                const c = PALETTE[region.colorIdx];
+                const text = region.correctedText || region.lines.map(l => l.correctedText || l.text).join('\n');
+                return (
+                  <div key={region.id} style={{ marginBottom:12, padding:'10px 14px', background:c.bg, border:`1px solid ${c.border2}`, borderRadius:9, borderLeft:`4px solid ${c.border}` }}>
+                    <div style={{ fontSize:9, fontWeight:800, color:c.text, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:5 }}>{region.label}</div>
+                    <pre style={{ fontFamily:'Kalam, cursive', fontSize:14, color:'#1e293b', whiteSpace:'pre-wrap', lineHeight:1.8, margin:0 }}>{text}</pre>
+                    {region.corrected && <div style={{ fontSize:9, color:'#16a34a', marginTop:4, fontWeight:700 }}>✓ Teacher corrected</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'12px 20px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:8, flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'8px 16px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:12, fontWeight:700, color:'#64748b' }}>Close</button>
+          <button style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 18px', background:'#3b82f6', color:'white', border:'none', borderRadius:8, fontSize:12, fontWeight:800 }}>
+            <Ico d={I.send} size={13} color="white" /> Submit for Grading
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main app ───────────────────────────────────────────────────────────────
+function App() {
+  const [pages, setPages]               = useState(MOCK_PAGES);
+  const [activePage, setActivePage]     = useState(0);
+  const [hoveredRegion, setHoveredRegion] = useState(null);
+  const [selectedRegion, setSelectedRegion] = useState(null);
+  const [dragIdx, setDragIdx]           = useState(null);
+  const [dragOver, setDragOver]         = useState(null);
+  const [showCompile, setShowCompile]   = useState(false);
+  const [zoom, setZoom]                 = useState(1);
+  const fileInputRef = useRef();
+
+  const page = pages[activePage];
+
+  const handleSaveCorrection = (regionId, draft) => {
+    setPages(prev => prev.map((p, pi) => pi !== activePage ? p : {
+      ...p,
+      regions: p.regions.map(r => r.id !== regionId ? r : {
+        ...r,
+        correctedText: draft,
+        corrected: true,
+        lines: draft.split('\n').map((text, i) => ({ ...r.lines[i], text, correctedText: text, confidence: 1, error: null })),
+      })
+    }));
+  };
+
+  const handleAddPages = (e) => {
+    const files = Array.from(e.target.files || []);
+    const newPages = files.map((f, i) => ({
+      id: `pg-new-${Date.now()}-${i}`, name: f.name.replace(/\.[^.]+$/,''),
+      studentName: page.studentName, studentId: page.studentId,
+      regions: [{
+        id: `rn-${Date.now()}-${i}`, label:'Uploaded — pending OCR', colorIdx: i % PALETTE.length,
+        bounds:{ x:12, y:10, w:76, h:30 },
+        lines:[{ text:'OCR processing…', confidence:0.5 }],
+        corrected:false,
+      }],
+    }));
+    setPages(prev => [...prev, ...newPages]);
+  };
+
+  const handleDrop = (e) => {
+    if (dragIdx == null || dragOver == null || dragIdx === dragOver) return;
+    setPages(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(dragIdx, 1);
+      arr.splice(dragOver, 0, moved);
+      return arr;
+    });
+    setActivePage(dragOver);
+    setDragIdx(null); setDragOver(null);
+  };
+
+  const totalErrors    = pages.reduce((a,p) => a + p.regions.reduce((b,r) => b + r.lines.filter(l=>l.error).length, 0), 0);
+  const totalCorrected = pages.reduce((a,p) => a + p.regions.filter(r=>r.corrected).length, 0);
+
+  return (
+    <div style={{ height:'calc(100vh - 180px)', display:'flex', background:'#f1f5f9', borderRadius:12, border:'1.5px solid #e2e8f0', overflow:'hidden' }}>
+
+      {/* ── FILMSTRIP ── */}
+      <div style={{ width:148, flexShrink:0, borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', background:'white', overflow:'hidden' }}>
+        {/* Header */}
+        <div style={{ padding:'10px 12px 6px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ fontSize:10, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Pages</div>
+          <div style={{ display:'flex', gap:6, marginTop:4 }}>
+            {totalErrors > 0 && <span style={{ fontSize:8, fontWeight:800, background:'#fef2f2', color:'#dc2626', border:'1px solid #fca5a5', padding:'1px 5px', borderRadius:8 }}>{totalErrors} OCR flags</span>}
+            {totalCorrected > 0 && <span style={{ fontSize:8, fontWeight:800, background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'1px 5px', borderRadius:8 }}>{totalCorrected} fixed</span>}
+          </div>
+        </div>
+
+        {/* Page thumbs */}
+        <div style={{ flex:1, overflowY:'auto', padding:'8px', display:'flex', flexDirection:'column', gap:6 }}>
+          {pages.map((p, pi) => (
+            <PageThumb key={p.id} page={p} pageNum={pi+1} active={activePage===pi}
+              onClick={() => { setActivePage(pi); setSelectedRegion(null); setHoveredRegion(null); }}
+              onDragStart={() => setDragIdx(pi)}
+              onDragOver={() => setDragOver(pi)}
+              onDrop={handleDrop}
+            />
+          ))}
+        </div>
+
+        {/* Add page + compile */}
+        <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9', flexShrink:0, display:'flex', flexDirection:'column', gap:6 }}>
+          <button onClick={() => fileInputRef.current?.click()} style={{
+            width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:5,
+            padding:'7px', background:'#eff6ff', color:'#3b82f6', border:'1.5px dashed #bfdbfe',
+            borderRadius:8, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em'
+          }}>
+            <Ico d={I.plus} size={12} color="#3b82f6" /> Add page
+          </button>
+          <button onClick={() => setShowCompile(true)} style={{
+            width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:5,
+            padding:'7px', background:'#3b82f6', color:'white', border:'none',
+            borderRadius:8, fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.04em'
+          }}>
+            <Ico d={I.layers} size={12} color="white" /> Compile
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={handleAddPages} />
+        </div>
+      </div>
+
+      {/* ── IMAGE PANEL ── */}
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0, background:'#f8fafc' }}>
+        {/* Toolbar */}
+        <div style={{ padding:'7px 12px', borderBottom:'1px solid #e2e8f0', background:'white', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+          <Ico d={I.eye} size={13} color="#64748b" />
+          <span style={{ fontSize:12, fontWeight:700, color:'#334155' }}>{page.name}</span>
+          <span style={{ fontSize:10, color:'#94a3b8' }}>{page.regions.length} regions detected</span>
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+            <button onClick={() => setZoom(z => Math.max(0.5, z-0.1))} style={{ width:24, height:24, borderRadius:6, border:'1px solid #e2e8f0', background:'white', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Ico d={I.zoomOut} size={12} color="#64748b" />
+            </button>
+            <span style={{ fontSize:10, fontWeight:700, color:'#64748b', minWidth:32, textAlign:'center' }}>{Math.round(zoom*100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(2, z+0.1))} style={{ width:24, height:24, borderRadius:6, border:'1px solid #e2e8f0', background:'white', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <Ico d={I.zoom} size={12} color="#64748b" />
+            </button>
+            <button onClick={() => setZoom(1)} style={{ fontSize:9, fontWeight:700, color:'#3b82f6', padding:'2px 8px', border:'1px solid #bfdbfe', borderRadius:6, background:'#eff6ff' }}>Reset</button>
+          </div>
+        </div>
+
+        {/* Image viewport */}
+        <div style={{ flex:1, overflowY:'auto', overflowX:'auto', display:'flex', justifyContent:'center', padding:'16px' }}>
+          <div style={{ transformOrigin:'top center', transform:`scale(${zoom})`, width: 480, flexShrink:0, boxShadow:'0 4px 24px rgba(0,0,0,0.12)', borderRadius:4 }}>
+            <NotebookPage page={page} hoveredRegion={hoveredRegion} selectedRegion={selectedRegion}
+              onHoverRegion={setHoveredRegion} onClickRegion={id => setSelectedRegion(prev => prev===id ? null : id)} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── EXTRACTION PANEL ── */}
+      <div style={{ width:340, flexShrink:0, borderLeft:'1px solid #e2e8f0', display:'flex', flexDirection:'column', overflow:'hidden', background:'white' }}>
+        {/* Header */}
+        <div style={{ padding:'10px 14px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <span style={{ fontSize:12, fontWeight:800, color:'#0f172a' }}>Extracted Text</span>
+            <div style={{ display:'flex', gap:5 }}>
+              <span style={{ fontSize:9, fontWeight:700, color:'#d97706', background:'#fffbeb', border:'1px solid #fde68a', padding:'2px 7px', borderRadius:10 }}>
+                {page.regions.reduce((a,r) => a + r.lines.filter(l=>l.error).length, 0)} flags
+              </span>
+              <span style={{ fontSize:9, fontWeight:700, color:'#16a34a', background:'#dcfce7', border:'1px solid #86efac', padding:'2px 7px', borderRadius:10 }}>
+                {page.regions.filter(r=>r.corrected).length} corrected
+              </span>
+            </div>
+          </div>
+          <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>Click a region to select · hover to highlight · edit to correct</div>
+        </div>
+
+        {/* Region cards */}
+        <div style={{ flex:1, overflowY:'auto', padding:'10px 12px', display:'flex', flexDirection:'column', gap:8 }}>
+          {page.regions.map(region => (
+            <RegionCard key={region.id} region={region}
+              hovered={hoveredRegion === region.id}
+              selected={selectedRegion === region.id}
+              onHover={setHoveredRegion}
+              onSelect={id => setSelectedRegion(prev => prev===id ? null : id)}
+              onSave={handleSaveCorrection}
+            />
+          ))}
+        </div>
+      </div>
+
+      {showCompile && <CompileView pages={pages} onClose={() => setShowCompile(false)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

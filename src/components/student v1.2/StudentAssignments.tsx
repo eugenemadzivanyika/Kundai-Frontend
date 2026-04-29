@@ -9,8 +9,10 @@ import {
   Eye,
   FileText,
   Loader2,
+  ScanLine,
   Upload,
 } from 'lucide-react';
+import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
 import {
   assessmentService,
   studentService,
@@ -33,7 +35,7 @@ interface StudentAssignmentsProps {
 type AssessmentTabKey = 'attempt' | 'list' | 'review';
 type StatusFilterKey = 'all' | 'pending' | 'submitted' | 'graded' | 'overdue';
 type AssignmentStatusKey = Exclude<StatusFilterKey, 'all'>;
-type SubmissionMode = 'questions' | 'text' | 'file';
+type SubmissionMode = 'questions' | 'handwritten';
 
 interface AssessmentQuestionPart {
   id?: string;
@@ -215,10 +217,12 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
   const [activeAttemptEntryId, setActiveAttemptEntryId] = useState<string | null>(null);
   const [submissionMode, setSubmissionMode] = useState<SubmissionMode>('questions');
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
-  const [textSubmission, setTextSubmission] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingEntryId, setSubmittingEntryId] = useState<string | null>(null);
   const [loadingAttemptEntryId, setLoadingAttemptEntryId] = useState<string | null>(null);
+
+  const [ocrEntry, setOcrEntry] = useState<AssignmentEntry | null>(null);
+  const [ocrInitialFiles, setOcrInitialFiles] = useState<File[]>([]);
+  const handwrittenInputRef = useRef<HTMLInputElement>(null);
 
   const [reviewSubmissionDetail, setReviewSubmissionDetail] = useState<SubmissionReviewDetail | null>(null);
   const [loadingReviewDetail, setLoadingReviewDetail] = useState(false);
@@ -639,39 +643,17 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
   }
 };
 
-  const submitTextOrFile = async (entry: AssignmentEntry) => {
-    if (submissionMode === 'text' && !textSubmission.trim()) {
-      toast.error('Please provide your response text before submitting.');
-      return;
-    }
-
-    if (submissionMode === 'file' && !selectedFile) {
-      toast.error('Please select a file before submitting.');
-      return;
-    }
-
-    setSubmittingEntryId(entry.id);
-    try {
-      await submissionService.submitAssignment({
-        assessmentId: entry.assessmentId,
-        studentId,
-        submissionType: submissionMode === 'file' ? 'file' : 'text',
-        textContent: submissionMode === 'text' ? textSubmission.trim() : undefined,
-        file: submissionMode === 'file' ? selectedFile || undefined : undefined,
-        originalFilename: submissionMode === 'file' ? selectedFile?.name : undefined,
-        fileType: submissionMode === 'file' ? selectedFile?.type : undefined,
-      });
-
-      setTextSubmission('');
-      setSelectedFile(null);
-      setActiveAttemptEntryId(null);
-      await fetchWorkspace({ forceRefresh: true });
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to submit assessment.');
-    } finally {
-      setSubmittingEntryId(null);
-    }
+  const openHandwrittenPicker = (entry: AssignmentEntry) => {
+    setOcrEntry(entry);
+    handwrittenInputRef.current?.click();
   };
+
+  const handleHandwrittenFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length) setOcrInitialFiles(files);
+  };
+
 
   if (loading) {
     return (
@@ -893,7 +875,7 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                             const hydratedAssessment = await ensureAssessmentWithQuestions(entry);
                             const questionCount = hydratedAssessment?.questions?.length || 0;
                             setActiveAttemptEntryId(entry.id);
-                            setSubmissionMode(questionCount > 0 ? 'questions' : 'text');
+                            setSubmissionMode(questionCount > 0 ? 'questions' : 'handwritten');
                           } catch {
                             toast.error('Unable to load assessment questions right now.');
                           } finally {
@@ -920,17 +902,10 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                           )}
                           <button
                             type="button"
-                            onClick={() => setSubmissionMode('text')}
-                            className={`px-3 py-1.5 rounded-md text-sm font-medium ${submissionMode === 'text' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                            onClick={() => setSubmissionMode('handwritten')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium ${submissionMode === 'handwritten' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                           >
-                            Text submission
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSubmissionMode('file')}
-                            className={`px-3 py-1.5 rounded-md text-sm font-medium ${submissionMode === 'file' ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
-                          >
-                            File upload
+                            Handwritten submission
                           </button>
                         </div>
 
@@ -1049,53 +1024,22 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                           </div>
                         )}
 
-                        {submissionMode === 'text' && (
+                        {submissionMode === 'handwritten' && (
                           <div className="space-y-3">
-                            <textarea
-                              rows={8}
-                              value={textSubmission}
-                              onChange={(event) => setTextSubmission(event.target.value)}
-                              placeholder="Type your full response"
-                              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => submitTextOrFile(entry)}
-                                disabled={submittingEntryId === entry.id || !textSubmission.trim()}
-                                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                              >
-                                {submittingEntryId === entry.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                Submit response
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {submissionMode === 'file' && (
-                          <div className="space-y-3">
-                            <label className="block">
-                              <input
-                                type="file"
-                                className="hidden"
-                                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                              />
-                              <div className="flex items-center gap-2 rounded-md border-2 border-dashed border-slate-300 px-4 py-3 text-sm text-slate-600 hover:border-blue-400 cursor-pointer">
-                                <Upload className="w-4 h-4" />
-                                <span>{selectedFile ? selectedFile.name : 'Choose file to upload'}</span>
-                              </div>
-                            </label>
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => submitTextOrFile(entry)}
-                                disabled={submittingEntryId === entry.id || !selectedFile}
-                                className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                              >
-                                {submittingEntryId === entry.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                Submit file
-                              </button>
-                            </div>
+                            <p className="text-sm text-slate-500">
+                              Upload photos or scans of your handwritten work. You can select multiple images and arrange them in order before extraction.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => openHandwrittenPicker(entry)}
+                              disabled={submittingEntryId === entry.id}
+                              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                            >
+                              {submittingEntryId === entry.id
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                                : <><ScanLine className="w-4 h-4" /> Upload handwritten work</>
+                              }
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1473,6 +1417,52 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
           )}
         </section>
       </div>
+
+      {/* Hidden file input for handwritten image selection */}
+      <input
+        ref={handwrittenInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        multiple
+        className="hidden"
+        onChange={handleHandwrittenFiles}
+      />
+
+      {/* OCR overlay — shown after files are selected and order is confirmed */}
+      {ocrEntry && ocrInitialFiles.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ width: '100%', maxWidth: 1400, height: 'calc(100vh - 80px)' }}>
+            <OcrReviewComponent
+              mode="student-submit"
+              assessmentId={ocrEntry.assessmentId}
+              studentId={studentId}
+              initialFiles={ocrInitialFiles}
+              onSubmit={async ({ fullText }: CompiledSubmission) => {
+                const entry = ocrEntry;
+                setOcrEntry(null);
+                setOcrInitialFiles([]);
+                setSubmittingEntryId(entry.id);
+                try {
+                  await submissionService.submitAssignment({
+                    assessmentId: entry.assessmentId,
+                    studentId,
+                    submissionType: 'text',
+                    textContent: fullText,
+                  });
+                  toast.success('Handwritten submission sent successfully.');
+                  setActiveAttemptEntryId(null);
+                  await fetchWorkspace({ forceRefresh: true });
+                } catch (err: any) {
+                  toast.error(err?.message || 'Failed to submit.');
+                } finally {
+                  setSubmittingEntryId(null);
+                }
+              }}
+              onCancel={() => { setOcrEntry(null); setOcrInitialFiles([]); }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

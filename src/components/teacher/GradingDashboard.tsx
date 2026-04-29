@@ -225,15 +225,25 @@ const GradingDashboard: React.FC = () => {
   }
 
   if (showReviewModal && selectedSubmission) {
-  return (
-    <SubmissionReviewModal
-      isOpen={true}
-      onClose={() => { setShowReviewModal(false); setSelectedSubmission(null); }}
-      submissionId={selectedSubmission}
-      onReviewComplete={fetchData}
-    />
-  );
-}
+    // Only let the switcher walk results for the same assessment as the
+    // one being reviewed, and only those that have an actual result record.
+    const selectedAssessmentId = filteredSubmissions.find(s => s._id === selectedSubmission)?.assessment?._id;
+    const siblingIds = selectedAssessmentId
+      ? filteredSubmissions
+          .filter(s => s.assessment?._id === selectedAssessmentId)
+          .map(s => s._id)
+      : [];
+    return (
+      <SubmissionReviewModal
+        isOpen={true}
+        onClose={() => { setShowReviewModal(false); setSelectedSubmission(null); }}
+        submissionId={selectedSubmission}
+        onReviewComplete={fetchData}
+        allSubmissionIds={siblingIds}
+        onSwitchSubmission={(id) => setSelectedSubmission(id)}
+      />
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-160px)]" style={{ display: 'flex', flexDirection: 'column', padding: '14px 18px', gap: 10, fontFamily: 'Inter, system-ui, sans-serif', background: '#f8fafc', overflow: 'hidden' }}>
@@ -530,17 +540,6 @@ const GradingDashboard: React.FC = () => {
         )}
       </div>
 
-      {showReviewModal && selectedSubmission && (
-        <SubmissionReviewModal
-          isOpen={showReviewModal}
-          onClose={() => {
-            setShowReviewModal(false);
-            setSelectedSubmission(null);
-          }}
-          submissionId={selectedSubmission}
-          onReviewComplete={fetchData}
-        />
-      )}
     </div>
   );
 };
