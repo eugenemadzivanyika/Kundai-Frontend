@@ -4,6 +4,8 @@ import type {
   OcrRegion,
   BackendOcrRegion,
   BackendOcrPage,
+  OcrQuestion,
+  OcrAnswerEntry,
 } from './ocr.types';
 import { OCR_ENDPOINT, OCR_BATCH_ENDPOINT } from './ocr.constants';
 
@@ -81,12 +83,27 @@ export async function runOcr(file: File): Promise<{ regions: OcrRegion[]; extraP
 /**
  * Sends all files in one batch request. Gemini sees every page together for
  * better cross-page context. Returns one entry per input file.
+ *
+ * When `questions` is provided the backend runs question-aware OCR: Gemini
+ * maps each answer block directly to a question ID and returns an `answers`
+ * array alongside the per-file page transcriptions.
  */
 export async function runOcrBatch(
   files: File[],
-): Promise<{ files: Array<{ pages: BackendOcrPage[] }> }> {
+  questions?: OcrQuestion[],
+): Promise<{ files: Array<{ pages: BackendOcrPage[] }>; answers?: OcrAnswerEntry[] }> {
   const fd = new FormData();
   files.forEach(f => fd.append('files', f));
+
+  if (questions?.length) {
+    fd.append('questions', JSON.stringify(
+      questions.map((q, i) => ({
+        id:     q.id,
+        number: i + 1,
+        parts:  q.parts ?? [],
+      }))
+    ));
+  }
 
   const resp = await fetch(OCR_BATCH_ENDPOINT, { method: 'POST', body: fd });
   if (!resp.ok) {

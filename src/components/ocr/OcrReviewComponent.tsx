@@ -7,7 +7,7 @@ import {
 
 import type {
   OcrPage, OcrRegion, DragState, ResizeHandle,
-  OcrReviewProps, CompiledSubmission, BackendOcrPage,
+  OcrReviewProps, CompiledSubmission, BackendOcrPage, OcrAnswerEntry,
 } from './ocr.types';
 import { PALETTE, uid } from './ocr.constants';
 import { runOcr, runOcrBatch, mapRegion, collapseToThree } from './ocr.api';
@@ -53,34 +53,41 @@ function extractForQuestion(text: string, qIndex: number, totalQ: number): strin
   }
 
   if (startLine === -1) return '';
-  return lines.slice(startLine, endLine).join('\n').trim();
+  const block = lines.slice(startLine, endLine);
+  // Strip the question-number prefix ("11) ", "2a) ", "2 ") from the first line so
+  // splitIntoParts sees clean part labels rather than a number-prefixed first line.
+  block[0] = block[0].trim().replace(new RegExp(`^${num}[a-z]?[).\\s]\\s*`, 'i'), '');
+  return block.join('\n').trim();
 }
 
 /** Split a question's extracted text into per-part strings. */
 function splitIntoParts(questionText: string, partCount: number): string[] {
   const partLines: string[][] = Array.from({ length: partCount }, () => []);
-  let currentPart = -1;
+  // Start at 0: content before the first explicit part marker belongs to part a.
+  let currentPart = 0;
 
   for (const raw of questionText.split('\n')) {
-    const t     = raw.trim();
-    const match = t.match(/^([a-z])[)]\s*/i);
+    const t = raw.trim();
+    // Matches part labels in the forms students actually write them:
+    //   "2a)" "2b."  — question-number prefix + letter + paren/dot (e.g. "2a) …")
+    //   "a)"  "b."   — bare letter + paren/dot
+    //   "b text"     — bare letter + space (no closing paren, e.g. "b solve …")
+    // Does NOT match math like "6a−4" (letter followed by operator) or "11)" (no letter).
+    const match = t.match(/^(?:\d+([a-z])[).]|([a-z])(?:[).]\s*|\s+))/i);
     if (match) {
-      const pi = match[1].toLowerCase().charCodeAt(0) - 97;
+      const letter = (match[1] ?? match[2] ?? '').toLowerCase();
+      const pi = letter.charCodeAt(0) - 97;
       if (pi >= 0 && pi < partCount) {
         currentPart = pi;
-        const rest = t.slice(match[0].length);
+        const rest = t.slice(match[0].length).trim();
         if (rest) partLines[currentPart].push(rest);
         continue;
       }
     }
-    if (currentPart >= 0) partLines[currentPart].push(raw);
+    if (raw.trim()) partLines[currentPart].push(raw);
   }
 
-  if (partLines.some(p => p.length > 0)) {
-    return partLines.map(p => p.join('\n').trim());
-  }
-  // No part markers found — put everything in the first part
-  return [questionText, ...Array(partCount - 1).fill('')];
+  return partLines.map(p => p.join('\n').trim());
 }
 
 // ── Mode config ────────────────────────────────────────────────────────────────
@@ -126,6 +133,9 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
   const [pendingFiles,   setPendingFiles]   = useState<File[] | null>(null);
   const [questionAnswers,     setQuestionAnswers]     = useState<Record<string, string>>({});
   const [questionPartAnswers, setQuestionPartAnswers] = useState<Record<string, string[]>>({});
+  // Tracks which question IDs were mapped by Gemini so the compile modal skips
+  // regex for those and only fills gaps via regex.
+  const aiMappedIds = useRef<Set<string>>(new Set());
 
   const fileInputRef    = useRef<HTMLInputElement>(null);
   const imgContainerRef = useRef<HTMLDivElement>(null);
@@ -219,7 +229,8 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
 
     try {
       // All files sent in one request — Gemini sees every page together.
-      const result = await runOcrBatch(accepted);
+      // Pass questions when available so Gemini returns structured answer mapping.
+      const result = await runOcrBatch(accepted, questions);
 
       setPages(prev => {
         let updated = [...prev];
@@ -261,6 +272,22 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
 
         return updated;
       });
+
+      // Store Gemini-mapped answers so the compile modal can skip regex for them
+      if (result.answers?.length) {
+        const single: Record<string, string> = {};
+        const multi:  Record<string, string[]> = {};
+        result.answers.forEach((ans: OcrAnswerEntry) => {
+          if (ans.partAnswers?.some(Boolean)) {
+            multi[ans.questionId] = ans.partAnswers!;
+          } else {
+            single[ans.questionId] = ans.studentAnswer;
+          }
+          aiMappedIds.current.add(ans.questionId);
+        });
+        if (Object.keys(single).length) setQuestionAnswers(prev => ({ ...prev, ...single }));
+        if (Object.keys(multi).length)  setQuestionPartAnswers(prev => ({ ...prev, ...multi }));
+      }
     } catch {
       setPages(prev =>
         prev.map(p =>
@@ -268,7 +295,7 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
         )
       );
     }
-  }, []);
+  }, [questions]);
 
   // ── Rotation ──────────────────────────────────────────────────────────────────
 
@@ -373,11 +400,16 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
 
   useEffect(() => {
     if (!showCompile || !questions?.length) return;
-    const text = buildFullText(pages);
-    const single: Record<string, string> = {};
+    // Only regex-parse questions Gemini didn't already map
+    const unmapped = questions.filter(q => !aiMappedIds.current.has(q.id));
+    if (!unmapped.length) return;
+
+    const text   = buildFullText(pages);
+    const single: Record<string, string>   = {};
     const multi:  Record<string, string[]> = {};
 
-    questions.forEach((q, qi) => {
+    unmapped.forEach(q => {
+      const qi    = questions.indexOf(q);
       const block = extractForQuestion(text, qi, questions.length);
       if (q.parts?.length) {
         multi[q.id] = splitIntoParts(block, q.parts.length);
@@ -386,8 +418,8 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
       }
     });
 
-    setQuestionAnswers(single);
-    setQuestionPartAnswers(multi);
+    if (Object.keys(single).length) setQuestionAnswers(prev => ({ ...prev, ...single }));
+    if (Object.keys(multi).length)  setQuestionPartAnswers(prev => ({ ...prev, ...multi }));
   }, [showCompile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Submit ────────────────────────────────────────────────────────────────────
