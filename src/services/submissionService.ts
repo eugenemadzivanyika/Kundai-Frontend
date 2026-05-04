@@ -35,14 +35,25 @@ export const submissionService = {
     formData.append('submissionType', submissionData.submissionType);
 
     if (submissionData.file) formData.append('file', submissionData.file);
-    if (submissionData.textContent) formData.append('answers', JSON.stringify([{ text: submissionData.textContent }]));
+    if (submissionData.textContent) formData.append('answers', JSON.stringify([{ studentAnswer: submissionData.textContent }]));
+
+    const debugPayload = {
+      assessmentId: submissionData.assessmentId,
+      studentId: submissionData.studentId,
+      submissionType: submissionData.submissionType,
+      answers: submissionData.textContent ? [{ studentAnswer: submissionData.textContent }] : [],
+      hasFile: !!submissionData.file,
+    };
+    console.log('[submitAssignment] Sending to backend:', debugPayload);
 
     const response = await fetch(`${API_URL}/submissions`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       body: formData,
     });
-    return response.json();
+    const result = await response.json();
+    console.log('[submitAssignment] Backend response:', result);
+    return result;
   },
 
   // Method 2: For BKT-enabled Question Responses (Surgical BKT Loop)
@@ -52,12 +63,13 @@ export const submissionService = {
     submissionType: string;
     answers: Array<{ questionId: string; studentAnswer: string; isCorrect?: boolean; partAnswers?: string[] }>;
   }) => {
-    // Your controller handles raw JSON too. Since we aren't uploading a file here,
-    // we use fetchData which defaults to application/json.
-    return fetchData('/submissions', {
+    console.log('[submitAnswers] Sending to backend:', JSON.stringify(payload, null, 2));
+    const result = await fetchData('/submissions', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    console.log('[submitAnswers] Backend response:', result);
+    return result;
   },
 
   getSubmissionReviewDetail: async (id: string) => {

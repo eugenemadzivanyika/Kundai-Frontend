@@ -10,11 +10,78 @@ import type {
   OcrReviewProps, CompiledSubmission, BackendOcrPage,
 } from './ocr.types';
 import { PALETTE, uid } from './ocr.constants';
-import { runOcr, mapRegion, collapseToThree } from './ocr.api';
+import { runOcr, runOcrBatch, mapRegion, collapseToThree } from './ocr.api';
 import { OrderConfirmModal } from './OrderConfirmModal';
 import { PageTextEditor }    from './PageTextEditor';
 import { PageThumb }         from './PageThumb';
 import { CompileModal }      from './CompileModal';
+
+// ── Auto-parse helpers ────────────────────────────────────────────────────────
+
+function buildFullText(pages: OcrPage[]): string {
+  return pages
+    .map((p, pi) =>
+      `=== Page ${pi + 1}: ${p.name} ===\n--- Transcription ---\n` +
+      p.regions
+        .map(r => r.correctedText ?? r.lines.map(l => l.correctedText ?? l.text).join('\n'))
+        .join('\n\n')
+    )
+    .join('\n\n');
+}
+
+/** Extract OCR text for question number `qIndex+1` from the full transcript. */
+function extractForQuestion(text: string, qIndex: number, totalQ: number): string {
+  const num     = qIndex + 1;
+  const nextNum = qIndex + 2;
+  const lines   = text.split('\n');
+
+  // Match lines that start the question: "11)" "11 " "11a)" but NOT "112)"
+  const startRe = new RegExp(`^${num}(?:[a-z][)]|[)\\s])`);
+  const endRe   = nextNum <= totalQ ? new RegExp(`^${nextNum}(?:[a-z][)]|[)\\s])`) : null;
+
+  let startLine = -1;
+  let endLine   = lines.length;
+
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (startLine === -1) {
+      if (startRe.test(t)) startLine = i;
+    } else if (endRe && endRe.test(t)) {
+      endLine = i;
+      break;
+    }
+  }
+
+  if (startLine === -1) return '';
+  return lines.slice(startLine, endLine).join('\n').trim();
+}
+
+/** Split a question's extracted text into per-part strings. */
+function splitIntoParts(questionText: string, partCount: number): string[] {
+  const partLines: string[][] = Array.from({ length: partCount }, () => []);
+  let currentPart = -1;
+
+  for (const raw of questionText.split('\n')) {
+    const t     = raw.trim();
+    const match = t.match(/^([a-z])[)]\s*/i);
+    if (match) {
+      const pi = match[1].toLowerCase().charCodeAt(0) - 97;
+      if (pi >= 0 && pi < partCount) {
+        currentPart = pi;
+        const rest = t.slice(match[0].length);
+        if (rest) partLines[currentPart].push(rest);
+        continue;
+      }
+    }
+    if (currentPart >= 0) partLines[currentPart].push(raw);
+  }
+
+  if (partLines.some(p => p.length > 0)) {
+    return partLines.map(p => p.join('\n').trim());
+  }
+  // No part markers found — put everything in the first part
+  return [questionText, ...Array(partCount - 1).fill('')];
+}
 
 // ── Mode config ────────────────────────────────────────────────────────────────
 
@@ -41,6 +108,7 @@ const MODE_CONFIG = {
 const OcrReviewComponent: React.FC<OcrReviewProps> = ({
   mode,
   initialFiles,
+  questions,
   onSubmit,
   onCancel,
 }) => {
@@ -56,6 +124,8 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
   const [submitting,     setSubmitting]     = useState(false);
   const [activeDrag,     setActiveDrag]     = useState<DragState | null>(null);
   const [pendingFiles,   setPendingFiles]   = useState<File[] | null>(null);
+  const [questionAnswers,     setQuestionAnswers]     = useState<Record<string, string>>({});
+  const [questionPartAnswers, setQuestionPartAnswers] = useState<Record<string, string[]>>({});
 
   const fileInputRef    = useRef<HTMLInputElement>(null);
   const imgContainerRef = useRef<HTMLDivElement>(null);
@@ -147,34 +217,57 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
       return [...prev, ...newPages];
     });
 
-    // Fire all OCR requests in parallel — each page updates its own slot independently.
-    // setPages uses functional updates so concurrent calls are serialised by React safely.
-    await Promise.allSettled(
-      newPages.map(async (pg, i) => {
-        try {
-          const { regions, extraPages } = await runOcr(accepted[i]);
+    try {
+      // All files sent in one request — Gemini sees every page together.
+      const result = await runOcrBatch(accepted);
 
-          const extra: OcrPage[] = extraPages.map((ep: BackendOcrPage) => ({
-            id:       uid(),
-            name:     `${pg.name} — p${ep.page_number}`,
-            imageUrl: undefined,
-            isPdf:    true,
-            status:   'done' as const,
-            regions:  collapseToThree(ep.regions.map(mapRegion)),
-            rotation: 0 as const,
-          }));
+      setPages(prev => {
+        let updated = [...prev];
 
-          setPages(prev => {
-            const updated = prev.map(p => p.id !== pg.id ? p : { ...p, status: 'done' as const, regions });
-            if (!extra.length) return updated;
-            const idx = updated.findIndex(p => p.id === pg.id);
-            return [...updated.slice(0, idx + 1), ...extra, ...updated.slice(idx + 1)];
-          });
-        } catch {
-          setPages(prev => prev.map(p => p.id !== pg.id ? p : { ...p, status: 'error' as const }));
-        }
-      })
-    );
+        result.files.forEach((fileResult, fi) => {
+          const pg              = newPages[fi];
+          const [first, ...rest] = fileResult.pages ?? [];
+          if (!first) {
+            updated = updated.map(p => p.id !== pg.id ? p : { ...p, status: 'error' as const });
+            return;
+          }
+
+          updated = updated.map(p =>
+            p.id !== pg.id ? p : {
+              ...p,
+              status:  'done' as const,
+              regions: collapseToThree(first.regions.map(mapRegion)),
+            }
+          );
+
+          if (rest.length) {
+            const idx         = updated.findIndex(p => p.id === pg.id);
+            const extraPages: OcrPage[] = rest.map((ep: BackendOcrPage) => ({
+              id:       uid(),
+              name:     `${pg.name} — p${ep.page_number}`,
+              imageUrl: undefined,
+              isPdf:    true,
+              status:   'done' as const,
+              regions:  collapseToThree(ep.regions.map(mapRegion)),
+              rotation: 0 as const,
+            }));
+            updated = [
+              ...updated.slice(0, idx + 1),
+              ...extraPages,
+              ...updated.slice(idx + 1),
+            ];
+          }
+        });
+
+        return updated;
+      });
+    } catch {
+      setPages(prev =>
+        prev.map(p =>
+          newPages.some(np => np.id === p.id) ? { ...p, status: 'error' as const } : p
+        )
+      );
+    }
   }, []);
 
   // ── Rotation ──────────────────────────────────────────────────────────────────
@@ -276,24 +369,49 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
     ));
   };
 
+  // ── Auto-parse question answers when compile modal opens ─────────────────────
+
+  useEffect(() => {
+    if (!showCompile || !questions?.length) return;
+    const text = buildFullText(pages);
+    const single: Record<string, string> = {};
+    const multi:  Record<string, string[]> = {};
+
+    questions.forEach((q, qi) => {
+      const block = extractForQuestion(text, qi, questions.length);
+      if (q.parts?.length) {
+        multi[q.id] = splitIntoParts(block, q.parts.length);
+      } else {
+        single[q.id] = block;
+      }
+    });
+
+    setQuestionAnswers(single);
+    setQuestionPartAnswers(multi);
+  }, [showCompile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Submit ────────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
-    const fullText = pages
-      .map((p, pi) =>
-        `=== Page ${pi + 1}: ${p.name} ===\n` +
-        p.regions
-          .map(r =>
-            `--- ${r.label} ---\n` +
-            (r.correctedText ?? r.lines.map(l => l.correctedText ?? l.text).join('\n'))
-          )
-          .join('\n\n')
-      )
-      .join('\n\n');
+    const fullText = buildFullText(pages);
+
+    const answers: CompiledSubmission['answers'] = questions?.length
+      ? questions.map(q => {
+          const parts = q.parts?.length ? (questionPartAnswers[q.id] ?? []) : undefined;
+          const studentAnswer = parts?.some(Boolean)
+            ? parts.filter(Boolean).join(' | ')
+            : (questionAnswers[q.id] ?? '');
+          return {
+            questionId:  q.id,
+            studentAnswer,
+            partAnswers: parts?.some(Boolean) ? parts : undefined,
+          };
+        }).filter(a => a.studentAnswer !== '')
+      : undefined;
 
     setSubmitting(true);
     try {
-      await onSubmit?.({ pages, fullText });
+      await onSubmit?.({ pages, fullText, answers });
       setShowCompile(false);
     } catch {
       // parent shows error toast; keep modal open for retry
@@ -813,6 +931,19 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
           submitting={submitting}
           onClose={() => setShowCompile(false)}
           onSubmit={handleSubmit}
+          questions={questions}
+          questionAnswers={questionAnswers}
+          questionPartAnswers={questionPartAnswers}
+          onAnswerChange={(qId, val) =>
+            setQuestionAnswers(prev => ({ ...prev, [qId]: val }))
+          }
+          onPartAnswerChange={(qId, pi, val) =>
+            setQuestionPartAnswers(prev => {
+              const arr = [...(prev[qId] ?? [])];
+              arr[pi] = val;
+              return { ...prev, [qId]: arr };
+            })
+          }
         />
       )}
 

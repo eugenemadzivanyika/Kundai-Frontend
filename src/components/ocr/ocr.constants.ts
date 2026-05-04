@@ -9,6 +9,7 @@ export const PALETTE = [
   { fill: 'rgba(20,184,166,0.15)', border: '#14b8a6', text: '#0f766e', bg: '#f0fdfa',  border2: '#99f6e4' },
 ];
 
-export const OCR_ENDPOINT = 'http://localhost:8000/ocr/extract';
+export const OCR_ENDPOINT       = 'http://localhost:8000/ocr/extract';
+export const OCR_BATCH_ENDPOINT = 'http://localhost:8000/ocr/extract-batch';
 
 export const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

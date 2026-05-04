@@ -1437,18 +1437,33 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
               assessmentId={ocrEntry.assessmentId}
               studentId={studentId}
               initialFiles={ocrInitialFiles}
-              onSubmit={async ({ fullText }: CompiledSubmission) => {
+              questions={ocrEntry.assessment?.questions?.map(q => ({
+                id: resolveAssessmentQuestionId(q),
+                stem: q.stem,
+                parts: q.parts?.map((p, pi) => ({ id: p.id || String(pi), text: p.text })),
+              }))}
+              onSubmit={async ({ fullText, answers }: CompiledSubmission) => {
                 const entry = ocrEntry;
+                console.log('[OCR submit] answers count:', answers?.length ?? 0, '| fullText length:', fullText?.length);
                 setOcrEntry(null);
                 setOcrInitialFiles([]);
                 setSubmittingEntryId(entry.id);
                 try {
-                  await submissionService.submitAssignment({
-                    assessmentId: entry.assessmentId,
-                    studentId,
-                    submissionType: 'text',
-                    textContent: fullText,
-                  });
+                  if (answers && answers.length > 0) {
+                    await submissionService.submitAnswers({
+                      assessmentId:   entry.assessmentId,
+                      studentId,
+                      submissionType: 'text',
+                      answers: answers as any,
+                    });
+                  } else {
+                    await submissionService.submitAssignment({
+                      assessmentId:   entry.assessmentId,
+                      studentId,
+                      submissionType: 'text',
+                      textContent:    fullText,
+                    });
+                  }
                   toast.success('Handwritten submission sent successfully.');
                   setActiveAttemptEntryId(null);
                   await fetchWorkspace({ forceRefresh: true });

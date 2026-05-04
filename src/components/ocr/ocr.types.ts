@@ -45,9 +45,22 @@ export interface OcrPage {
   naturalH?: number;
 }
 
+export interface OcrQuestion {
+  id: string;
+  stem: string;
+  parts?: Array<{ id?: string; text: string }>;
+}
+
+export interface OcrAnswerEntry {
+  questionId: string;
+  studentAnswer: string;
+  partAnswers?: string[];
+}
+
 export interface CompiledSubmission {
   pages: OcrPage[];
   fullText: string;
+  answers?: OcrAnswerEntry[];
 }
 
 export interface OcrReviewProps {
@@ -55,6 +68,8 @@ export interface OcrReviewProps {
   assessmentId?: string;
   studentId?: string;
   submissionId?: string;
+  /** Assessment questions — when provided in student-submit mode, enables per-question answer mapping */
+  questions?: OcrQuestion[];
   /** Files to begin processing immediately when the component opens */
   initialFiles?: File[];
   onSubmit?: (data: CompiledSubmission) => void | Promise<void>;

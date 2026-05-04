@@ -5,7 +5,7 @@ import type {
   BackendOcrRegion,
   BackendOcrPage,
 } from './ocr.types';
-import { OCR_ENDPOINT } from './ocr.constants';
+import { OCR_ENDPOINT, OCR_BATCH_ENDPOINT } from './ocr.constants';
 
 // ── Region mapping ─────────────────────────────────────────────────────────────
 
@@ -57,9 +57,7 @@ export function collapseToThree(regions: OcrRegion[]): OcrRegion[] {
 // ── OCR API call ───────────────────────────────────────────────────────────────
 
 /**
- * Calls the backend Mistral OCR endpoint.
- * Returns [regions[], extraPages[]] — regions for page 0, plus any additional
- * pages (PDFs can yield multiple) packaged as ready-to-insert OcrPage objects.
+ * Calls the single-file OCR endpoint. Used for per-page retry only.
  */
 export async function runOcr(file: File): Promise<{ regions: OcrRegion[]; extraPages: BackendOcrPage[] }> {
   const fd = new FormData();
@@ -74,8 +72,27 @@ export async function runOcr(file: File): Promise<{ regions: OcrRegion[]; extraP
   const data: { pages: BackendOcrPage[] } = await resp.json();
   const pages = data.pages ?? [];
 
-  const regions     = collapseToThree(pages[0]?.regions.map(mapRegion) ?? []);
-  const extraPages  = pages.slice(1);
+  return {
+    regions:    collapseToThree(pages[0]?.regions.map(mapRegion) ?? []),
+    extraPages: pages.slice(1),
+  };
+}
 
-  return { regions, extraPages };
+/**
+ * Sends all files in one batch request. Gemini sees every page together for
+ * better cross-page context. Returns one entry per input file.
+ */
+export async function runOcrBatch(
+  files: File[],
+): Promise<{ files: Array<{ pages: BackendOcrPage[] }> }> {
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+
+  const resp = await fetch(OCR_BATCH_ENDPOINT, { method: 'POST', body: fd });
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => resp.statusText);
+    throw new Error(`OCR batch failed (${resp.status}): ${msg}`);
+  }
+
+  return resp.json();
 }
