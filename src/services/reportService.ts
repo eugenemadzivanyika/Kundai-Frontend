@@ -14,10 +14,36 @@ export interface StudentReportCardResponse {
   subjects: StudentReportCardSubjectRow[];
 }
 
+export interface TermForecastDetail {
+  forecastId: string;
+  term: string;
+  academicYear: string;
+  expectedTopicIds?: string[];
+  expectedCoveragePercent?: number;
+  topics: Array<{
+    id: string;
+    code: string;
+    name: string;
+    topic?: string;
+    coveragePercent?: number;
+    masteryPercent?: number;
+    coveragePct?: number;
+    masteryPct?: number;
+  }>;
+}
+
 export const reportService = {
-  getStudentReportCard: async (studentId: string): Promise<StudentReportCardResponse> => {
-    // Try a commonly used endpoint; if it doesn't exist the component will handle nulls.
-    return fetchData<StudentReportCardResponse>(`/students/${studentId}/report-card`);
+  getStudentReportCard: (studentId: string): Promise<StudentReportCardResponse> =>
+    fetchData(`/students/${studentId}/report-card`),
+
+  getTermForecast: (
+    subjectId: string,
+    term: string,
+    academicYear: string,
+    forecastId: string,
+  ): Promise<TermForecastDetail> => {
+    const params = new URLSearchParams({ subjectId, term, academicYear });
+    return fetchData(`/admin/term-forecasts/${forecastId}/detail?${params.toString()}`);
   },
 };
 

@@ -1442,12 +1442,19 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                 stem: q.stem,
                 parts: q.parts?.map((p, pi) => ({ id: p.id || String(pi), text: p.text })),
               }))}
-              onSubmit={async ({ fullText, answers }: CompiledSubmission) => {
+              onSubmit={async ({ fullText, answers, pages }: CompiledSubmission) => {
                 const entry = ocrEntry;
                 console.log('[OCR submit] answers count:', answers?.length ?? 0, '| fullText length:', fullText?.length);
                 setOcrEntry(null);
                 setOcrInitialFiles([]);
                 setSubmittingEntryId(entry.id);
+
+                // Collect original File objects from pages that have them (excludes
+                // backend-generated PDF extra pages which have no sourceFile).
+                const imageFiles = pages
+                  .map(p => p.sourceFile)
+                  .filter((f): f is File => !!f);
+
                 try {
                   if (answers && answers.length > 0) {
                     await submissionService.submitAnswers({
@@ -1455,6 +1462,7 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                       studentId,
                       submissionType: 'text',
                       answers: answers as any,
+                      imageFiles,
                     });
                   } else {
                     await submissionService.submitAssignment({
@@ -1462,6 +1470,7 @@ const submitQuestionAnswers = async (entry: AssignmentEntry) => {
                       studentId,
                       submissionType: 'text',
                       textContent:    fullText,
+                      imageFiles,
                     });
                   }
                   toast.success('Handwritten submission sent successfully.');

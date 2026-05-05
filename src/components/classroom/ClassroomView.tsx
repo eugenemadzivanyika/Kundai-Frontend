@@ -28,7 +28,7 @@ const ClassroomView: React.FC = () => {
     try {
       setLoading(true);
       const courseId = selectedCourse?.id || selectedCourse?.code;
-      const data = await studentService.getStudents(courseId);
+      const data = await studentService.getStudents(courseId ? { courseId } : undefined);
 
       const studentsWithPlans = await Promise.all(
         data.map(async (student: any) => {

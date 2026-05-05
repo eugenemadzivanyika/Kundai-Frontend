@@ -52,7 +52,7 @@ const Dashboard: React.FC = () => {
 
           // 2. UPDATE THESE THREE CALLS to use courseIdentifier
           const [rawStudents, assessments, allCourses] = await Promise.all([
-            studentService.getStudents(courseIdentifier),
+            studentService.getStudents(courseIdentifier ? { courseId: courseIdentifier } : undefined),
             assessmentService.getAssessmentsByCourseId(courseIdentifier),
             courseService.getCourses()
           ]);

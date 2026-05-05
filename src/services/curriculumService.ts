@@ -1,5 +1,4 @@
-// src/services/curriculumService.ts
-import { fetchData } from './api'; // Use your existing api.ts
+import { fetchData } from './apiClient';
 
 export interface CurriculumTopic {
   id: string;
@@ -7,21 +6,32 @@ export interface CurriculumTopic {
   code: string;
   name: string;
   description?: string;
+  sequenceIndex?: number | null;
 }
 
 export const curriculumService = {
-  // We map 'listTopics' to your existing 'CourseAttributes' logic
-  listTopics: async (subjectId: string): Promise<CurriculumTopic[]> => {
-    // This hits your current backend which stores syllabus items as attributes
-    const attributes = await fetchData<any[]>(`/courses/${subjectId}/attributes`);
-    
-    // Transform your backend attributes into the 'Topic' format the UI expects
-    return attributes.map(attr => ({
-      id: attr._id,
-      subjectId: attr.course,
-      code: attr.level || 'TOPIC',
-      name: attr.name,
-      description: attr.description
-    }));
-  }
+  listTopics: (subjectId: string): Promise<CurriculumTopic[]> =>
+    fetchData(`/admin/subjects/${subjectId}/topics`),
+
+  createTopic: (subjectId: string, data: {
+    code: string;
+    name: string;
+    description?: string;
+    sequenceIndex?: number;
+  }): Promise<CurriculumTopic> =>
+    fetchData(`/admin/subjects/${subjectId}/topics`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateTopic: (id: string, data: {
+    code?: string;
+    name?: string;
+    description?: string;
+    sequenceIndex?: number;
+  }): Promise<CurriculumTopic> =>
+    fetchData(`/admin/topics/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteTopic: (id: string): Promise<any> =>
+    fetchData(`/admin/topics/${id}`, { method: 'DELETE' }),
 };

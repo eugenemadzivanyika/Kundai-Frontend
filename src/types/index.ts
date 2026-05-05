@@ -92,17 +92,82 @@ export type SubmissionStatus = 'submitted' | 'grading' | 'graded' | 'reviewed';
 export type NotificationType = 'assignment_graded' | 'assignment_submitted' | 'plan_assigned' | 'message_received';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type Subject = Course;
+
+// ClassGroup Interface - Represents a class section (e.g. Form 1A, Form 2B)
+export interface ClassGroup {
+  _id: string;
+  name: string;   // e.g. "Form 1A"
+  form: number;   // 1–6
+  stream: string; // e.g. "A", "B", "C"
+  year: number;
+  homeroomTeacher?: string | User;
+  students?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+export type Gender = 'Male' | 'Female' | 'Other' | '';
+export type MaritalStatus = 'Single' | 'Married' | 'Divorced' | 'Widowed' | '';
+export type GuardianRelationship = 'Father' | 'Mother' | 'Guardian' | 'Relative' | 'Other' | '';
+
+export interface TeacherProfile {
+  _id: string;
+  user: string;
+  gender: Gender;
+  dateOfBirth?: string | Date | null;
+  nationalId: string;
+  maritalStatus: MaritalStatus;
+  homeAddress: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelationship: string;
+  qualifications: string;
+  teachingCertificate: string;
+  yearsOfExperience: number;
+  department: string;
+  classTeacherOf?: { _id: string; name: string; form: number; stream: string } | string | null;
+  subjectAssignments: {
+    subject: { _id: string; name: string; code: string } | string;
+    subjectName?: string;
+    classes: Array<{ _id: string; name: string; form: number; stream: string } | string>;
+  }[];
+}
+
+export interface StudentProfileData {
+  _id: string;
+  id: string;
+  form: number;
+  gender: Gender;
+  dateOfBirth?: string | Date | null;
+  homeAddress: string;
+  guardianName: string;
+  guardianRelationship: GuardianRelationship;
+  guardianPhone: string;
+  guardianEmail: string;
+  previousSchool: string;
+  admissionDate?: string | Date | null;
+  classGroup?: { _id: string; name: string; form: number; stream: string } | string | null;
+  overall: number;
+}
+
 // User Interface - Represents a user in the system (student, teacher, admin)
 export interface User {
   _id: string; // MongoDB's default ID
+  id?: string; // Normalised alias returned by some admin endpoints
   firstName: string;
   lastName: string;
   email: string;
+  phoneNumber?: string;
+  username?: string;
   role: UserRole; // Canonical role assigned on the backend ('student' | 'teacher' | 'admin')
+  roles?: Array<string | { code?: string; name?: string }>; // Extended roles array (admin API)
+  isAdmin?: boolean; // Convenience flag set by some endpoints
+  active?: boolean; // Whether the account is active
   avatar?: string; // Optional avatar URL
   createdAt?: Date; // Mongoose timestamps
   updatedAt?: Date; // Mongoose timestamps
   token?: string; // Transient property for authentication, not stored in DB
+  studentProfile?: StudentProfileData; // Populated on admin API
+  teacherProfile?: TeacherProfile;     // Populated on admin API
 }
 
 // Student Interface - Represents a student profile
@@ -112,12 +177,13 @@ export interface Student {
   firstName: string;
   lastName: string;
   email: string;
-  form: number; // ADDED: Critical for Form 1-4 ZIMSEC logic
+  form: number; // ZIMSEC form level 1–6
+  classGroup?: ClassGroup | string; // which class section (e.g. Form 1A)
   overall: number;
   strength: string;
   performance: string;
   engagement: string;
-  courses?: string[]; 
+  courses?: string[];
   activePlan?: DevelopmentPlan;
   createdAt?: Date;
   updatedAt?: Date;
@@ -228,7 +294,8 @@ export interface StudentDevelopment {
   studentId: string;
   firstName: string;
   lastName: string;
-  form: number; // ADDED
+  form: number;
+  classGroup?: ClassGroup | string; // which class section
   overall: number;
   potentialOverall: number;
   eta: number | string;
@@ -427,24 +494,25 @@ export interface CourseAttribute {
   course: string; // Changed from courseId
   tags: string[];
 }
-// Course Interface - Represents a single course
+// Course Interface - Represents a single course (subject + form level + class groups)
 export interface Course {
   _id: string;
-  code: string; // E.g., "HCC301"
-  name: string; // E.g., "Network Security"
+  code: string; // E.g., "MATH-F1"
+  name: string; // E.g., "Mathematics Form 1"
   description: string;
-  teacher: string | { _id: string; firstName: string; lastName: string; }; // Teacher ID or populated Teacher object
-  students?: string[]; // Array of student IDs enrolled
-  resources?: string[]; // Array of resource IDs associated (if not using resourceCounts)
-  resourceCounts?: { // Pre-calculated counts
+  form: number; // ZIMSEC form level this course targets (1–6)
+  classGroups?: ClassGroup[] | string[]; // which class sections are in this course
+  teacher: string | { _id: string; firstName: string; lastName: string; };
+  students?: string[];
+  resources?: string[];
+  resourceCounts?: {
     documents: number;
     images: number;
     videos: number;
     others: number;
   };
-  // Virtuals for easier access to related data (if populated on backend)
-  attributes?: CourseAttribute[]; // Array of CourseAttribute definitions for this course
-  plans?: Plan[]; // Array of Plan templates associated with this course
+  attributes?: CourseAttribute[];
+  plans?: Plan[];
   createdAt?: Date;
   updatedAt?: Date;
 }

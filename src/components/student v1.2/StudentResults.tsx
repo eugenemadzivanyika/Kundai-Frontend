@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, Award, Target, FileText } from 'lucide-react';
 import { assessmentService } from '../../services/api';
-import { studentService } from '../../services/studentService';
 import TablePagination from '../ui/TablePagination';
 import { useClientPagination } from '../../hooks/useClientPagination';
 
@@ -87,10 +86,8 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
         const subjectId = selectedSubjectId && selectedSubjectId !== 'all' ? selectedSubjectId : undefined;
 
         const [history, assessments] = await Promise.all([
-          studentService.getAssessmentHistory(studentId, { subjectId }),
-          subjectId
-            ? assessmentService.getAssessmentsBySubjectId(subjectId).catch(() => [])
-            : assessmentService.getAssessments().catch(() => []),
+          assessmentService.getAssessmentHistory(studentId, { subjectId }),
+          assessmentService.getAssessmentsByCourseId(subjectId ?? 'all').catch(() => []),
         ]);
 
         const weightByAssessmentId = new Map<string, number>();

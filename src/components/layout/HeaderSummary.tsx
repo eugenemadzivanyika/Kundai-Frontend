@@ -16,7 +16,7 @@ const HeaderSummary: React.FC<HeaderSummaryProps> = ({ courseId }) => {
     const fetchStats = async () => {
       if (!courseId || courseId === 'dashboard') return;
       try {
-        const students = await studentService.getStudents(courseId);
+        const students = await studentService.getStudents({ courseId });
         const grades = [
           { name: 'A', count: students.filter((s: Student) => (s.overall || 0) >= 75).length, color: '#22c55e' },
           { name: 'B', count: students.filter((s: Student) => (s.overall || 0) >= 65 && (s.overall || 0) < 75).length, color: '#3b82f6' },

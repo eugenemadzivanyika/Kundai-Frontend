@@ -36,6 +36,7 @@ export const submissionService = {
 
     if (submissionData.file) formData.append('file', submissionData.file);
     if (submissionData.textContent) formData.append('answers', JSON.stringify([{ studentAnswer: submissionData.textContent }]));
+    (submissionData.imageFiles as File[] | undefined)?.forEach(f => formData.append('handwrittenImages', f));
 
     const debugPayload = {
       assessmentId: submissionData.assessmentId,
@@ -62,11 +63,31 @@ export const submissionService = {
     studentId: string;
     submissionType: string;
     answers: Array<{ questionId: string; studentAnswer: string; isCorrect?: boolean; partAnswers?: string[] }>;
+    imageFiles?: File[];
   }) => {
-    console.log('[submitAnswers] Sending to backend:', JSON.stringify(payload, null, 2));
+    const { imageFiles, ...rest } = payload;
+
+    // Use multipart when images are present so the server can persist them
+    if (imageFiles?.length) {
+      const fd = new FormData();
+      fd.append('assessmentId', rest.assessmentId);
+      fd.append('studentId',    rest.studentId);
+      fd.append('submissionType', rest.submissionType);
+      fd.append('answers', JSON.stringify(rest.answers));
+      imageFiles.forEach(f => fd.append('handwrittenImages', f));
+
+      const response = await fetch(`${API_URL}/submissions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: fd,
+      });
+      return response.json();
+    }
+
+    console.log('[submitAnswers] Sending to backend:', JSON.stringify(rest, null, 2));
     const result = await fetchData('/submissions', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(rest),
     });
     console.log('[submitAnswers] Backend response:', result);
     return result;

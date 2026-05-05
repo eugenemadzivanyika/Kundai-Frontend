@@ -438,23 +438,10 @@ const realPlanBySubjectId = useMemo(() => {
         const studentData = await studentService.getStudent(currentUser.studentId);
         setStudent(studentData);
 
-        const allSubjects = await courseService.getCourses().catch(() => []);
-        const studentSubjectIds = (studentData?.subjects || [])
-          .map((s: any) => (typeof s === 'string' ? s : s?.id))
-          .filter(Boolean) as string[];
-
-        let fetchedSubjects: Subject[] = [];
-        if (studentSubjectIds.length > 0) {
-          const byId = new Map(allSubjects.map((s) => [s.id, s]));
-          const missingIds = studentSubjectIds.filter((id) => !byId.has(id));
-          const missing = await Promise.all(missingIds.map((id) => courseService.getCourseById(id).catch(() => null)));
-          missing.filter(Boolean).forEach((s) => byId.set((s as Subject).id, s as Subject));
-          fetchedSubjects = studentSubjectIds.map((id) => byId.get(id)).filter(Boolean) as Subject[];
-        } else {
-          fetchedSubjects = allSubjects;
-        }
-
-        const normalized = (fetchedSubjects || []).map((s: any) => ({ ...(s || {}), id: s?.id || s?._id }));
+        // getCourses is scoped server-side: students only receive courses they
+        // are enrolled in (or courses for their form level if not yet enrolled).
+        const fetchedSubjects = await courseService.getCourses().catch(() => []);
+        const normalized = fetchedSubjects.map((s: any) => ({ ...(s || {}), id: s?.id || s?._id }));
         setSubjects(normalized as Course[]);
 
         if (studentData?.id) {

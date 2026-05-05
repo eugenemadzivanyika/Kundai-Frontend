@@ -21,9 +21,13 @@ export type StudentTeacher = {
 };
 
 export const studentService = {
-  getStudents: async (courseId?: string): Promise<Student[]> => {
-    const endpoint = courseId ? `/students?courseId=${courseId}` : '/students';
-    return fetchData(endpoint);
+  getStudents: async (filters?: { courseId?: string; classGroupId?: string; form?: number }): Promise<Student[]> => {
+    const params = new URLSearchParams();
+    if (filters?.courseId)     params.append('courseId',     filters.courseId);
+    if (filters?.classGroupId) params.append('classGroupId', filters.classGroupId);
+    if (filters?.form != null) params.append('form',         String(filters.form));
+    const qs = params.toString();
+    return fetchData(qs ? `/students?${qs}` : '/students');
   },
 
   getStudent: async (id: string): Promise<Student> => {
