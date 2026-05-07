@@ -74,16 +74,9 @@ export const resourceService = {
     });
   },
 
-  // 9. Syllabus topics for a course (Coverage tab)
+  // 9. Syllabus topics with RAG coverage data for a course (Coverage tab)
   getSyllabus: async (courseId: string): Promise<SyllabusAttribute[]> => {
-    const attrs = await fetchData<any[]>(`/courses/attributes/course/${courseId}`);
-    return attrs.map((a: any) => ({
-      id: a._id,
-      topic: a.name || a.attribute_id,
-      parentUnit: a.parent_unit || '',
-      resources: 0,
-      linked: [],
-    }));
+    return fetchData<SyllabusAttribute[]>(`/courses/${courseId}/coverage`);
   },
 
   // 10. Files for a course mapped to LinkedFile shape (Coverage tab)

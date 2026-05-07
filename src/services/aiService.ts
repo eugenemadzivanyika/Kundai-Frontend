@@ -1,4 +1,4 @@
-import { API_URL, fetchData } from './api';
+import { API_URL, fetchData, fetchAiData } from './api';
 import { Assessment } from '../types';
 
 interface AttributeInput {
@@ -98,6 +98,25 @@ generateQuestions: async (params: GenerateQuestionsParams): Promise<Assessment> 
    */
   regenerateQuestions: async (params: any): Promise<Assessment> => {
     return aiService.generateQuestions(params);
+  },
+
+  generateNotes: async (
+    subjectId: string,
+    topic: string,
+    attributeName: string,
+    level: string,
+    studentProfile?: Record<string, unknown>,
+  ): Promise<{ notes: string; sources: Array<Record<string, unknown>>; grounded_by_rag: boolean }> => {
+    return fetchAiData('/notes/generate', {
+      method: 'POST',
+      body: JSON.stringify({ subject_id: subjectId, topic, attribute_name: attributeName, level, student_profile: studentProfile }),
+    });
+  },
+
+  getRagStatus: async (
+    subjectId: string,
+  ): Promise<{ has_documents: boolean; chunk_count: number }> => {
+    return fetchAiData(`/rag/status/${subjectId}`);
   },
 
   /**

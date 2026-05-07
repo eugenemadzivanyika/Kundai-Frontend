@@ -288,7 +288,7 @@ const StudentAssignments: React.FC<StudentAssignmentsProps> = ({ studentId, sele
       ));
 
       
-      alert(`Assignment submitted and graded successfully!\nScore: ${resultData.actualMark}/${assignment.maxScore}\nGrade: ${resultData.grade}`);
+      alert(`Assignment submitted successfully! Grading is running in the background. Your teacher will be notified once it's ready for review.`);
   
     } catch (error) {
       console.error('ERROR: Failed to submit assignment:', error);

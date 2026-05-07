@@ -7,6 +7,7 @@ export interface ClassItem {
   gradeLevel?: string;
   academicYear?: string;
   studentCount?: number;
+  courses?: string[];
   homeroomTeacher?: {
     id: string;
     firstName?: string;
@@ -18,6 +19,12 @@ export interface ClassItem {
     name?: string;
     code?: string;
   } | null;
+}
+
+export interface ClassSubject {
+  _id: string;
+  code: string;
+  name: string;
 }
 
 export const classService = {
@@ -44,4 +51,22 @@ export const classService = {
 
   deleteClass: (id: string): Promise<any> =>
     fetchData(`/admin/classes/${id}`, { method: 'DELETE' }),
+
+  getClassSubjects: (classId: string): Promise<ClassSubject[]> =>
+    fetchData(`/admin/classes/${classId}/subjects`),
+
+  addSubjectToClass: (classId: string, courseId: string): Promise<{ message: string; studentsEnrolled: number; attributesCreated: number }> =>
+    fetchData(`/admin/classes/${classId}/subjects`, { method: 'POST', body: JSON.stringify({ courseId }) }),
+
+  removeSubjectFromClass: (classId: string, courseId: string): Promise<{ message: string; studentsUnenrolled: number }> =>
+    fetchData(`/admin/classes/${classId}/subjects/${courseId}`, { method: 'DELETE' }),
+
+  getClassStudentSubjectStatus: (classId: string): Promise<any> =>
+    fetchData(`/admin/classes/${classId}/students/subject-status`),
+
+  enrollStudentInSubject: (classId: string, studentId: string, courseId: string): Promise<{ message: string; attributesCreated: number }> =>
+    fetchData(`/admin/classes/${classId}/students/${studentId}/subjects/${courseId}`, { method: 'POST' }),
+
+  unenrollStudentFromSubject: (classId: string, studentId: string, courseId: string): Promise<{ message: string }> =>
+    fetchData(`/admin/classes/${classId}/students/${studentId}/subjects/${courseId}`, { method: 'DELETE' }),
 };

@@ -1,4 +1,4 @@
-import { fetchData } from './apiClient';
+import { fetchData, API_URL } from './apiClient';
 
 export interface AdminSummary {
   totalUsers: number;
@@ -21,6 +21,25 @@ export interface AdminSummary {
     active?: boolean;
     createdAt?: string;
   }>;
+}
+
+export interface BulkUploadRowResult {
+  row: number;
+  status: 'success' | 'failed' | 'skipped';
+  studentId: string;
+  name: string;
+  error?: string;
+  temporaryPassword?: string;
+}
+
+export interface BulkUploadResult {
+  summary: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    skipped: number;
+  };
+  results: BulkUploadRowResult[];
 }
 
 export const adminService = {
@@ -52,4 +71,40 @@ export const adminService = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  // Bulk student upload
+  downloadBulkTemplate: async (): Promise<void> => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/admin/students/bulk-template`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const url  = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href     = url;
+    link.download = 'kundai_student_upload_template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+
+  bulkCreateStudents: async (file: File): Promise<BulkUploadResult> => {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+    // Do NOT set Content-Type — browser sets it with the multipart boundary
+    const response = await fetch(`${API_URL}/admin/students/bulk`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
+    return data as BulkUploadResult;
+  },
 };

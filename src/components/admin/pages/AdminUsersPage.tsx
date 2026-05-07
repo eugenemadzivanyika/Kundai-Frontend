@@ -1,22 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  BookOpen,
+  ChevronDown,
+  ChevronRight,
+  GraduationCap,
+  Loader2,
   Plus,
   RefreshCw,
   Shield,
   Trash2,
+  Upload,
   UserCog,
-  X,
-  GraduationCap,
-  BookOpen,
   Users,
+  X,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { authService, userService } from '../../../services/api';
+import { adminService, authService, classService, subjectService, userService } from '../../../services/api';
 import { User } from '../../../types';
 import AdminSectionHeader from '../components/AdminSectionHeader';
 import { useToast } from '../../ui/use-toast';
 import AdminConfirmDialog from '../components/AdminConfirmDialog';
+import BulkStudentUpload from '../components/BulkStudentUpload';
 import TeacherFormModal, { TeacherFormData } from './TeacherFormModal';
 import StudentFormModal, { StudentFormData } from './StudentFormModal';
 import {
@@ -180,6 +185,428 @@ const AdminFormModal: React.FC<AdminFormModalProps> = ({ open, mode, user, savin
 };
 
 // ---------------------------------------------------------------------------
+// Student Subjects Panel
+// ---------------------------------------------------------------------------
+
+interface StudentSubjectsPanelProps {
+  user: User;
+  onClose: () => void;
+}
+
+const StudentSubjectsPanel: React.FC<StudentSubjectsPanelProps> = ({ user, onClose }) => {
+  const sp = user.studentProfile as any;
+  const studentId: string = sp?._id || '';
+  const classGroup = sp?.classGroup;
+  const classId: string =
+    classGroup && typeof classGroup === 'object' ? classGroup._id : (classGroup as string) || 'direct';
+
+  const [studentData, setStudentData] = useState<any>(null);
+  const [allSubjects, setAllSubjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mutating, setMutating] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [addSearch, setAddSearch] = useState('');
+  const { toast } = useToast();
+
+  const fullName = `${user.firstName} ${user.lastName}`.trim();
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [fresh, subjects] = await Promise.all([
+        adminService.getStudent(studentId),
+        subjectService.getSubjects(),
+      ]);
+      setStudentData(fresh);
+      setAllSubjects(Array.isArray(subjects) ? subjects : []);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load student subjects');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { if (studentId) loadData(); }, [studentId]);
+
+  const enrolledCourses: { _id: string; name: string; code: string }[] = studentData?.courses || [];
+  const manualIds = new Set<string>((studentData?.manualEnrollments || []).map((m: any) => m?.toString?.() ?? m));
+  const enrolledIds = new Set(enrolledCourses.map((c) => c._id.toString()));
+
+  const availableSubjects = allSubjects.filter((s) => {
+    const id = s._id || s.id;
+    if (enrolledIds.has(id)) return false;
+    if (!addSearch.trim()) return true;
+    const q = addSearch.toLowerCase();
+    return s.name?.toLowerCase().includes(q) || s.code?.toLowerCase().includes(q);
+  });
+
+  const handleAdd = async () => {
+    if (!selectedCourseId) return;
+    setMutating('add');
+    try {
+      await classService.enrollStudentInSubject(classId, studentId, selectedCourseId);
+      await loadData();
+      setSelectedCourseId('');
+      setAddSearch('');
+      const name = allSubjects.find((s) => (s._id || s.id) === selectedCourseId)?.name || 'Subject';
+      toast.success(`${name} added to ${fullName}.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to add subject');
+    } finally {
+      setMutating(null);
+    }
+  };
+
+  const handleRemove = async (course: { _id: string; name: string }, force = false) => {
+    const isClassSubject = !manualIds.has(course._id.toString());
+    if (isClassSubject && !force) return;
+    setMutating(course._id);
+    try {
+      await classService.unenrollStudentFromSubject(classId, studentId, course._id);
+      await loadData();
+      toast.success(`${course.name} removed from ${fullName}.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove subject');
+    } finally {
+      setMutating(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-md shadow-xl flex flex-col h-full overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Subjects — {fullName}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {classGroup && typeof classGroup === 'object' ? classGroup.name : 'No class assigned'}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <>
+              <section>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Enrolled subjects <span className="text-gray-400">({enrolledCourses.length})</span>
+                </h3>
+                {enrolledCourses.length === 0 ? (
+                  <p className="text-sm text-gray-400">Not enrolled in any subjects.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {enrolledCourses.map((course) => {
+                      const isManual = manualIds.has(course._id.toString());
+                      const isBusy = mutating === course._id;
+                      return (
+                        <li key={course._id} className="flex items-center gap-2 bg-gray-50 rounded-md px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-gray-800">
+                              <span className="font-mono text-xs text-gray-400 mr-1.5">{course.code}</span>
+                              {course.name}
+                            </span>
+                            <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
+                              isManual
+                                ? 'bg-violet-100 text-violet-700'
+                                : 'bg-teal-100 text-teal-700'
+                            }`}>
+                              {isManual ? 'Manual' : 'Via class'}
+                            </span>
+                          </div>
+                          {isManual ? (
+                            <button
+                              disabled={!!mutating}
+                              onClick={() => handleRemove(course)}
+                              title="Remove this subject"
+                              className="text-red-500 hover:text-red-700 disabled:opacity-40 shrink-0"
+                            >
+                              {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          ) : (
+                            <div className="flex gap-1 shrink-0">
+                              <span
+                                className="text-xs text-gray-400 cursor-help"
+                                title="Remove this subject from the class to unenroll all students, or use Force Remove to unenroll this student only"
+                              >
+                                Via class
+                              </span>
+                              <button
+                                disabled={!!mutating}
+                                onClick={() => handleRemove(course, true)}
+                                title="Force remove: unenrolls this student only, class unchanged"
+                                className="text-xs text-red-500 hover:text-red-700 underline disabled:opacity-40"
+                              >
+                                {isBusy ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Force'}
+                              </button>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Add a subject</h3>
+                <input
+                  className="border rounded-md px-3 py-2 text-sm w-full mb-2"
+                  placeholder="Search subjects…"
+                  value={addSearch}
+                  onChange={(e) => { setAddSearch(e.target.value); setSelectedCourseId(''); }}
+                />
+                <select
+                  className="border rounded-md px-3 py-2 text-sm w-full mb-3"
+                  value={selectedCourseId}
+                  onChange={(e) => setSelectedCourseId(e.target.value)}
+                >
+                  <option value="">Select a subject…</option>
+                  {availableSubjects.map((s) => (
+                    <option key={s._id || s.id} value={s._id || s.id}>
+                      {s.code} — {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAdd}
+                  disabled={!selectedCourseId || !!mutating}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50 w-full justify-center"
+                >
+                  {mutating === 'add' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add Subject (Manual)
+                </button>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Hierarchical student view — All → Form N → Class name
+// ---------------------------------------------------------------------------
+
+const FORM_LEVELS = [1, 2, 3, 4, 5, 6];
+
+interface StudentHierarchyViewProps {
+  students: User[];
+  onEdit: (u: User) => void;
+  onDelete: (u: User) => void;
+  onViewSubjects: (u: User) => void;
+}
+
+const StudentHierarchyView: React.FC<StudentHierarchyViewProps> = ({ students, onEdit, onDelete, onViewSubjects }) => {
+  const [expandedForms, setExpandedForms] = useState<Set<number>>(new Set());
+  const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
+
+  const toggleForm = (form: number) =>
+    setExpandedForms((prev) => {
+      const next = new Set(prev);
+      next.has(form) ? next.delete(form) : next.add(form);
+      return next;
+    });
+
+  const toggleClass = (key: string) =>
+    setExpandedClasses((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  // Group students: form → className → [User]
+  const grouped = useMemo(() => {
+    const map = new Map<number, Map<string, User[]>>();
+    for (const u of students) {
+      const sp = u.studentProfile as any;
+      const form = Number(sp?.form ?? 0) || 0;
+      const cg = sp?.classGroup;
+      const className =
+        cg && typeof cg === 'object' ? (cg.name as string) : 'Unassigned';
+      if (!map.has(form)) map.set(form, new Map());
+      const formMap = map.get(form)!;
+      if (!formMap.has(className)) formMap.set(className, []);
+      formMap.get(className)!.push(u);
+    }
+    return map;
+  }, [students]);
+
+  const unassignedForm = grouped.get(0);
+  const formsWithStudents = FORM_LEVELS.filter((f) => grouped.has(f));
+
+  if (students.length === 0) {
+    return <p className="py-8 text-center text-gray-400 text-sm">No students found.</p>;
+  }
+
+  const StudentRow: React.FC<{ u: User }> = ({ u }) => {
+    const sp = u.studentProfile as any;
+    const cg = sp?.classGroup;
+    const className = cg && typeof cg === 'object' ? (cg.name as string) : '—';
+    return (
+      <tr className="border-b last:border-0 hover:bg-gray-50 text-sm">
+        <td className="py-2 px-3 font-medium">{`${u.firstName} ${u.lastName}`.trim()}</td>
+        <td className="py-2 px-3 text-gray-500">{u.email}</td>
+        <td className="py-2 px-3 text-gray-500">{className}</td>
+        <td className="py-2 px-3">{sp?.gender || '—'}</td>
+        <td className="py-2 px-3">
+          {sp?.guardianName ? (
+            <div>
+              <div className="font-medium text-xs">{sp.guardianName}</div>
+              <div className="text-xs text-gray-400">{sp.guardianPhone || '—'}</div>
+            </div>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+        <td className="py-2 px-3"><StatusBadge active={u.active !== false} /></td>
+        <td className="py-2 px-3">
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => onEdit(u)}
+              className="inline-flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white rounded px-2.5 py-1 text-xs">
+              <UserCog className="w-3 h-3" /> Edit
+            </button>
+            <button onClick={() => onViewSubjects(u)}
+              className="inline-flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white rounded px-2.5 py-1 text-xs">
+              <BookOpen className="w-3 h-3" /> Subjects
+            </button>
+            <button onClick={() => onDelete(u)}
+              className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white rounded px-2.5 py-1 text-xs">
+              <Trash2 className="w-3 h-3" /> Delete
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const ClassTable: React.FC<{ classUsers: User[] }> = ({ classUsers }) => (
+    <table className="min-w-full text-sm">
+      <thead>
+        <tr className="text-left border-b text-gray-500 bg-gray-50/60">
+          <th className="py-1.5 px-3 font-medium text-xs">Name</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Email</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Class</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Gender</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Guardian</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Status</th>
+          <th className="py-1.5 px-3 font-medium text-xs">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {classUsers.map((u) => <StudentRow key={u._id} u={u} />)}
+      </tbody>
+    </table>
+  );
+
+  const renderFormSection = (form: number) => {
+    const classMap = grouped.get(form);
+    if (!classMap) return null;
+    const totalInForm = [...classMap.values()].reduce((s, arr) => s + arr.length, 0);
+    const isFormOpen = expandedForms.has(form);
+    const classes = [...classMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    return (
+      <div key={form} className="border border-gray-200 rounded-lg overflow-hidden mb-2">
+        {/* Form header */}
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-4 py-3 bg-teal-50 hover:bg-teal-100 transition-colors text-left"
+          onClick={() => toggleForm(form)}
+        >
+          <div className="flex items-center gap-2">
+            {isFormOpen ? <ChevronDown className="w-4 h-4 text-teal-700" /> : <ChevronRight className="w-4 h-4 text-teal-700" />}
+            <span className="font-semibold text-teal-800 text-sm">Form {form}</span>
+            <span className="text-xs bg-teal-600 text-white rounded-full px-2 py-0.5">{totalInForm}</span>
+          </div>
+          <span className="text-xs text-teal-600">{classes.length} class{classes.length !== 1 ? 'es' : ''}</span>
+        </button>
+
+        {/* Classes within this form */}
+        {isFormOpen && (
+          <div className="divide-y divide-gray-100">
+            {classes.map(([className, classUsers]) => {
+              const classKey = `${form}-${className}`;
+              const isClassOpen = expandedClasses.has(classKey);
+              return (
+                <div key={classKey}>
+                  {/* Class sub-header */}
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-6 py-2.5 bg-white hover:bg-gray-50 transition-colors text-left"
+                    onClick={() => toggleClass(classKey)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isClassOpen ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+                      <span className="font-medium text-gray-700 text-sm">{className}</span>
+                      <span className="text-xs bg-gray-200 text-gray-700 rounded-full px-2 py-0.5">{classUsers.length}</span>
+                    </div>
+                  </button>
+                  {isClassOpen && (
+                    <div className="overflow-x-auto border-t border-gray-100">
+                      <ClassTable classUsers={classUsers} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-1">
+      {/* Summary bar */}
+      <div className="flex items-center gap-2 text-xs text-gray-500 mb-3 flex-wrap">
+        <span className="font-medium text-gray-700">{students.length} student{students.length !== 1 ? 's' : ''} total</span>
+        {formsWithStudents.map((f) => {
+          const count = [...(grouped.get(f)?.values() ?? [])].reduce((s, a) => s + a.length, 0);
+          return (
+            <span key={f} className="bg-teal-50 border border-teal-200 text-teal-700 rounded px-2 py-0.5">
+              Form {f}: {count}
+            </span>
+          );
+        })}
+      </div>
+
+      {formsWithStudents.map(renderFormSection)}
+
+      {/* Unassigned students (form = 0 or no profile) */}
+      {unassignedForm && unassignedForm.size > 0 && (
+        <div className="border border-amber-200 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-4 py-3 bg-amber-50 hover:bg-amber-100 transition-colors text-left"
+            onClick={() => toggleForm(0)}
+          >
+            {expandedForms.has(0) ? <ChevronDown className="w-4 h-4 text-amber-700" /> : <ChevronRight className="w-4 h-4 text-amber-700" />}
+            <span className="font-semibold text-amber-800 text-sm">Unassigned</span>
+            <span className="text-xs bg-amber-500 text-white rounded-full px-2 py-0.5">
+              {[...unassignedForm.values()].reduce((s, a) => s + a.length, 0)}
+            </span>
+          </button>
+          {expandedForms.has(0) && (
+            <div className="overflow-x-auto border-t border-amber-100">
+              <ClassTable classUsers={[...unassignedForm.values()].flat()} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
@@ -194,6 +621,9 @@ const AdminUsersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
+  // Bulk upload
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+
   // Modal state
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -201,6 +631,7 @@ const AdminUsersPage: React.FC = () => {
   const [teacherModalOpen, setTeacherModalOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [subjectsPanelUser, setSubjectsPanelUser] = useState<User | null>(null);
 
   const classNameParam = searchParams.get('className') || '';
   const classIdParam = searchParams.get('classId') || undefined;
@@ -281,10 +712,23 @@ const AdminUsersPage: React.FC = () => {
         gender: data.gender || undefined,
         dateOfBirth: data.dateOfBirth || undefined,
         homeAddress: data.homeAddress || undefined,
+        nationality: data.nationality || undefined,
+        religion: data.religion || undefined,
+        bloodType: data.bloodType || undefined,
+        medicalConditions: data.medicalConditions || undefined,
+        specialNeeds: data.specialNeeds || undefined,
+        studentRegNumber: data.studentRegNumber || undefined,
+        boardingStatus: data.boardingStatus || undefined,
+        transportMode: data.transportMode || undefined,
         guardianName: data.guardianName || undefined,
         guardianRelationship: data.guardianRelationship || undefined,
         guardianPhone: data.guardianPhone || undefined,
         guardianEmail: data.guardianEmail || undefined,
+        guardianAddress: data.guardianAddress || undefined,
+        guardianOccupation: data.guardianOccupation || undefined,
+        secondGuardianName: data.secondGuardianName || undefined,
+        secondGuardianPhone: data.secondGuardianPhone || undefined,
+        secondGuardianRelationship: data.secondGuardianRelationship || undefined,
         previousSchool: data.previousSchool || undefined,
         admissionDate: data.admissionDate || undefined,
       };
@@ -323,6 +767,9 @@ const AdminUsersPage: React.FC = () => {
         nationalId: data.nationalId || undefined,
         maritalStatus: data.maritalStatus || undefined,
         homeAddress: data.homeAddress || undefined,
+        spouseName: data.spouseName || undefined,
+        spousePhone: data.spousePhone || undefined,
+        numberOfDependants: data.numberOfDependants ? Number(data.numberOfDependants) : undefined,
         emergencyContactName: data.emergencyContactName || undefined,
         emergencyContactPhone: data.emergencyContactPhone || undefined,
         emergencyContactRelationship: data.emergencyContactRelationship || undefined,
@@ -330,6 +777,11 @@ const AdminUsersPage: React.FC = () => {
         teachingCertificate: data.teachingCertificate || undefined,
         yearsOfExperience: data.yearsOfExperience ? Number(data.yearsOfExperience) : undefined,
         department: data.department || undefined,
+        staffNumber: data.staffNumber || undefined,
+        teachingCouncilRegNumber: data.teachingCouncilRegNumber || undefined,
+        employmentType: data.employmentType || undefined,
+        position: data.position || undefined,
+        employmentStartDate: data.employmentStartDate || undefined,
         classTeacherOf: data.classTeacherOf || undefined,
         subjectAssignments: data.subjectAssignments.filter((sa) => sa.subject),
       };
@@ -441,6 +893,15 @@ const AdminUsersPage: React.FC = () => {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
+            {activeTab === 'students' && (
+              <button
+                onClick={() => setShowBulkUpload(true)}
+                className="inline-flex items-center gap-2 text-sm border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-md"
+              >
+                <Upload className="w-4 h-4" />
+                Bulk Upload
+              </button>
+            )}
             <button
               onClick={openCreate}
               className={`inline-flex items-center gap-2 text-sm text-white px-3 py-2 rounded-md ${
@@ -456,6 +917,20 @@ const AdminUsersPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Bulk upload panel */}
+        {showBulkUpload && (
+          <div className="p-4 border-b">
+            <BulkStudentUpload
+              onComplete={(count) => {
+                setShowBulkUpload(false);
+                loadUsers();
+                toast.success(`${count} student${count !== 1 ? 's' : ''} added successfully.`);
+              }}
+              onCancel={() => setShowBulkUpload(false)}
+            />
+          </div>
+        )}
 
         {/* Class filter banner */}
         {classNameParam && (
@@ -522,76 +997,14 @@ const AdminUsersPage: React.FC = () => {
             <TableSkeleton />
           ) : (
             <>
-              {/* STUDENTS TABLE */}
+              {/* STUDENTS — hierarchical Form → Class view */}
               {activeTab === 'students' && (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left border-b text-gray-600">
-                        <th className="py-2 px-3 font-medium">Name</th>
-                        <th className="py-2 px-3 font-medium">Email</th>
-                        <th className="py-2 px-3 font-medium">Form</th>
-                        <th className="py-2 px-3 font-medium">Class</th>
-                        <th className="py-2 px-3 font-medium">Gender</th>
-                        <th className="py-2 px-3 font-medium">Guardian</th>
-                        <th className="py-2 px-3 font-medium">Status</th>
-                        <th className="py-2 px-3 font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {studentUsers.map((u) => {
-                        const sp = u.studentProfile;
-                        const classGroup = sp?.classGroup;
-                        const className =
-                          classGroup && typeof classGroup === 'object'
-                            ? classGroup.name
-                            : '—';
-                        return (
-                          <tr key={u._id} className="border-b last:border-0 hover:bg-gray-50">
-                            <td className="py-2 px-3 font-medium">{`${u.firstName} ${u.lastName}`.trim()}</td>
-                            <td className="py-2 px-3 text-gray-600">{u.email}</td>
-                            <td className="py-2 px-3">{sp?.form ? `Form ${sp.form}` : '—'}</td>
-                            <td className="py-2 px-3">{className}</td>
-                            <td className="py-2 px-3">{sp?.gender || '—'}</td>
-                            <td className="py-2 px-3">
-                              {sp?.guardianName ? (
-                                <span title={`${sp.guardianRelationship || 'Guardian'}: ${sp.guardianPhone || 'no phone'}`}>
-                                  {sp.guardianName}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">—</span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3">
-                              <StatusBadge active={u.active !== false} />
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => openEdit(u)}
-                                  className="inline-flex items-center gap-1 bg-teal-600 hover:bg-teal-700 text-white rounded px-3 py-1 text-xs"
-                                >
-                                  <UserCog className="w-3 h-3" /> Edit
-                                </button>
-                                <button
-                                  onClick={() => setUserToDelete(u)}
-                                  className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white rounded px-3 py-1 text-xs"
-                                >
-                                  <Trash2 className="w-3 h-3" /> Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {studentUsers.length === 0 && (
-                        <tr>
-                          <td colSpan={8} className="py-8 text-center text-gray-400 text-sm">No students found.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <StudentHierarchyView
+                  students={studentUsers}
+                  onEdit={openEdit}
+                  onDelete={(u) => setUserToDelete(u)}
+                  onViewSubjects={(u) => setSubjectsPanelUser(u)}
+                />
               )}
 
               {/* TEACHERS TABLE */}
@@ -765,6 +1178,13 @@ const AdminUsersPage: React.FC = () => {
         onConfirm={removeUser}
         onOpenChange={(open) => { if (!open) setUserToDelete(null); }}
       />
+
+      {subjectsPanelUser && (
+        <StudentSubjectsPanel
+          user={subjectsPanelUser}
+          onClose={() => setSubjectsPanelUser(null)}
+        />
+      )}
     </div>
   );
 };

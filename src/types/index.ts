@@ -78,7 +78,7 @@ export interface ChatConversation {
 
 // Enums or Union Types for clarity
 export type ResourceType = 'document' | 'image' | 'video' | 'other';
-export type PlanStatus = 'Active' | 'Completed' | 'On Hold' | 'Cancelled';
+export type PlanStatus = 'Draft' | 'Pending Audit' | 'Active' | 'On Hold' | 'Mastered' | 'Failed';
 export type AssessmentType = 'Assignment' | 'Test' | 'D-Plan' | 'Project' | 'Exam' | 'Quiz' | 'Exercise' | 'Homework';
 export type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer' | 'essay' | 'code';
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
@@ -147,6 +147,8 @@ export interface StudentProfileData {
   admissionDate?: string | Date | null;
   classGroup?: { _id: string; name: string; form: number; stream: string } | string | null;
   overall: number;
+  courses?: { _id: string; name: string; code: string }[];
+  manualEnrollments?: string[];
 }
 
 // User Interface - Represents a user in the system (student, teacher, admin)
@@ -515,6 +517,11 @@ export interface Course {
   plans?: Plan[];
   createdAt?: Date;
   updatedAt?: Date;
+  // Mastery summary — populated by GET /api/students/me/subjects
+  totalAttributes?: number;
+  masteredAttributes?: number;
+  overallMastery?: number;
+  isManualEnrollment?: boolean;
 }
 
 // Submission Interface - Represents a student's assignment submission

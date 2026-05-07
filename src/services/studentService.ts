@@ -1,5 +1,5 @@
 import { fetchData } from './apiClient';
-import { Student } from '../types';
+import { Course, Student } from '../types';
 
 export interface StudentDevelopmentResponse {
   student: Student;
@@ -21,10 +21,15 @@ export type StudentTeacher = {
 };
 
 export const studentService = {
-  getStudents: async (filters?: { courseId?: string; classGroupId?: string; form?: number }): Promise<Student[]> => {
+  getStudents: async (filters?: { courseId?: string; classGroupId?: string; classGroupIds?: string[]; form?: number }): Promise<Student[]> => {
     const params = new URLSearchParams();
     if (filters?.courseId)     params.append('courseId',     filters.courseId);
-    if (filters?.classGroupId) params.append('classGroupId', filters.classGroupId);
+    // classGroupIds (multi-select) takes precedence over single classGroupId
+    if (filters?.classGroupIds?.length) {
+      params.append('classGroupIds', filters.classGroupIds.join(','));
+    } else if (filters?.classGroupId) {
+      params.append('classGroupId', filters.classGroupId);
+    }
     if (filters?.form != null) params.append('form',         String(filters.form));
     const qs = params.toString();
     return fetchData(qs ? `/students?${qs}` : '/students');
@@ -63,7 +68,11 @@ export const studentService = {
       return [];
     }
   },
-  getStudentDevelopment: async (studentId: string): Promise<StudentDevelopmentResponse> => {
-    return fetchData<StudentDevelopmentResponse>(`/students/${studentId}/development`);
+  getStudentDevelopment: async (studentId: string, options?: { courseId?: string }): Promise<StudentDevelopmentResponse> => {
+    const qs = options?.courseId ? `?courseId=${encodeURIComponent(options.courseId)}` : '';
+    return fetchData<StudentDevelopmentResponse>(`/students/${studentId}/development${qs}`);
   },
+
+  getMySubjects: (): Promise<Course[]> =>
+    fetchData<Course[]>('/students/me/subjects'),
 };

@@ -27,7 +27,7 @@ interface StudentPerformance {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { selectedCourse } = useAuth();
+  const { selectedCourse, selectedClassGroups } = useAuth();
 
   // State
   const [loading, setLoading] = useState(true);
@@ -50,9 +50,13 @@ const Dashboard: React.FC = () => {
         try {
           setLoading(true);
 
-          // 2. UPDATE THESE THREE CALLS to use courseIdentifier
+          // Build student filter: subject + optional class group(s)
+          const studentFilters: { courseId?: string; classGroupIds?: string[] } = {};
+          if (courseIdentifier) studentFilters.courseId = courseIdentifier;
+          if (selectedClassGroups.length > 0) studentFilters.classGroupIds = selectedClassGroups;
+
           const [rawStudents, assessments, allCourses] = await Promise.all([
-            studentService.getStudents(courseIdentifier ? { courseId: courseIdentifier } : undefined),
+            studentService.getStudents(studentFilters),
             assessmentService.getAssessmentsByCourseId(courseIdentifier),
             courseService.getCourses()
           ]);
@@ -68,11 +72,17 @@ const Dashboard: React.FC = () => {
           setLatestAssessment(latest);
           
           const results = await assessmentService.getResults(latest._id);
-          setPerformance(results.map((r: any) => ({
-            studentId: r.student?._id || '',
-            name: `${r.student?.user?.firstName || ''} ${r.student?.user?.lastName || ''}`,
-            score: r.actualMark
-          })));
+          // Restrict performance panel to students matching the class group filter
+          const visibleStudentIds = new Set(rawStudents.map((s: any) => s._id?.toString()));
+          setPerformance(
+            results
+              .filter((r: any) => visibleStudentIds.has(r.student?._id?.toString()))
+              .map((r: any) => ({
+                studentId: r.student?._id || '',
+                name: `${r.student?.user?.firstName || ''} ${r.student?.user?.lastName || ''}`,
+                score: r.actualMark
+              }))
+          );
         }
 
         // Digital Twin Logic
@@ -131,7 +141,7 @@ const devProfiles = await Promise.all(
     };
 
     fetchDashboardData();
-  }, [selectedCourse]);
+  }, [selectedCourse, selectedClassGroups]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[calc(100vh-160px)] p-0 relative overflow-hidden">

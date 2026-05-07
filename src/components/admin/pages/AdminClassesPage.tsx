@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, GraduationCap, Pencil, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
+import { AlertCircle, BookOpen, GraduationCap, Loader2, Pencil, Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { authService, classService, schoolService, userService } from '../../../services/api';
-import { ClassItem } from '../../../services/classService';
+import { authService, classService, schoolService, subjectService, userService } from '../../../services/api';
+import { ClassItem, ClassSubject } from '../../../services/classService';
 import { SchoolItem } from '../../../services/schoolService';
 import { User } from '../../../types';
 import AdminSectionHeader from '../components/AdminSectionHeader';
@@ -77,6 +77,168 @@ const ClassTableSkeleton = () => (
   </div>
 );
 
+interface ClassSubjectsPanelProps {
+  classId: string;
+  className: string;
+  onClose: () => void;
+}
+
+const ClassSubjectsPanel: React.FC<ClassSubjectsPanelProps> = ({ classId, className, onClose }) => {
+  const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
+  const [allSubjects, setAllSubjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mutating, setMutating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const { toast } = useToast();
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [subjects, all] = await Promise.all([
+        classService.getClassSubjects(classId),
+        subjectService.getSubjects(),
+      ]);
+      setClassSubjects(subjects);
+      setAllSubjects(Array.isArray(all) ? all : []);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to load subjects');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, [classId]);
+
+  const assignedIds = new Set(classSubjects.map((s) => s._id));
+
+  const availableSubjects = allSubjects.filter((s) => {
+    const id = s._id || s.id;
+    if (assignedIds.has(id)) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return s.name?.toLowerCase().includes(q) || s.code?.toLowerCase().includes(q);
+  });
+
+  const handleAdd = async () => {
+    if (!selectedCourseId) return;
+    setMutating(true);
+    try {
+      const res = await classService.addSubjectToClass(classId, selectedCourseId);
+      await loadData();
+      setSelectedCourseId('');
+      setSearch('');
+      if (res.studentsEnrolled === 0) {
+        toast.success('Subject added. No students in this class yet — students will be enrolled when assigned.');
+      } else {
+        const subjectName = allSubjects.find((s) => (s._id || s.id) === selectedCourseId)?.name || 'Subject';
+        toast.success(`${subjectName} added — ${res.studentsEnrolled} student${res.studentsEnrolled !== 1 ? 's' : ''} enrolled automatically.`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to add subject');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleRemove = async (subject: ClassSubject) => {
+    setMutating(true);
+    try {
+      const res = await classService.removeSubjectFromClass(classId, subject._id);
+      await loadData();
+      toast.success(`${subject.name} removed — ${res.studentsUnenrolled} student${res.studentsUnenrolled !== 1 ? 's' : ''} unenrolled.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove subject');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-md shadow-xl flex flex-col h-full overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Subjects — {className}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Assign subjects to this class. All enrolled students are updated automatically.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <>
+              <section>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  Assigned subjects <span className="text-gray-400">({classSubjects.length})</span>
+                </h3>
+                {classSubjects.length === 0 ? (
+                  <p className="text-sm text-gray-400">No subjects assigned yet.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {classSubjects.map((s) => (
+                      <li key={s._id} className="flex items-center justify-between bg-gray-50 rounded-md px-3 py-2">
+                        <span className="text-sm text-gray-800">
+                          <span className="font-mono text-xs text-gray-500 mr-2">{s.code}</span>
+                          {s.name}
+                        </span>
+                        <button
+                          disabled={mutating}
+                          onClick={() => handleRemove(s)}
+                          className="text-red-500 hover:text-red-700 disabled:opacity-40"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">Add a subject</h3>
+                <input
+                  className="border rounded-md px-3 py-2 text-sm w-full mb-2"
+                  placeholder="Search subjects…"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setSelectedCourseId(''); }}
+                />
+                <select
+                  className="border rounded-md px-3 py-2 text-sm w-full mb-3"
+                  value={selectedCourseId}
+                  onChange={(e) => setSelectedCourseId(e.target.value)}
+                >
+                  <option value="">Select a subject…</option>
+                  {availableSubjects.map((s) => (
+                    <option key={s._id || s.id} value={s._id || s.id}>
+                      {s.code} — {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAdd}
+                  disabled={!selectedCourseId || mutating}
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-md disabled:opacity-50 w-full justify-center"
+                >
+                  {mutating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add Subject
+                </button>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminClassesPage: React.FC = () => {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -88,6 +250,7 @@ const AdminClassesPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [classToDelete, setClassToDelete] = useState<ClassItem | null>(null);
+  const [subjectsPanelClass, setSubjectsPanelClass] = useState<ClassItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
@@ -341,7 +504,14 @@ const AdminClassesPage: React.FC = () => {
               <tbody>
                 {filteredClasses.map((classItem) => (
                   <tr key={classItem.id} className="border-b last:border-b-0">
-                    <td className="py-2 pr-4 font-medium">{classItem.name || '-'}</td>
+                    <td className="py-2 pr-4 font-medium">
+                      <span>{classItem.name || '-'}</span>
+                      {classItem.courses != null && (
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">
+                          {classItem.courses.length} subject{classItem.courses.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4">{classItem.gradeLevel || '-'}</td>
                     <td className="py-2 pr-4">{teacherDisplayName((classItem.homeroomTeacher as User | null) || null)}</td>
                     <td className="py-2 pr-4">
@@ -356,6 +526,14 @@ const AdminClassesPage: React.FC = () => {
                         >
                           <Users className="w-3 h-3" />
                           Students
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSubjectsPanelClass(classItem)}
+                          className="inline-flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white rounded px-3 py-1 text-xs"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          Subjects
                         </button>
                         <button
                           type="button"
@@ -480,6 +658,14 @@ const AdminClassesPage: React.FC = () => {
           }
         }}
       />
+
+      {subjectsPanelClass && (
+        <ClassSubjectsPanel
+          classId={subjectsPanelClass.id}
+          className={subjectsPanelClass.name}
+          onClose={() => setSubjectsPanelClass(null)}
+        />
+      )}
     </div>
   );
 };

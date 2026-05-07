@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -20,6 +21,7 @@ import {
 import { CourseAttribute, StudentAttribute, Subject } from '../../types';
 import { courseService } from '../../services/courseService';
 import { fetchAiData } from '../../services/apiClient';
+import { aiService } from '../../services/aiService';
 import StudentPracticeRunner, { buildMockPracticeQuestions, PracticeQuestion, PracticeRunSummary } from './StudentPracticeRunner';
 
 // ─── Local placeholder types for removed external services ───────────────────
@@ -496,6 +498,8 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
   const [unitChallengeConfigByUnitId, setUnitChallengeConfigByUnitId] = useState<Record<string, ChallengeGenerationConfig>>({});
   const [subjectChallengeConfigBySubjectId, setSubjectChallengeConfigBySubjectId] = useState<Record<string, ChallengeGenerationConfig>>({});
   const [isSubjectsChatOpen, setIsSubjectsChatOpen] = useState(false);
+  const [notesCache, setNotesCache] = useState<Record<string, { notes: string; sources: any[]; grounded_by_rag: boolean }>>({});
+  const [notesLoadingIds, setNotesLoadingIds] = useState<Set<string>>(new Set());
   const [subjectsChatInput, setSubjectsChatInput] = useState('');
   const [subjectsChatMessages, setSubjectsChatMessages] = useState<SubjectsChatMessage[]>([
     {
@@ -601,6 +605,42 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     void loadCurriculum();
   }, [activeSubject?.id, activeSubject?.name, studentId]);
 
+  // Fetch RAG-grounded notes when a 'learn' content item is opened
+  useEffect(() => {
+    if (!detailState || !activeSubject) return;
+    const topicId = detailState.topicId;
+    if (notesCache[topicId] || notesLoadingIds.has(topicId)) return;
+
+    const rawAttrs: CourseAttribute[] = (activeSubject as any)._courseAttributes || [];
+    const matchedAttr = rawAttrs.find((a) => (a._id?.toString() || a.attribute_id) === topicId);
+    if (!matchedAttr) return;
+
+    const subjectMongoId = (activeSubject as any)._id as string | undefined;
+    if (!subjectMongoId) return;
+
+    setNotesLoadingIds((prev) => new Set(prev).add(topicId));
+
+    aiService
+      .generateNotes(
+        subjectMongoId,
+        matchedAttr.name,
+        matchedAttr.name,
+        matchedAttr.level || 'O Level',
+      )
+      .then((result) => {
+        setNotesCache((prev) => ({ ...prev, [topicId]: result }));
+      })
+      .catch(() => {
+        setNotesCache((prev) => ({
+          ...prev,
+          [topicId]: { notes: '', sources: [], grounded_by_rag: false },
+        }));
+      })
+      .finally(() => {
+        setNotesLoadingIds((prev) => { const next = new Set(prev); next.delete(topicId); return next; });
+      });
+  }, [detailState?.topicId, activeSubject]);
+
   useEffect(() => {
     setSelectedUnitIndex(0);
     setDetailState(null);
@@ -615,6 +655,8 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     setSubjectChallengeConfigBySubjectId({});
     setIsSubjectOverviewActive(false);
     setIsSubjectsChatOpen(false);
+    setNotesCache({});
+    setNotesLoadingIds(new Set());
     setSubjectsChatInput('');
     setSubjectsChatPosition(null);
     setSubjectsChatMessages([
@@ -1141,8 +1183,14 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
 
   if (!activeSubject) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500">
-        Select a subject to load curriculum.
+      <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div className="text-4xl mb-4">📚</div>
+        <p className="text-slate-600 font-medium mb-1">No subjects yet</p>
+        <p className="text-slate-400 text-sm">
+          {subjects.length === 0
+            ? 'Your subjects will appear here once your class is assigned.'
+            : 'Select a subject to load curriculum.'}
+        </p>
       </div>
     );
   }
@@ -1384,13 +1432,42 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
                     )}
 
                     <div className="space-y-4 max-w-4xl">
-                      <h3 className="text-2xl font-semibold text-slate-900">What you will learn</h3>
-                      <p className="text-lg text-slate-800">
-                        This section explains <span className="font-semibold">{detailTopic.title.toLowerCase()}</span> and how it connects to unit mastery.
-                      </p>
-                      <p className="text-lg text-slate-800">
-                        Work through the explanations first, then move to practice for one-by-one question attempts.
-                      </p>
+                      <h3 className="text-2xl font-semibold text-slate-900">{detailTopic.title}</h3>
+                      {notesLoadingIds.has(detailTopic.id) ? (
+                        <div className="space-y-3 animate-pulse">
+                          {[...Array(5)].map((_, i) => (
+                            <div key={i} className={`h-4 rounded bg-slate-200 ${i % 3 === 0 ? 'w-2/3' : 'w-full'}`} />
+                          ))}
+                        </div>
+                      ) : notesCache[detailTopic.id]?.notes ? (
+                        <>
+                          <div className="prose prose-slate max-w-none text-base">
+                            <ReactMarkdown>{notesCache[detailTopic.id].notes}</ReactMarkdown>
+                          </div>
+                          <div className={`mt-4 inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold ${notesCache[detailTopic.id].grounded_by_rag ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                            {notesCache[detailTopic.id].grounded_by_rag ? (
+                              <>
+                                <BookOpen className="w-3.5 h-3.5" />
+                                Grounded by your teacher's uploaded materials
+                                {notesCache[detailTopic.id].sources.length > 0 && (
+                                  <span className="ml-1 font-normal opacity-75">
+                                    ({[...new Set(notesCache[detailTopic.id].sources.map((s: any) => s.source_file).filter(Boolean))].join(', ')})
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5" />
+                                AI-generated from ZIMSEC curriculum knowledge
+                              </>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-lg text-slate-800">
+                          Work through the explanations first, then move to practice for one-by-one question attempts.
+                        </p>
+                      )}
                     </div>
 
                     <div className="border-t border-slate-200 pt-4">

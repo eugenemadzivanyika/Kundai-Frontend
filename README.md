@@ -1,245 +1,295 @@
-# KundAI (Kundai)
-## Data models (summary)
-Representative models (more present in `server/models`):
-# KundAI (Kundai)
+# KundAI — AI-Powered Lecturer-Student Development System
 
-A full-stack educational platform combining a Vite + React front-end with an Express + Node backend, MongoDB persistence, real-time messaging via Socket.io, scheduled jobs, and resource management features.
+A full-stack educational management platform built for Zimbabwe's primary and secondary school context. KundAI connects teachers, students, and parents through real-time performance tracking, AI-powered assessment, personalized development plans, and a shared communication hub.
 
-## Table of contents
+---
 
-- Project overview
-- System architecture
-- Tech stack
-- Project structure
-- Installation & prerequisites
-- Environment variables
-- Running the project
-- API overview
-- Data models (summary)
-- Background jobs & cron
-- Front-end
-- Deployment notes
-- Tests & verification
-- Contribution
-- License
+## Architecture
 
-## Project overview
+KundAI is composed of three independent services:
 
-KundAI (Kundai) is a learning management and analytics system. It exposes a REST API for core resources (students, courses, resources, submissions, assessments, notifications, etc.), serves a React-based front-end, uses Socket.io for real-time chat, and runs periodic background jobs (e.g., resource sync).
+```
+[Browser / React Client]
+        ↕ HTTP / WebSocket
+[kundai-server]  ←→  [kundai-ai-services-backend]
+  Node.js / Express         Python / FastAPI
+  Port: 5000                Port: 8000
+        ↕
+     MongoDB
+```
 
-This README documents the system architecture, key components, setup and run instructions, API surface, data models, and operational notes to help developers run and extend the system.
+| Service | Stack | Purpose |
+|---|---|---|
+| `kundai-frontend` | React 18, TypeScript, Vite, Tailwind CSS | UI for all user roles |
+| `kundai-server` | Node.js, Express 5, MongoDB, Socket.IO | Core REST API, auth, real-time chat |
+| `kundai-ai-services-backend` | Python, FastAPI, Gemini, Tesseract | AI/ML endpoints (OCR, grading, BKT, development plans) |
 
-## System architecture
+---
 
-High-level flow:
+## Portals
 
-Client (Vite + React)
-  ↕ (HTTP / WebSocket)
-Express API (server/index.js)
-  ↕
-MongoDB (via Mongoose)
+### Teacher Portal (`/dashboard`, `/classroom`, `/resources`, etc.)
+- Dashboard with class overview and student performance metrics
+- Classroom view — per-student tracking with subject attributes
+- Development plan creation per student per course
+- AI resource viewer — Gemini-generated explanations of uploaded materials
+- Assessment management: create, edit, review, grade, and analyse
+- AI assessment generator (multi-step wizard with Gemini)
+- Assignment marking dashboard with AI grading + manual override
+- Staffroom inbox for teacher-to-teacher messaging
+- Academic calendar with event management
+- Resources dashboard — upload, organise, and preview course materials
 
-Other components:
-- Static file storage: `uploads/` served at `/uploads`
-- Background jobs: `jobs/syncResourcesJob.js` scheduled with `node-cron`
-- Real-time: Socket.io on the same HTTP server
+### Student Portal (`/student/*`)
+- Home dashboard with personal stats and active development plans
+- Subjects view with per-subject performance breakdown
+- Assignments — view and submit work
+- AI Coach (tutor) — conversational support
+- Peer study rooms
+- Report card view
+- Mastery gaps view (BKT-powered knowledge state)
+- Profile settings
 
-ASCII diagram
+### Admin Portal (`/admin/*`)
+- Dashboard with system-wide metrics
+- User management (create/edit/delete teachers and students)
+- Subjects management
+- Classes management
+- Curriculum management (ZIMSEC-aligned syllabus seeded)
+- Term forecasts
 
-  [Browser / Client] <--HTTP/WebSocket--> [Express + Socket.io Server]
-                                     |
-                                     +--> MongoDB (Mongoose)
-                                     |
-                                     +--> Local uploads/ (static)
-                                     +--> Background jobs (node-cron)
+---
 
-## Tech stack
+## Tech Stack
 
-- Frontend: React, TypeScript, Vite, Tailwind CSS
-- Backend: Node.js (ES Modules), Express, Socket.io
-- Database: MongoDB (via Mongoose)
-- Storage: Local `uploads/` folder (S3 client code present for AWS S3 integrations)
-- Realtime: Socket.io
-- Jobs: node-cron
-- Auth: JSON Web Tokens (jsonwebtoken) and bcryptjs for password hashing
+### Frontend
+- React 18 + TypeScript (Vite)
+- Tailwind CSS + Radix UI + shadcn/ui components
+- React Router v7
+- Socket.IO client (real-time presence + chat)
+- FullCalendar (academic calendar)
+- Recharts (performance visualisations)
+- KaTeX (maths rendering in assessments)
+- pdf.js + mammoth (document preview)
+- React Hook Form + Zod (form validation)
+- Framer Motion (animations)
 
-## Project structure (key files)
+### Backend (Node.js)
+- Express 5 + ES Modules
+- MongoDB via Mongoose 9
+- Socket.IO (real-time messaging, online presence)
+- JWT authentication + bcrypt
+- Multer (file uploads)
+- node-cron (background jobs)
+- pdf-parse + mammoth (document processing)
+- @google/generative-ai (Gemini SDK)
 
-- `server/` - Backend code
-  - `index.js` - Main server entry (Express + Socket.io + cron + routes)
-  - `config/db.js` - MongoDB connection helper
-  - `routes/` - API route modules (e.g. `studentRoutes.js`, `authRoutes.js`, `aiRoutes.js`, ...)
-  - `controllers/` - Route handlers and business logic
-  - `models/` - Mongoose models (Student, User, Course, Resource, Submission, etc.)
-  - `jobs/` - Background jobs (resource sync)
-  - `middleware/` - Auth and error middleware
+### AI Services (Python)
+- FastAPI + Uvicorn
+- google-genai (Gemini)
+- Tesseract / pytesseract (OCR on handwritten/scanned submissions)
+- pdfminer + pdfplumber (PDF text extraction)
+- Pillow + pypdfium2 (image processing)
+- Pydantic v2 (request/response schemas)
 
-- `src/` - Front-end React app (Vite)
-  - `main.tsx` - App bootstrap
-  - `App.tsx` - Routes and layout
-  - `components/` - React components grouped by feature
+---
 
-- `uploads/` - Static files uploaded by users (served via Express at `/uploads`)
-- `data/` - Static JSON fixtures and import scripts used during development
+## API Routes (kundai-server)
 
-## Installation & prerequisites
+| Route | Description |
+|---|---|
+| `POST /api/auth/login` | Login, returns JWT |
+| `GET/POST /api/students` | Student CRUD |
+| `GET/POST /api/assessments` | Assessment management |
+| `GET/POST /api/submissions` | Student submissions |
+| `GET/POST /api/development` | Development plans |
+| `GET/POST /api/resources` | Course resources |
+| `GET/POST /api/courses` | Course management |
+| `GET/POST /api/ai` | AI content generation |
+| `GET/POST /api/ai-tutor` | AI tutor sessions |
+| `GET/POST /api/chat` | Real-time chat |
+| `GET/POST /api/chats` | Chat history |
+| `GET/POST /api/notifications` | Notifications |
+| `GET/POST /api/calendar` | Calendar events |
+| `GET/POST /api/staff-messages` | Staff-to-staff messaging |
+| `GET/POST /api/staff` | Teacher profiles |
+| `GET/POST /api/class-groups` | Class group management |
+| `GET/POST /api/admin` | Admin operations |
+| `GET/POST /api/whatsapp` | WhatsApp bot integration |
 
-Prerequisites:
-- Node.js (v18+ recommended)
-- npm (or yarn)
-- MongoDB instance (local or remote)
+## API Routes (kundai-ai-services-backend)
 
-Install dependencies:
+| Route | Description |
+|---|---|
+| `GET /health` | Service health check |
+| `POST /ocr/extract` | OCR on uploaded images/PDFs (Gemini Vision + Tesseract) |
+| `POST /asag/grade` | Automated Short Answer Grading |
+| `POST /bkt/update` | Bayesian Knowledge Tracing — update student knowledge state |
+| `POST /development-plan/generate` | Generate personalised student development plan |
+| `POST /devplan-content/generate` | Generate content for development plan steps |
+| `POST /assessment/generate` | Generate assessments from syllabus topics |
+| `POST /ai-tutor/chat` | AI tutor conversational endpoint |
+| `POST /agents/route` | Multi-agent routing |
+| `POST /content/generate` | Lesson notes and content generation |
+| `GET /resources` | Resource management |
 
+---
+
+## Data Models (kundai-server)
+
+| Model | Key Fields |
+|---|---|
+| `User` | firstName, lastName, email, password, role, avatar |
+| `Student` | userId, overall, engagement, strength, performance, courses, activePlan |
+| `TeacherProfile` | userId, subjects, classes |
+| `Course` | name, code, teacher, students, attributes |
+| `CourseAttribute` | course, name, weight (ZIMSEC syllabus-aligned) |
+| `Assessment` | title, course, questions, dueDate, type, aiGenerated |
+| `Submission` | student, assessment, answers, aiScore, teacherScore, feedback |
+| `StudentPlan` | student, course, recommendations, strengthAreas, improvementAreas |
+| `StudentAttribute` | student, course, attribute, score |
+| `Result` | student, assessment, finalScore |
+| `Resource` | course, title, fileType, s3Key / localPath |
+| `AIGeneratedResource` | resource, generatedContent, model |
+| `CalendarEvent` | title, start, end, type, course |
+| `Message` | sender, receiver, chatId, content, readStatus |
+| `StaffMessage` | sender, receivers, subject, body |
+| `Notification` | user, type, message, read |
+| `PeerStudy` | participants, topic, course, status |
+| `TutorSession` | student, messages, course, topic |
+| `QuestionBank` | course, topic, questions (ZIMSEC-seeded) |
+| `TermForecast` | class, term, projectedScores |
+| `ClassGroup` | name, teacher, students, courses |
+| `WhatsappSession` | phoneNumber, userId, state |
+
+---
+
+## Background Jobs
+
+| Job | Schedule | Description |
+|---|---|---|
+| `syncResourcesJob` | Every minute (dev) / daily 3am (production) | Syncs resource metadata |
+| `retryAIGradingJob` | Every 5 minutes | Retries AI grading for submissions that failed while AI service was unavailable |
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+- Node.js 18+
+- Python 3.10+
+- MongoDB (local or remote)
+- Tesseract OCR installed on the system (`sudo apt install tesseract-ocr`)
+- Google Gemini API key
+
+### 1. Clone and install frontend
 ```bash
+cd kundai-frontend
 npm install
 ```
 
-Create a `.env` file in the project root with the environment variables described in the next section.
+### 2. Install server dependencies
+```bash
+cd kundai-server
+npm install
+```
 
-## Environment variables
+### 3. Set up Python AI services
+```bash
+cd kundai-ai-services-backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-Create a `.env` (not committed) file and set at least the following:
+### 4. Environment variables
 
-- `MONGO_URI` - MongoDB connection string
-- `PORT` - (optional) server port, default 5000
-- `CLIENT_URL` - (optional) front-end origin allowed by CORS (e.g. `http://localhost:5173`)
-- `JWT_SECRET` - secret used for JWT token generation
-- (Optional / AWS) `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` if S3 uploads are used
-
-Example `.env` (do NOT commit):
-
+**kundai-server/.env**
 ```env
 MONGO_URI=mongodb://localhost:27017/kundai
 PORT=5000
 CLIENT_URL=http://localhost:5173
-JWT_SECRET=replace-with-secure-secret
+JWT_SECRET=your-jwt-secret
+GEMINI_API_KEY=your-gemini-key
+AWS_ACCESS_KEY_ID=optional
+AWS_SECRET_ACCESS_KEY=optional
+AWS_REGION=optional
+S3_BUCKET=optional
 ```
 
-## Running the project
+**kundai-ai-services-backend/.env**
+```env
+GEMINI_API_KEY=your-gemini-key
+AI_SERVICE_PORT=8000
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
 
-The repository includes convenient npm scripts in `package.json`.
+**kundai-frontend/.env**
+```env
+VITE_API_URL=http://localhost:5000
+VITE_AI_API_URL=http://localhost:8000
+```
 
-- `npm run dev` — Starts both the front-end dev server (Vite) and the backend with `nodemon` (uses `concurrently`). Ideal for local development.
-- `npm run server` — Start only the backend server: `node server/index.js`.
-- `npm run build` — Build the front-end for production.
-
-Development (both client & server):
+### 5. Run all services
 
 ```bash
-npm run dev
+# Terminal 1 — Frontend
+cd kundai-frontend && npm run dev
+
+# Terminal 2 — Node.js backend
+cd kundai-server && npm run dev
+
+# Terminal 3 — Python AI services
+cd kundai-ai-services-backend
+source venv/bin/activate
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-Start only server (useful in production or testing):
-
-```bash
-npm run server
-```
-
-Notes:
-- `dev` uses `concurrently` to run `vite` and `nodemon server/index.js` together.
-- `server/index.js` creates an HTTP server and attaches Socket.io. It also schedules the resource sync job with `node-cron`.
-
-## API overview
-
-All API routes are mounted under `/api/*` in `server/index.js`:
-
-- `/api/auth` - Authentication (login, register, token)
-- `/api/students` - Student profiles and operations
-- `/api/assessments` - Assessments management
-- `/api/development` - Development plan endpoints
-- `/api/chat` - Chat endpoints
-- `/api/resources` - Uploads, resource listing and sync
-- `/api/courses` - Courses and curriculum
-- `/api/ai` - AI endpoints (document processing / AI features)
-- `/api/submissions` - Student submissions
-- `/api/notifications` - Notifications/alerts
-
-Static uploads are served from `/uploads` (Express static middleware).
-
-Realtime: Socket.io is attached to the same HTTP server and supports events such as `join_chat`, `send_message`, and `receive_message`. The server namespace and CORS are configured in `server/index.js`.
-
-Error handling middleware is located in `server/middleware/errorMiddleware.js`.
-
-For full route details, inspect `server/routes/*.js` and their respective controllers in `server/controllers/`.
-
-## Data models (summary)
-
-Representative models (more present in `server/models`):
-
-- Student (`server/models/studentModel.js`):
-  - Fields: `id`, `firstName`, `lastName`, `email`, `overall`, `engagement`, `strength`, `performance`, `courses` (refs), `activePlan` (ref)
-  - Uses virtual populate for `attributes` and `plans`.
-
-- User (`server/models/userModel.js`):
-- User (`server/models/userModel.js`):
-  - Fields: `firstName`, `lastName`, `email`, `password` (hashed), `avatar`, `role`, `studentId` (optional link)
-  - Password hashing via bcrypt in `pre('save')` and `matchPassword` method.
-
-Other models include `courseModel`, `resourceModel`, `submissionModel`, `assessmentModel`, `notificationModel`, `studentAttributeModel`, `studentPlanModel`, `resultModel`, and `planModel`. Inspect `server/models` for detailed schemas.
-
-## Background jobs & cron
-
-- `jobs/syncResourcesJob.js` is scheduled from `server/index.js` using `node-cron`. In the current development branch the schedule is configured to run every minute (`'* * * * *'`) — adjust to a sensible production schedule (e.g., `0 3 * * *` for daily at 3am) in `server/index.js`.
-
-## Front-end overview
-
-- Bootstrapped with Vite + React + TypeScript.
-- `src/main.tsx` renders the app and mounts `App.tsx` inside a `BrowserRouter`.
-- `App.tsx` contains the React Router routes and redirects for authenticated users. Authentication state is provided via `context/AuthContext.tsx`.
-- Styling: Tailwind CSS and utility components under `src/components/ui`.
-
-## Deployment notes
-
-Typical production flow for a simple deploy:
-
-1. Build the front-end:
-
-```bash
-npm run build
-```
-
-2. Serve the built front-end using a static host (Vercel, Netlify, S3 + CloudFront) or serve via Express (add a static middleware pointing to the `dist` folder).
-
-3. Start the server:
-
-```bash
-NODE_ENV=production node server/index.js
-```
-
-Consider using process managers like PM2 or systemd for the backend, and ensure `MONGO_URI` and `JWT_SECRET` are set in your production environment. For scaling, run multiple server instances behind a load balancer and use a shared S3 or CDN for file uploads.
-
-## Tests & verification
-
-There are no automated test scripts in this repository yet. Recommended quick checks:
-
-- Run `npm run dev` and verify the front-end loads at `http://localhost:5173` and the API responds at `http://localhost:5000`.
-- Use Postman or curl to hit: `GET /api/students` and `GET /` (root returns "API is running...").
-- Ensure MongoDB connection string (`MONGO_URI`) is correct and the server logs `MongoDB Connected` on start.
-
-Suggested next steps: add unit tests for controllers and integration tests for main routes using Jest + Supertest.
-
-## Contribution
-
-Contributions welcome. Typical workflow:
-
-1. Fork the repository.
-2. Create a feature branch `feature/your-feature`.
-3. Make changes and include tests where appropriate.
-4. Open a pull request describing the change.
-
-Please follow existing code style and lint rules (`npm run lint`).
-
-## License
-
-Specify your license here (e.g., MIT). If you don't want to open-source the code, note that here.
 
 ---
 
-If you'd like, I can also:
+## Seeded Data
 
-- Add an `.env.example` with required environment variables.
-- Create a short `DEVELOPMENT.md` with quick run & debug tips.
-- Add a simple Dockerfile and docker-compose for local development.
+The server includes ZIMSEC-aligned syllabus data for the question bank and course attributes:
 
-Tell me which of those you'd like next and I will implement them.
+```
+kundai-server/scripts/
+  zimsec_kundai_dataset_batch1.json
+  zimsec_batch2.json
+  zimsec_batch3_remaining.json
+  syllabus_attributes.json
+```
+
+Seed with:
+```bash
+cd kundai-server
+node scripts/seedSyllabus.js
+node scripts/seedQuestions.js
+```
+
+---
+
+## AI Services Documentation (FastAPI)
+
+Auto-generated docs available when the AI service is running:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+---
+
+## Developer Notes
+
+- `kundai-frontend/src/components/student v1.2/` contains the newer student portal components actively in use
+- `.bak` files in the server controllers are old backups — safe to delete
+- The cron job for `syncResourcesJob` is set to run every minute in the current config — change to `0 3 * * *` for production
+- WhatsApp bot (`/api/whatsapp`) gives students access to the AI tutor and their development plans via WhatsApp-only data bundles — currently experimental. SMS access (for feature phone users with no data) is planned as the third tier of a web → WhatsApp → SMS connectivity model
+
+---
+
+## Project
+
+BSc Honours in Cloud Computing and Internet of Things
+Faculty of Computer Engineering, Informatics and Communications
+University of Zimbabwe
+
+Developer: Eugene Madzivanyika (R204525V)
+Supervisor: Mr T Rupere

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DevelopmentPlan, Student, SkillColor } from '../../types';
 import { studentService, developmentService } from '../../services/api';
-import { Activity, Plus, ChevronDown, Zap, Check, MoreVertical, Trash2 } from 'lucide-react';
+import { Activity, Plus, ChevronDown, Zap, Check, MoreVertical, Trash2, AlertTriangle, Pause } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DevelopmentViewProps {
@@ -86,11 +86,15 @@ function scoreColor(score: number): string {
 
 // ── Status pill ───────────────────────────────────────────────────────────────
 const STATUS_MAP: Record<string, { bg: string; color: string; border: string }> = {
-  'Completed':   { bg: '#f0fdfa', color: '#0d9488', border: '#99f6e4' },
-  'In Progress': { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
-  'Pending':     { bg: '#f4f4f5', color: '#71717a', border: '#d4d4d8' },
-  'Draft':       { bg: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' },
-  'Active':      { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
+  'Completed':     { bg: '#f0fdfa', color: '#0d9488', border: '#99f6e4' },
+  'In Progress':   { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
+  'Pending':       { bg: '#f4f4f5', color: '#71717a', border: '#d4d4d8' },
+  'Draft':         { bg: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' },
+  'Active':        { bg: '#ccfbf1', color: '#0f766e', border: '#5eead4' },
+  'On Hold':       { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+  'Pending Audit': { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
+  'Mastered':      { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' },
+  'Failed':        { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
 };
 
 const StatusPill: React.FC<{ status: string }> = ({ status }) => {
@@ -248,6 +252,11 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
   const [error, setError] = useState<string | null>(null);
   const [expandedSkill, setExpandedSkill] = useState<number | null>(null);
   const [isActivating, setIsActivating] = useState(false);
+  const [activateConflict, setActivateConflict] = useState<{
+    conflictingPlan: { _id: string; title: string; progress: number };
+    pendingPlanId: string;
+    pendingPlanTitle: string;
+  } | null>(null);
   const [openKebabId, setOpenKebabId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -361,15 +370,55 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
 
   const handleActivatePlan = async () => {
     if (!currentDisplayPlan) return;
+    const planDoc = asDoc(currentDisplayPlan)!;
     setIsActivating(true);
     try {
-      const updated = await developmentService.activatePlan(asDoc(currentDisplayPlan)!._id);
+      const result = await developmentService.activatePlan(planDoc._id);
+      if ('conflict' in result && result.conflict) {
+        // Another plan is active for this subject — ask teacher to confirm
+        setActivateConflict({
+          conflictingPlan: result.conflictingPlan,
+          pendingPlanId: planDoc._id,
+          pendingPlanTitle: planDoc.title ?? planDoc.name ?? 'This Plan',
+        });
+        return;
+      }
+      const updated = result as DevelopmentPlan;
       setCurrentDisplayPlan(updated);
       setAllStudentDevelopmentPlans(prev =>
         prev.map(p => asDoc(p)?._id === asDoc(updated)?._id ? updated : p)
       );
+      toast.success(`"${planDoc.title ?? 'Plan'}" is now active.`);
     } catch (err) {
       console.error('Failed to activate plan:', err);
+      toast.error('Failed to activate plan.');
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
+  const handleConfirmForceActivate = async () => {
+    if (!activateConflict) return;
+    setIsActivating(true);
+    const { pendingPlanId, conflictingPlan, pendingPlanTitle } = activateConflict;
+    setActivateConflict(null);
+    try {
+      const updated = (await developmentService.activatePlan(pendingPlanId, { force: true })) as DevelopmentPlan;
+      // Reflect the on-hold status of the displaced plan in local state
+      setAllStudentDevelopmentPlans(prev =>
+        prev.map(p => {
+          const doc = asDoc(p);
+          if (!doc) return p;
+          if (doc._id === conflictingPlan._id) return { ...p, status: 'On Hold' } as DevelopmentPlan;
+          if (doc._id === pendingPlanId) return updated;
+          return p;
+        })
+      );
+      setCurrentDisplayPlan(updated);
+      toast.success(`"${pendingPlanTitle}" activated. "${conflictingPlan.title}" is now on hold.`);
+    } catch (err) {
+      console.error('Force activate failed:', err);
+      toast.error('Failed to activate plan.');
     } finally {
       setIsActivating(false);
     }
@@ -607,7 +656,50 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
                       </div>
                     </div>
                   )}
-                  {currentDisplayPlan.status !== 'Active' ? (
+                  {currentDisplayPlan.status === 'Active' ? (
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: '#ccfbf1', color: '#0f766e', border: '1.5px solid #5eead4',
+                      borderRadius: 8, padding: '7px 14px', fontSize: 10, fontWeight: 900,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                      <Zap size={12} /> Active
+                    </span>
+                  ) : currentDisplayPlan.status === 'Mastered' ? (
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: '#f0fdf4', color: '#15803d', border: '1.5px solid #bbf7d0',
+                      borderRadius: 8, padding: '7px 14px', fontSize: 10, fontWeight: 900,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                      <Check size={12} /> Mastered
+                    </span>
+                  ) : currentDisplayPlan.status === 'Failed' ? (
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca',
+                      borderRadius: 8, padding: '7px 14px', fontSize: 10, fontWeight: 900,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                      Failed
+                    </span>
+                  ) : currentDisplayPlan.status === 'On Hold' ? (
+                    <button
+                      onClick={handleActivatePlan}
+                      disabled={isActivating}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        background: isActivating ? '#71717a' : '#c2410c',
+                        color: 'white', border: 'none', borderRadius: 8,
+                        padding: '7px 14px', fontSize: 10, fontWeight: 900,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        cursor: isActivating ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
+                      }}
+                    >
+                      <Pause size={12} />
+                      {isActivating ? 'Resuming…' : 'Resume'}
+                    </button>
+                  ) : (
                     <button
                       onClick={handleActivatePlan}
                       disabled={isActivating}
@@ -623,15 +715,6 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
                       <Zap size={12} />
                       {isActivating ? 'Activating…' : 'Activate'}
                     </button>
-                  ) : (
-                    <span style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      background: '#ccfbf1', color: '#0f766e', border: '1.5px solid #5eead4',
-                      borderRadius: 8, padding: '7px 14px', fontSize: 10, fontWeight: 900,
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                    }}>
-                      <Zap size={12} /> Active
-                    </span>
                   )}
                 </div>
               </div>
@@ -774,6 +857,55 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
       </div>
 
     </div>
+
+      {/* ── Activate conflict confirmation modal ── */}
+      {activateConflict && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={() => setActivateConflict(null)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 14, padding: '28px 28px 22px', maxWidth: 440, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 16 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={18} color="#c2410c" />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Plan conflict</div>
+                <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+                  <strong style={{ color: '#0f172a' }}>"{activateConflict.conflictingPlan.title}"</strong> is currently active
+                  {activateConflict.conflictingPlan.progress > 0 && (
+                    <span> and is <strong style={{ color: '#0f172a' }}>{activateConflict.conflictingPlan.progress}%</strong> complete</span>
+                  )}.
+                  <br /><br />
+                  Activating <strong style={{ color: '#0f172a' }}>"{activateConflict.pendingPlanTitle}"</strong> will put the current plan <strong>on hold</strong>. The student will be notified and their progress is preserved — the paused plan will resume automatically when this one is mastered.
+                </div>
+              </div>
+            </div>
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={13} />
+              Switching plans mid-progress may disrupt the student's learning flow.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                onClick={() => setActivateConflict(null)}
+                style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: 'white', fontSize: 13, fontWeight: 600, color: '#475569', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isActivating}
+                onClick={handleConfirmForceActivate}
+                style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: isActivating ? '#fed7aa' : '#c2410c', fontSize: 13, fontWeight: 600, color: 'white', cursor: isActivating ? 'not-allowed' : 'pointer', fontFamily: 'inherit', minWidth: 120 }}
+              >
+                {isActivating ? 'Activating…' : 'Activate & Pause Current'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (

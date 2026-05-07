@@ -10,9 +10,11 @@ interface UnitMastery {
 
 interface DevelopmentAttributesViewProps {
   student: Student;
+  courseId?: string;
+  courseName?: string;
 }
 
-const DevelopmentAttributesView: React.FC<DevelopmentAttributesViewProps> = ({ student }) => {
+const DevelopmentAttributesView: React.FC<DevelopmentAttributesViewProps> = ({ student, courseId, courseName }) => {
   const [unitMasteries, setUnitMasteries] = useState<UnitMastery[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [allPlans, setAllPlans] = useState<DevelopmentPlan[]>([]);
@@ -25,7 +27,7 @@ const DevelopmentAttributesView: React.FC<DevelopmentAttributesViewProps> = ({ s
       setLoading(true);
       setError(null);
       try {
-        const response = await studentService.getStudentDevelopment(student._id);
+        const response = await studentService.getStudentDevelopment(student._id, courseId ? { courseId } : undefined);
         setUnitMasteries(response.unitMasteries || []);
 
         const plans: DevelopmentPlan[] = await developmentService.getAllPlansForStudent(student._id);
@@ -40,7 +42,7 @@ const DevelopmentAttributesView: React.FC<DevelopmentAttributesViewProps> = ({ s
       }
     };
     fetchData();
-  }, [student]);
+  }, [student, courseId]);
 
   if (loading) {
     return (
@@ -59,6 +61,13 @@ const DevelopmentAttributesView: React.FC<DevelopmentAttributesViewProps> = ({ s
     <div className="bg-white rounded-lg shadow-xl p-0 flex flex-col h-full overflow-hidden border border-slate-200">
 
       <div className="p-4 overflow-y-auto flex-1 min-h-0 space-y-4 custom-scrollbar">
+
+        {/* Subject scope label */}
+        {courseName && (
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            Showing attributes for: <span className="text-blue-600">{courseName}</span>
+          </div>
+        )}
 
         {/* Plan Section */}
         <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">

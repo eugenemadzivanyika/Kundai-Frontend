@@ -66,11 +66,11 @@ export const developmentService = {
       body: JSON.stringify(planData),
     }),
 
-  activatePlan: (planId: string, teacherNotes?: string) =>
-    fetchData<DevelopmentPlan>(`/development/plans/${planId}/activate`, {
-      method: 'PUT',
-      body: JSON.stringify({ teacherNotes }),
-    }),
+  activatePlan: (planId: string, options?: { teacherNotes?: string; force?: boolean }) =>
+    fetchData<DevelopmentPlan | { conflict: true; conflictingPlan: { _id: string; title: string; progress: number } }>(
+      `/development/plans/${planId}/activate`,
+      { method: 'PUT', body: JSON.stringify(options ?? {}) }
+    ),
 
   deletePlan: (planId: string) =>
     fetchData<{ message: string }>(`/development/plans/${planId}`, { method: 'DELETE' }),

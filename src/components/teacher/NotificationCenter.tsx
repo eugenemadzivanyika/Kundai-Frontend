@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, X, Eye, CheckCircle, Clock, AlertCircle, FileText, User } from 'lucide-react';
+import { Bell, X, Eye, CheckCircle, Clock, AlertCircle, FileText, User, BookOpen } from 'lucide-react';
 import { notificationService, submissionService } from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import SubmissionReviewModal from './SubmissionReviewModal';
@@ -36,7 +36,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     try {
       setLoading(true);
       const response = await notificationService.getNotifications(1, 50);
-      setNotifications(response.notifications);
+      setNotifications(response);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -80,6 +80,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         return <FileText className={`w-5 h-5 ${iconClass}`} />;
       case 'plan_assigned':
         return <User className={`w-5 h-5 ${iconClass}`} />;
+      case 'coverage_updated':
+        return <BookOpen className={`w-5 h-5 text-green-500`} />;
       default:
         return <Bell className={`w-5 h-5 ${iconClass}`} />;
     }

@@ -10,6 +10,7 @@ import GradingDashboard from './components/teacher/GradingDashboard';
 import Login from './components/pages/Login';
 import MainLayout from './components/layout/MainLayout';
 import AdminLayout from './components/layout/AdminLayout';
+import SysAdminLayout from './components/layout/SysAdminLayout';
 import StudentDashboard from './components/student/StudentDashboard';
 import NotFound from './components/pages/NotFound';
 import DevelopmentPage from './pages/DevelopmentPage';
@@ -25,6 +26,10 @@ import AssessmentsDashboardPage from './pages/AssessmentsDashboardPage';
 import AssessmentDetailPage from './pages/AssessmentDetailPage';
 import AssessmentAnalysisPage from './pages/AssessmentAnalysisPage';
 import EditAssessmentPage from './pages/EditAssessmentPage';
+import SysAdminDashboardPage from './components/sysadmin/pages/SysAdminDashboardPage';
+import SysAdminSchoolsPage from './components/sysadmin/pages/SysAdminSchoolsPage';
+import SysAdminPackagesPage from './components/sysadmin/pages/SysAdminPackagesPage';
+import SysAdminSubscriptionsPage from './components/sysadmin/pages/SysAdminSubscriptionsPage';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -61,6 +66,7 @@ function App() {
               (() => {
                 const userStr = localStorage.getItem('user');
                 const user = userStr ? JSON.parse(userStr) : null;
+                if (user?.role === 'sys_admin') return <Navigate to="/sys-admin" replace />;
                 if (user?.role === 'admin') return <Navigate to="/admin" replace />;
                 if (user?.role === 'teacher') return <Navigate to="/dashboard" replace />;
                 if (user?.role === 'student') return <Navigate to="/student/home" replace />;
@@ -71,7 +77,8 @@ function App() {
                 setIsAuthenticated(true);
                 const userStr = localStorage.getItem('user');
                 const user = userStr ? JSON.parse(userStr) : null;
-                if (user?.role === 'admin') navigate('/admin', { replace: true });
+                if (user?.role === 'sys_admin') navigate('/sys-admin', { replace: true });
+                else if (user?.role === 'admin') navigate('/admin', { replace: true });
                 else if (user?.role === 'teacher') navigate('/dashboard', { replace: true });
                 else if (user?.role === 'student') navigate('/student/home', { replace: true });
                 else navigate('/dashboard', { replace: true });
@@ -94,7 +101,17 @@ function App() {
         <Route path="/student/stats" element={renderStudentDashboard()} />
         <Route path="/student/mastery" element={renderStudentDashboard()} />
 
-        {/* --- Admin Portal (own layout, own navigation) --- */}
+        {/* --- Sys Admin Portal --- */}
+        {isAuthenticated && (
+          <Route path="/sys-admin" element={<SysAdminLayout />}>
+            <Route index element={<SysAdminDashboardPage />} />
+            <Route path="schools" element={<SysAdminSchoolsPage />} />
+            <Route path="packages" element={<SysAdminPackagesPage />} />
+            <Route path="subscriptions" element={<SysAdminSubscriptionsPage />} />
+          </Route>
+        )}
+
+        {/* --- School Admin Portal (own layout, own navigation) --- */}
         {isAuthenticated && (
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboardPage />} />

@@ -22,13 +22,16 @@ const ClassroomView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { selectedCourse } = useAuth();
+  const { selectedCourse, selectedClassGroups } = useAuth();
 
   const fetchStudents = useCallback(async () => {
     try {
       setLoading(true);
       const courseId = selectedCourse?.id || selectedCourse?.code;
-      const data = await studentService.getStudents(courseId ? { courseId } : undefined);
+      const filters: { courseId?: string; classGroupIds?: string[] } = {};
+      if (courseId) filters.courseId = courseId;
+      if (selectedClassGroups.length > 0) filters.classGroupIds = selectedClassGroups;
+      const data = await studentService.getStudents(Object.keys(filters).length ? filters : undefined);
 
       const studentsWithPlans = await Promise.all(
         data.map(async (student: any) => {
@@ -52,11 +55,11 @@ const ClassroomView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedCourse]);
+  }, [selectedCourse, selectedClassGroups]);
 
   useEffect(() => {
     fetchStudents();
-  }, [selectedCourse]);
+  }, [selectedCourse, selectedClassGroups]);
 
   const getStudentName = (student: any) => {
     if (student?.user?.firstName) return `${student.user.firstName} ${student.user.lastName}`;
@@ -243,7 +246,11 @@ const ClassroomView: React.FC = () => {
           >
             ✕
           </button>
-          <DevelopmentAttributesView student={selectedStudent} />
+          <DevelopmentAttributesView
+            student={selectedStudent}
+            courseId={selectedCourse?.id || selectedCourse?.code}
+            courseName={selectedCourse?.name}
+          />
         </div>
       )}
 

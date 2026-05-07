@@ -438,9 +438,7 @@ const realPlanBySubjectId = useMemo(() => {
         const studentData = await studentService.getStudent(currentUser.studentId);
         setStudent(studentData);
 
-        // getCourses is scoped server-side: students only receive courses they
-        // are enrolled in (or courses for their form level if not yet enrolled).
-        const fetchedSubjects = await courseService.getCourses().catch(() => []);
+        const fetchedSubjects = await studentService.getMySubjects().catch(() => []);
         const normalized = fetchedSubjects.map((s: any) => ({ ...(s || {}), id: s?.id || s?._id }));
         setSubjects(normalized as Course[]);
 
