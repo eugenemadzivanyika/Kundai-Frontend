@@ -509,6 +509,12 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     },
   ]);
   const [subjectsChatPosition, setSubjectsChatPosition] = useState<{ x: number; y: number } | null>(null);
+  const [subjectsChatHistory, setSubjectsChatHistory] = useState<
+    Array<{ role: 'user' | 'assistant'; content: string }>
+  >([]);
+  const [subjectsChatIsLoading, setSubjectsChatIsLoading] = useState(false);
+  const [topicPracticeCache, setTopicPracticeCache] = useState<Record<string, PracticeQuestion[]>>({});
+  const [topicPracticeLoadingIds, setTopicPracticeLoadingIds] = useState<Set<string>>(new Set());
   const subjectsChatFloatingRef = useRef<HTMLDivElement | null>(null);
   const subjectsChatDragStateRef = useRef<SubjectsChatDragState | null>(null);
   const subjectsChatDragCleanupRef = useRef<(() => void) | null>(null);
@@ -576,15 +582,24 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
 
         const mappedUnits = mapAttributesToUnits(courseAttrs, studentAttrs);
         // Stash the raw attributes on the subject object for the challenge generator
-        if (activeSubject) (activeSubject as any)._courseAttributes = courseAttrs;
+        if (activeSubject) {
+          (activeSubject as any)._courseAttributes = courseAttrs;
+          (activeSubject as any)._studentAttributes = studentAttrs;
+        }
         setBackendUnits(mappedUnits);
 
         // Build a minimal subjectOverview-compatible object so the rest of
         // the component (challenge eligibility, etc.) keeps working.
+        const MIN_UNIT_MASTERY_FOR_ELIGIBILITY = 40;
         setSubjectOverview({
           challengeEligibility: {
-            eligible: mappedUnits.length > 0,
-            reason: mappedUnits.length === 0 ? 'No syllabus attributes published yet.' : null,
+            eligible:
+              mappedUnits.length > 0 &&
+              mappedUnits.every((u) => u.masteryPercent >= MIN_UNIT_MASTERY_FOR_ELIGIBILITY),
+            reason:
+              mappedUnits.length === 0
+                ? 'No syllabus attributes published yet.'
+                : `Complete all units to at least ${MIN_UNIT_MASTERY_FOR_ELIGIBILITY}% mastery to unlock the subject challenge.`,
           },
         } as any);
 
@@ -658,6 +673,10 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     setNotesCache({});
     setNotesLoadingIds(new Set());
     setSubjectsChatInput('');
+    setSubjectsChatHistory([]);
+    setSubjectsChatIsLoading(false);
+    setTopicPracticeCache({});
+    setTopicPracticeLoadingIds(new Set());
     setSubjectsChatPosition(null);
     setSubjectsChatMessages([
       {
@@ -775,6 +794,55 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     }
   };
 
+  const fetchTopicPracticeQuestions = async (
+    topicId: string,
+    topicTitle: string,
+    attribute: CourseAttribute,
+  ): Promise<PracticeQuestion[]> => {
+    if (topicPracticeCache[topicId]) return topicPracticeCache[topicId];
+    if (topicPracticeLoadingIds.has(topicId)) return [];
+
+    setTopicPracticeLoadingIds((prev) => new Set(prev).add(topicId));
+    try {
+      const data = await fetchAiData<{ questions?: Array<{
+        id?: string;
+        prompt?: string;
+        options?: string[];
+        correctOptionIndex?: number;
+        explanation?: string;
+      }> }>('/devPlan-content-gen/unit-challenge', {
+        method: 'POST',
+        body: JSON.stringify({
+          attributes: [attribute],
+          unit_title: topicTitle,
+          subject_name: activeSubject?.name || topicTitle,
+          count: 5,
+          difficulty: 'medium',
+        }),
+      });
+
+      const rawQuestions = data?.questions || [];
+      if (rawQuestions.length === 0) throw new Error('No questions returned');
+
+      const mapped: PracticeQuestion[] = rawQuestions.map((q, i) => ({
+        id:                   q.id || `tp-${topicId}-${i + 1}`,
+        type:                 'single' as const,
+        prompt:               q.prompt || `Question ${i + 1}`,
+        options:              q.options || [],
+        correctOptionIndexes: [q.correctOptionIndex ?? 0],
+      }));
+
+      setTopicPracticeCache((prev) => ({ ...prev, [topicId]: mapped }));
+      return mapped;
+    } catch {
+      const fallback = buildMockPracticeQuestions(`${activeSubject?.name} ${topicTitle}`, 'quiz');
+      setTopicPracticeCache((prev) => ({ ...prev, [topicId]: fallback }));
+      return fallback;
+    } finally {
+      setTopicPracticeLoadingIds((prev) => { const next = new Set(prev); next.delete(topicId); return next; });
+    }
+  };
+
   const generateUnitChallengeWithAi = async () => {
     if (!activeSubject || !selectedUnit) return;
     const currentConfig = selectedUnitChallengeConfig;
@@ -809,40 +877,74 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
   const generateSubjectChallengeWithAi = async () => {
     if (!activeSubject) return;
     if (!isSubjectChallengeEligible) {
-      updateSubjectChallengeConfig((current) => ({
-        ...current,
-        error: subjectChallengeBlockedReason || 'Subject challenge is currently unavailable.',
+      updateSubjectChallengeConfig((c) => ({
+        ...c, error: subjectChallengeBlockedReason || 'Subject challenge not yet available.',
       }));
       return;
     }
+
     const currentConfig = selectedSubjectChallengeConfig;
-    updateSubjectChallengeConfig((current) => ({ ...current, isGenerating: true, error: null }));
+    updateSubjectChallengeConfig((c) => ({ ...c, isGenerating: true, error: null }));
 
-    // For the subject challenge we pull questions from each unit and combine
-    const allUnitQuestions: PracticeQuestion[] = [];
-    const perUnit = Math.ceil(currentConfig.questionCount / Math.max(units.length, 1));
+    const rawAttrs: CourseAttribute[] = (activeSubject as any)._courseAttributes || [];
+    const rawStudentAttrs: StudentAttribute[] = (activeSubject as any)._studentAttributes || [];
 
-    for (const unit of units) {
-      const { questions: aiQuestions } = await fetchAiChallengeQuestions(
-        [],
-        unit.title,
-        perUnit,
-        currentConfig.difficulty,
-      );
-      allUnitQuestions.push(...aiQuestions);
-    }
+    // Build student_attrs payload: merge mastery data onto each CourseAttribute
+    const masteryMap = new Map<string, number>();
+    rawStudentAttrs.forEach((sa) => {
+      const id = (sa.attribute as any)?._id?.toString() || (sa.attribute as any)?.toString() || '';
+      if (id) masteryMap.set(id, sa.currentMastery || 0);
+    });
 
-    const finalQuestions = allUnitQuestions.length > 0
-      ? allUnitQuestions.slice(0, currentConfig.questionCount)
-      : buildSubjectChallengeQuestions(units, currentConfig.questionCount);
-
-    updateSubjectChallengeConfig((current) => ({
-      ...current,
-      questions: finalQuestions,
-      isGenerating: false,
-      generatedWithAi: allUnitQuestions.length > 0,
-      error: allUnitQuestions.length === 0 ? 'AI generation unavailable — using practice questions instead.' : null,
+    const studentAttrs = rawAttrs.map((a) => ({
+      name: a.name,
+      attribute_id: a.attribute_id,
+      description: a.description || '',
+      mastery: masteryMap.get(a._id?.toString() || '') ?? 0,
     }));
+
+    try {
+      const data = await fetchAiData<{
+        title?: string;
+        questions?: Array<{
+          id?: string; prompt?: string; options?: string[];
+          correctOptionIndex?: number; explanation?: string;
+        }>;
+      }>('/devPlan-content-gen/subject-challenge', {
+        method: 'POST',
+        body: JSON.stringify({
+          subject_id:    (activeSubject as any)._id,
+          subject_name:  activeSubject.name,
+          student_attrs: studentAttrs,
+          count:         currentConfig.questionCount,
+          difficulty:    currentConfig.difficulty,
+        }),
+      });
+
+      const rawQuestions = data?.questions ?? [];
+      if (rawQuestions.length === 0) throw new Error('No questions returned');
+
+      const mapped: PracticeQuestion[] = rawQuestions.map((q, i) => ({
+        id:                   q.id || `sc-${i + 1}`,
+        type:                 'single' as const,
+        prompt:               q.prompt || `Question ${i + 1}`,
+        options:              q.options || [],
+        correctOptionIndexes: [q.correctOptionIndex ?? 0],
+      }));
+
+      updateSubjectChallengeConfig((c) => ({
+        ...c, questions: mapped, isGenerating: false, generatedWithAi: true, error: null,
+      }));
+    } catch {
+      const fallback = buildSubjectChallengeQuestions(units, currentConfig.questionCount);
+      updateSubjectChallengeConfig((c) => ({
+        ...c,
+        questions: fallback,
+        isGenerating: false,
+        generatedWithAi: false,
+        error: 'AI unavailable — using curriculum practice questions instead.',
+      }));
+    }
   };
 
   const openSubjectOverview = () => {
@@ -907,25 +1009,53 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     }));
   };
 
-  const sendSubjectsChatMessage = () => {
+  const sendSubjectsChatMessage = async () => {
     const message = subjectsChatInput.trim();
-    if (!message) return;
+    if (!message || subjectsChatIsLoading) return;
 
     const studentMessage: SubjectsChatMessage = {
       id: `subjects-student-${Date.now()}`,
       sender: 'student',
       text: message,
     };
-
-    const focusLabel = detailTopic?.title || selectedUnit?.title || activeSubject?.name || 'this topic';
-    const coachReply: SubjectsChatMessage = {
-      id: `subjects-coach-${Date.now() + 1}`,
-      sender: 'coach',
-      text: `Focus on "${focusLabel}". Review one example, then attempt one practice item and explain each step.`,
-    };
-
-    setSubjectsChatMessages((previous) => [...previous, studentMessage, coachReply]);
+    setSubjectsChatMessages((prev) => [...prev, studentMessage]);
     setSubjectsChatInput('');
+    setSubjectsChatIsLoading(true);
+
+    const subjectMongoId = (activeSubject as any)?._id as string | undefined;
+    const topicId = detailState?.topicId;
+    const notes = topicId ? notesCache[topicId]?.notes ?? '' : '';
+    const topicTitle = detailTopic?.title ?? selectedUnit?.title ?? activeSubject?.name ?? 'this topic';
+
+    try {
+      const result = await aiService.chatAboutTopic(
+        subjectMongoId ?? '',
+        topicTitle,
+        notes,
+        message,
+        subjectsChatHistory,
+      );
+      const coachReply: SubjectsChatMessage = {
+        id: `subjects-coach-${Date.now()}`,
+        sender: 'coach',
+        text: result.answer,
+      };
+      setSubjectsChatMessages((prev) => [...prev, coachReply]);
+      setSubjectsChatHistory((prev) => [
+        ...prev,
+        { role: 'user', content: message },
+        { role: 'assistant', content: result.answer },
+      ]);
+    } catch {
+      const errorReply: SubjectsChatMessage = {
+        id: `subjects-coach-error-${Date.now()}`,
+        sender: 'coach',
+        text: 'Sorry, I could not reach the AI at the moment. Try again in a few seconds.',
+      };
+      setSubjectsChatMessages((prev) => [...prev, errorReply]);
+    } finally {
+      setSubjectsChatIsLoading(false);
+    }
   };
 
   const clampSubjectsChatPosition = (x: number, y: number) => {
@@ -1375,7 +1505,25 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
                     key={`${detailTopic.id}-${selectedDetailItem.practice.id}`}
                     title={selectedDetailItem.practice.title}
                     subtitle="Practice questions run on a dedicated screen and are answered one by one."
-                    questions={buildMockPracticeQuestions(`${activeSubject.name} ${selectedDetailItem.practice.title}`, 'quiz')}
+                    questions={(() => {
+                      const topicId = detailTopic.id;
+                      const cached = topicPracticeCache[topicId];
+                      if (cached) return cached;
+
+                      // Trigger a fetch if not loading yet
+                      if (!topicPracticeLoadingIds.has(topicId)) {
+                        const rawAttrs: CourseAttribute[] = (activeSubject as any)._courseAttributes || [];
+                        const matchedAttr = rawAttrs.find(
+                          (a) => (a._id?.toString() || a.attribute_id) === topicId
+                        );
+                        if (matchedAttr) {
+                          void fetchTopicPracticeQuestions(topicId, detailTopic.title, matchedAttr);
+                        }
+                      }
+
+                      // Return mock questions as placeholder while loading
+                      return buildMockPracticeQuestions(`${activeSubject.name} ${selectedDetailItem.practice.title}`, 'quiz');
+                    })()}
                     contentWrapperClassName="px-6 py-6 pb-8 space-y-6 md:pb-12"
                     fixedFooterStyle={{
                       left: 'var(--subjects-footer-left)',
@@ -2402,10 +2550,15 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
                     <button
                       type="button"
                       onClick={sendSubjectsChatMessage}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                      disabled={subjectsChatIsLoading}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed"
                       aria-label="Send message"
                     >
-                      <Send className="h-4 w-4" />
+                      {subjectsChatIsLoading ? (
+                        <span className="text-xs font-bold">…</span>
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>

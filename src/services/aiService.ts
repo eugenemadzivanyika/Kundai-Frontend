@@ -119,6 +119,25 @@ generateQuestions: async (params: GenerateQuestionsParams): Promise<Assessment> 
     return fetchAiData(`/rag/status/${subjectId}`);
   },
 
+  chatAboutTopic: async (
+    subjectId: string,
+    topic: string,
+    notesContext: string,
+    question: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  ): Promise<{ answer: string; grounded_by_rag: boolean }> => {
+    return fetchAiData('/notes/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        subject_id: subjectId,
+        topic,
+        notes_context: notesContext,
+        question,
+        history,
+      }),
+    });
+  },
+
   /**
    * 5. UPLOAD CONTEXT (File Handling)
    * If you've implemented Multer on the backend, use this to send files
