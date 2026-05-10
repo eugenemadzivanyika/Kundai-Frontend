@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { assessmentService, courseService } from '../services/api';
-import { Assessment, Course } from '../types';
+import { assessmentService, courseService } from '../../services/api';
+import { Assessment, Course } from '../../types';
 
 const BUCKETS = [
   { band: '0–39',   min: 0,  max: 39  },

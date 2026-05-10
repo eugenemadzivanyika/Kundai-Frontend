@@ -75,8 +75,8 @@ export const resourceService = {
   },
 
   // 9. Syllabus topics with RAG coverage data for a course (Coverage tab)
-  getSyllabus: async (courseId: string): Promise<SyllabusAttribute[]> => {
-    return fetchData<SyllabusAttribute[]>(`/courses/${courseId}/coverage`);
+  getSyllabus: async (courseId: string): Promise<{ attributes: SyllabusAttribute[]; allowedForms: number[] }> => {
+    return fetchData<{ attributes: SyllabusAttribute[]; allowedForms: number[] }>(`/courses/${courseId}/coverage`);
   },
 
   // 10. Files for a course mapped to LinkedFile shape (Coverage tab)

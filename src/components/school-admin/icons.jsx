@@ -1,0 +1,53 @@
+// Schoolhouse icons — warm, slightly heavier stroke for paper aesthetic
+const SIcon = ({ size = 16, stroke = 1.7, fill = 'none', children, ...rest }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" {...rest}>{children}</svg>
+);
+
+const SI = {
+  Home:        (p) => <SIcon {...p}><path d="m3 11 9-8 9 8"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-7h4v7"/></SIcon>,
+  Dashboard:   (p) => <SIcon {...p}><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></SIcon>,
+  Quill:       (p) => <SIcon {...p}><path d="M5 3h11l4 4v14H5z"/><path d="M16 3v4h4"/><path d="M9 12h7"/><path d="M9 16h5"/><path d="M9 8h2"/></SIcon>,
+  Students:    (p) => <SIcon {...p}><circle cx="9" cy="8" r="3.5"/><path d="M3 21v-1.5A4.5 4.5 0 0 1 7.5 15h3A4.5 4.5 0 0 1 15 19.5V21"/><circle cx="17" cy="9" r="2.5"/><path d="M14 14.5h2.5a3.5 3.5 0 0 1 3.5 3.5V19"/></SIcon>,
+  Teachers:    (p) => <SIcon {...p}><circle cx="12" cy="7" r="3.5"/><path d="M5 21v-1.5A4.5 4.5 0 0 1 9.5 15h5a4.5 4.5 0 0 1 4.5 4.5V21"/><path d="M16 3l3 1.5L16 6"/></SIcon>,
+  Classes:     (p) => <SIcon {...p}><rect x="3" y="4" width="18" height="14" rx="1"/><path d="M3 9h18"/><path d="M8 4v14"/><path d="M3 18l-1 3"/><path d="M21 18l1 3"/></SIcon>,
+  Assessments: (p) => <SIcon {...p}><path d="M5 3h11l4 4v14H5z"/><path d="M16 3v4h4"/><path d="M9 12h7"/><path d="M9 16h5"/><path d="M9 8h2"/></SIcon>,
+  Billing:     (p) => <SIcon {...p}><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M7 15h4"/></SIcon>,
+  Announce:    (p) => <SIcon {...p}><path d="M3 11v3a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a5 5 0 0 1 0 8"/><path d="M17 5a9 9 0 0 1 0 14"/></SIcon>,
+  Settings:    (p) => <SIcon {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></SIcon>,
+  Search:      (p) => <SIcon {...p}><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></SIcon>,
+  Bell:        (p) => <SIcon {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></SIcon>,
+  Plus:        (p) => <SIcon {...p}><path d="M12 5v14"/><path d="M5 12h14"/></SIcon>,
+  Mail:        (p) => <SIcon {...p}><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="m3 7 9 6 9-6"/></SIcon>,
+  Phone:       (p) => <SIcon {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></SIcon>,
+  Pin:         (p) => <SIcon {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></SIcon>,
+  Calendar:    (p) => <SIcon {...p}><rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M3 10h18"/></SIcon>,
+  ChevronRight:(p) => <SIcon {...p}><path d="m9 6 6 6-6 6"/></SIcon>,
+  ChevronLeft: (p) => <SIcon {...p}><path d="m15 6-6 6 6 6"/></SIcon>,
+  ChevronDown: (p) => <SIcon {...p}><path d="m6 9 6 6 6-6"/></SIcon>,
+  ArrowUp:     (p) => <SIcon {...p}><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></SIcon>,
+  ArrowDown:   (p) => <SIcon {...p}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></SIcon>,
+  Check:       (p) => <SIcon {...p}><path d="M20 6 9 17l-5-5"/></SIcon>,
+  X:           (p) => <SIcon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></SIcon>,
+  Filter:      (p) => <SIcon {...p}><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></SIcon>,
+  Download:    (p) => <SIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></SIcon>,
+  Upload:      (p) => <SIcon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></SIcon>,
+  Sparkles:    (p) => <SIcon {...p}><path d="M12 3 13.5 9 19 10.5 13.5 12 12 18 10.5 12 5 10.5 10.5 9z"/><path d="M19 4v3M21 5.5h-4"/></SIcon>,
+  TrendUp:     (p) => <SIcon {...p}><path d="m3 17 6-6 4 4 8-8"/><path d="M14 7h7v7"/></SIcon>,
+  TrendDown:   (p) => <SIcon {...p}><path d="m3 7 6 6 4-4 8 8"/><path d="M14 17h7v-7"/></SIcon>,
+  Alert:       (p) => <SIcon {...p}><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></SIcon>,
+  Clock:       (p) => <SIcon {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></SIcon>,
+  Edit:        (p) => <SIcon {...p}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></SIcon>,
+  Book:        (p) => <SIcon {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5V22h16"/></SIcon>,
+  GradCap:     (p) => <SIcon {...p}><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></SIcon>,
+  Star:        (p) => <SIcon {...p}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></SIcon>,
+  Stamp:       (p) => <SIcon {...p}><path d="M5 22h14"/><path d="M19 14a4 4 0 0 0-4-4h-1V7a3 3 0 0 0-6 0v3H7a4 4 0 0 0-4 4v4h16z"/></SIcon>,
+  More:        (p) => <SIcon {...p}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></SIcon>,
+  Logout:      (p) => <SIcon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></SIcon>,
+  Refresh:     (p) => <SIcon {...p}><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/><path d="M3 21v-5h5"/></SIcon>,
+  Eye:         (p) => <SIcon {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></SIcon>,
+  Trash:       (p) => <SIcon {...p}><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></SIcon>,
+  ListTree:    (p) => <SIcon {...p}><path d="M7 5h14M7 12h14M7 19h14M3 5h.01M3 12h.01M3 19h.01"/></SIcon>,
+  Pulse:       (p) => <SIcon {...p}><path d="M3 12h4l2-7 4 14 2-7h6"/></SIcon>,
+};
+
+window.SI = SI;

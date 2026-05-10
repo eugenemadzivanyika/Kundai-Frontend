@@ -358,6 +358,7 @@ const ResourcesDashboard: React.FC = () => {
   const [syllabus, setSyllabus] = useState<Record<string, SyllabusAttribute[]>>({});
   const [filesByCourse, setFilesByCourse] = useState<Record<string, LinkedFile[]>>({});
   const [coverageSelCourseId, setCoverageSelCourseId] = useState<string>('');
+  const [coverageAllowedFormsByCourse, setCoverageAllowedFormsByCourse] = useState<Record<string, number[]>>({});
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -384,25 +385,21 @@ const ResourcesDashboard: React.FC = () => {
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
 
-  // Fetch syllabus + files for coverage tab when it becomes active
+  // Lazy-load syllabus + files for the selected course when coverage tab is active
   useEffect(() => {
-    if (mainTab !== 'coverage' || courses.length === 0) return;
-    const fetchCoverageData = async () => {
-      try {
-        // resourceService.getSyllabus(courseId) → SyllabusAttribute[]
-        // resourceService.getFilesByCourse(courseId) → LinkedFile[]
-        const [syllabusResults, filesResults] = await Promise.all([
-          Promise.all(courses.map(c => resourceService.getSyllabus(c._id).then((attrs: SyllabusAttribute[]) => [c._id, attrs] as const))),
-          Promise.all(courses.map(c => resourceService.getFilesByCourse(c._id).then((files: LinkedFile[]) => [c._id, files] as const))),
-        ]);
-        setSyllabus(Object.fromEntries(syllabusResults));
-        setFilesByCourse(Object.fromEntries(filesResults));
-      } catch (error) {
-        console.error('Error fetching coverage data:', error);
-      }
-    };
-    fetchCoverageData();
-  }, [mainTab, courses]);
+    if (mainTab !== 'coverage' || !coverageSelCourseId) return;
+    if (syllabus[coverageSelCourseId]) return; // already loaded
+    Promise.all([
+      resourceService.getSyllabus(coverageSelCourseId),
+      resourceService.getFilesByCourse(coverageSelCourseId),
+    ])
+      .then(([{ attributes, allowedForms }, files]) => {
+        setSyllabus(prev => ({ ...prev, [coverageSelCourseId]: attributes }));
+        setFilesByCourse(prev => ({ ...prev, [coverageSelCourseId]: files }));
+        setCoverageAllowedFormsByCourse(prev => ({ ...prev, [coverageSelCourseId]: allowedForms }));
+      })
+      .catch(err => console.error('Coverage fetch failed:', err));
+  }, [mainTab, coverageSelCourseId]);
 
   useMemo(() => {
     if (courses.length === 0) return;
@@ -659,6 +656,8 @@ const ResourcesDashboard: React.FC = () => {
               syllabus={syllabus}
               filesByCourse={filesByCourse}
               onUpload={(course) => handleUploadClick(course as Course)}
+              syllabusEmpty={!syllabus[coverageSelCourseId]?.length}
+              allowedForms={coverageAllowedFormsByCourse[coverageSelCourseId] ?? []}
             />
           ) : (
             <>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Goromonzi High · School Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root, html[data-theme="light"] {
+    --paper: #fbf6ec;
+    --paper-shade: #f3ecdc;
+    --paper-deep: #ebe1c9;
+    --bg-canvas: #f5efdf;
+    --ink-1: #1a1814;
+    --ink-2: #4a443a;
+    --ink-3: #7a7062;
+    --rule: #d9cfb8;
+    --rule-soft: #e6dcc4;
+    --forest: #1f4d36;
+    --forest-deep: #163424;
+    --forest-soft: #d6e3d3;
+    --terracotta: #a83a1f;
+    --terracotta-soft: #f0d4c2;
+    --gold: #b88827;
+    --gold-deep: #8a6418;
+    --gold-soft: #f0e2bc;
+    --sky: #2a5a7a;
+    --sky-deep: #1a3a52;
+    --sky-soft: #cfdde6;
+    --plum: #6b2e5e;
+    --plum-soft: #e2cce0;
+    --clay: #6a3d20;
+    --clay-soft: #e6d2bb;
+    --neutral-soft: #ece4d0;
+  }
+  html[data-theme="dark"] {
+    --paper: #1c1814;
+    --paper-shade: #25201a;
+    --paper-deep: #2d2620;
+    --bg-canvas: #14110d;
+    --ink-1: #f0e9d5;
+    --ink-2: #c8bfa8;
+    --ink-3: #8c8270;
+    --rule: #3a3328;
+    --rule-soft: #2c2620;
+    --forest: #5fb380;
+    --forest-deep: #4a9968;
+    --forest-soft: rgba(95,179,128,.12);
+    --terracotta: #e58c70;
+    --terracotta-soft: rgba(229,140,112,.15);
+    --gold: #e0b85e;
+    --gold-deep: #c89a3a;
+    --gold-soft: rgba(224,184,94,.15);
+    --sky: #7da9cc;
+    --sky-deep: #5a8eb5;
+    --sky-soft: rgba(125,169,204,.15);
+    --plum: #c089b3;
+    --plum-soft: rgba(192,137,179,.15);
+    --clay: #c89a72;
+    --clay-soft: rgba(200,154,114,.15);
+    --neutral-soft: #2a2520;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg-canvas);
+    color: var(--ink-2);
+    font-size: 13px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  .serif { font-family: 'Source Serif 4', Georgia, serif; }
+  .mono, .tnum { font-feature-settings: 'tnum' 1; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 999px; border: 2px solid var(--bg-canvas); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--forest); outline-offset: 1px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="school/data.jsx"></script>
+<script type="text/babel" src="school/icons.jsx"></script>
+<script type="text/babel" src="school/primitives.jsx"></script>
+<script type="text/babel" src="school/charts.jsx"></script>
+<script type="text/babel" src="school/tweaks-panel.jsx"></script>
+<script type="text/babel" src="school/page-dashboard.jsx"></script>
+<script type="text/babel" src="school/pages.jsx"></script>
+<script type="text/babel" src="school/app.jsx"></script>
+</body>
+</html>

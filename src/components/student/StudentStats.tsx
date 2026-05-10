@@ -2,14 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Student, StudentAttributes } from '../../types';
 import { developmentService } from '../../services/api';
+import { reportService, StudentReportResponse } from '../../services/reportService';
 import { TrendingUp, Award, Target, Zap, CheckCircle, Clock } from 'lucide-react';
 
 interface StudentStatsProps {
   student: Student;
+  selectedSubjectId?: string;
 }
 
+type MetricCardProps = {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  color: string;
+};
+
 // ✨ NEW: A more compact card for displaying a key metric.
-const MetricCard = ({ icon: Icon, label, value, color }) => (
+const MetricCard: React.FC<MetricCardProps> = ({ icon: Icon, label, value, color }) => (
   <div className="flex items-center p-4 bg-slate-50 rounded-xl">
     <div className={`flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-lg mr-4 ${color}`}>
       <Icon className="w-5 h-5 text-white" />
@@ -21,29 +30,69 @@ const MetricCard = ({ icon: Icon, label, value, color }) => (
   </div>
 );
 
-const StudentStats: React.FC<StudentStatsProps> = ({ student }) => {
+const StudentStats: React.FC<StudentStatsProps> = ({ student, selectedSubjectId }) => {
   const [attributes, setAttributes] = useState<StudentAttributes | null>(null);
+  const [studentReport, setStudentReport] = useState<StudentReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAttributes = async () => {
-      if (student.courses && student.courses.length > 0) {
+      const subjectId = selectedSubjectId && selectedSubjectId !== 'all'
+        ? selectedSubjectId
+        : ((student.subjects || [])
+            .map((subject) => (typeof subject === 'string' ? subject : subject?.id))
+            .find(Boolean) as string | undefined);
+      if (subjectId) {
         try {
-          const attrs = await developmentService.getStudentAttributes(student._id, student.courses[0]);
+          const [attrs, report] = await Promise.all([
+            developmentService.getStudentAttributes(student.id, subjectId).catch(() => null),
+            reportService.getStudentReport(student.id, subjectId).catch(() => null),
+          ]);
           setAttributes(attrs);
+          setStudentReport(report);
         } catch (error) {
           console.error('Failed to fetch student attributes:', error);
+          setStudentReport(null);
         }
+      } else {
+        setAttributes(null);
+        setStudentReport(null);
       }
       setLoading(false);
     };
     fetchAttributes();
-  }, [student]);
+  }, [student.id, student.subjects, selectedSubjectId]);
 
   if (loading) {
     return (
-      <div className="text-center p-6 bg-white rounded-xl shadow-sm">
-        Loading statistics...
+      <div className="border border-slate-200 bg-white p-6 animate-pulse">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="border border-slate-200 bg-slate-50 rounded-lg p-6 space-y-3">
+              <div className="h-6 w-40 bg-slate-200 rounded" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-16 bg-slate-200 rounded" />
+                ))}
+              </div>
+            </div>
+            <div className="border border-slate-200 bg-slate-50 rounded-lg p-6 space-y-2">
+              <div className="h-6 w-36 bg-slate-200 rounded" />
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-4 bg-slate-200 rounded" />
+              ))}
+            </div>
+          </div>
+          <div className="lg:col-span-3 border border-slate-200 bg-slate-50 rounded-lg p-6 space-y-3">
+            <div className="h-6 w-32 bg-slate-200 rounded" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="space-y-1">
+                <div className="h-4 w-44 bg-slate-200 rounded" />
+                <div className="h-2 bg-slate-200 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -76,24 +125,31 @@ const StudentStats: React.FC<StudentStatsProps> = ({ student }) => {
         {/* Recent Progress */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-bold text-slate-800 mb-4">Recent Progress</h2>
-          <div className="space-y-3">
-             {/* Example items - replace with dynamic data */}
-            <div className="flex items-center text-sm">
-                <CheckCircle className="w-4 h-4 text-green-500 mr-3 flex-shrink-0" />
-                <p className="text-slate-600">Improved <span className="font-semibold text-slate-800">Network Security</span> skill.</p>
-                <span className="ml-auto text-slate-400 text-xs">1d ago</span>
+          {studentReport?.assessments?.length ? (
+            <div className="space-y-3">
+              {studentReport.assessments.slice(0, 3).map((assessment) => (
+                <div key={assessment.assessmentId || assessment.assessmentName} className="flex items-center text-sm">
+                  <CheckCircle className="w-4 h-4 text-green-500 mr-3 flex-shrink-0" />
+                  <p className="text-slate-600">
+                    Completed{' '}
+                    <span className="font-semibold text-slate-800">
+                      {assessment.assessmentName || 'Assessment'}
+                    </span>
+                    {typeof assessment.percent === 'number' ? ` (${Math.round(assessment.percent)}%)` : ''}
+                    .
+                  </p>
+                  <span className="ml-auto text-slate-400 text-xs">
+                    {assessment.submittedAt ? new Date(assessment.submittedAt).toLocaleDateString() : '—'}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center text-sm">
-                <CheckCircle className="w-4 h-4 text-green-500 mr-3 flex-shrink-0" />
-                <p className="text-slate-600">Completed <span className="font-semibold text-slate-800">OSPF Lab</span> assignment.</p>
-                <span className="ml-auto text-slate-400 text-xs">3d ago</span>
+          ) : (
+            <div className="flex items-center text-sm text-slate-600">
+              <Clock className="w-4 h-4 text-amber-500 mr-3 flex-shrink-0" />
+              <p>No recent submissions available for this subject.</p>
             </div>
-             <div className="flex items-center text-sm">
-                <Clock className="w-4 h-4 text-amber-500 mr-3 flex-shrink-0" />
-                <p className="text-slate-600">Assessment due for <span className="font-semibold text-slate-800">Routing</span>.</p>
-                <span className="ml-auto text-slate-400 text-xs">in 2d</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

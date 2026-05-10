@@ -4,6 +4,7 @@ import {
   BookOpen,
   CheckCircle,
   ChevronRight,
+  Lock,
   Loader2,
   Paperclip,
   Send,
@@ -50,6 +51,10 @@ export type TutorStep = {
 type StudentTutorProps = {
   studentId: string;
   selectedSubjectId: string;
+  /** Plan-scoped session — pass to get isolated chat history per plan */
+  planId?: string | null;
+  /** 'archived' locks the input bar; 'active' allows messages */
+  sessionStatus?: 'active' | 'archived' | string | null;
   /** The step the student is currently working on */
   activeStep: TutorStep | null;
   /** All steps in the plan — used to render the mini progress trail */
@@ -282,6 +287,8 @@ const TypingIndicator: React.FC = () => (
 const StudentTutor: React.FC<StudentTutorProps> = ({
   studentId,
   selectedSubjectId,
+  planId,
+  sessionStatus,
   activeStep,
   allSteps = [],
   activeStepIndex = 0,
@@ -289,6 +296,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
   onPrefillApplied,
   onCheckpointPassed,
 }) => {
+  const isArchived = sessionStatus === 'archived';
   const [session,     setSession]     = useState<AiTutorSession | null>(null);
   const [messages,    setMessages]    = useState<AiTutorMessage[]>([]);
   const [loading,     setLoading]     = useState(false);
@@ -314,7 +322,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
     setError(null);
 
     (async () => {
-      const s = await aiTutorService.getOrCreateSession(studentId, selectedSubjectId);
+      const s = await aiTutorService.getOrCreateSession(studentId, selectedSubjectId, undefined, planId ?? undefined);
       if (!active) return;
       setSession(s);
       const msgs = await aiTutorService.listMessages(s.id);
@@ -325,7 +333,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       .finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [studentId, selectedSubjectId]);
+  }, [studentId, selectedSubjectId, planId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -531,97 +539,114 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       </div>
 
       {/* ── Input area ──────────────────────────────────────────────────── */}
-      <div style={{ flexShrink: 0, borderTop: '0.5px solid #e2e8f0', background: '#fff' }}>
-
-        {/* Shortcut chips */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px 0' }}>
-          {SHORTCUT_CHIPS.map((chip) => (
-            <button key={chip.kind} type="button" onClick={() => applyShortcut(chip.kind)} style={{
-              fontSize: 12, padding: '4px 10px', borderRadius: 99,
-              border: '0.5px solid #e2e8f0', background: '#f8fafc', color: '#64748b',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <Zap style={{ width: 11, height: 11 }} />
-              {chip.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Attachment preview */}
-        {attachment && (
+      {isArchived ? (
+        /* ── Archived lock banner ── */
+        <div style={{
+          flexShrink: 0, borderTop: '0.5px solid #e2e8f0',
+          background: '#f8fafc', padding: '14px 16px',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            margin: '8px 14px 0', padding: '7px 10px',
-            borderRadius: 8, border: '0.5px solid #e2e8f0', background: '#f8fafc',
+            width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+            background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <img src={attachment.previewUrl} alt="preview" style={{
-              width: 36, height: 36, borderRadius: 5, objectFit: 'cover',
-              border: '0.5px solid #e2e8f0', flexShrink: 0,
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {attachment.file.name}
-              </p>
-              <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Image · ready to send</p>
-            </div>
-            <button type="button" onClick={removeAttachment} style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-              color: '#94a3b8', display: 'flex', alignItems: 'center',
+            <Lock style={{ width: 15, height: 15, color: '#94a3b8' }} />
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>
+            This plan is <strong style={{ color: '#475569' }}>archived</strong> — the conversation is read-only.
+            Ask your teacher to reactivate the plan to continue coaching.
+          </p>
+        </div>
+      ) : (
+        /* ── Active composer ── */
+        <div style={{ flexShrink: 0, borderTop: '0.5px solid #e2e8f0', background: '#fff' }}>
+
+          {/* Shortcut chips */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px 0' }}>
+            {SHORTCUT_CHIPS.map((chip) => (
+              <button key={chip.kind} type="button" onClick={() => applyShortcut(chip.kind)} style={{
+                fontSize: 12, padding: '4px 10px', borderRadius: 99,
+                border: '0.5px solid #e2e8f0', background: '#f8fafc', color: '#64748b',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                <Zap style={{ width: 11, height: 11 }} />
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Attachment preview */}
+          {attachment && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              margin: '8px 14px 0', padding: '7px 10px',
+              borderRadius: 8, border: '0.5px solid #e2e8f0', background: '#f8fafc',
             }}>
-              <X style={{ width: 14, height: 14 }} />
+              <img src={attachment.previewUrl} alt="preview" style={{
+                width: 36, height: 36, borderRadius: 5, objectFit: 'cover',
+                border: '0.5px solid #e2e8f0', flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, fontWeight: 500, margin: 0, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {attachment.file.name}
+                </p>
+                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>Image · ready to send</p>
+              </div>
+              <button type="button" onClick={removeAttachment} style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                color: '#94a3b8', display: 'flex', alignItems: 'center',
+              }}>
+                <X style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+          )}
+
+          {/* Composer */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', margin: '8px 14px',
+            border: '0.5px solid #cbd5e1', borderRadius: 10, overflow: 'hidden',
+            background: '#fff',
+          }}>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+
+            <button type="button" onClick={() => fileInputRef.current?.click()} title="Attach photo of your working" style={{
+              width: 40, minHeight: 40, border: 'none', background: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              color: attachment ? '#3b82f6' : '#94a3b8', paddingBottom: 1, transition: 'color 0.15s',
+            }}>
+              <Paperclip style={{ width: 16, height: 16 }} />
+            </button>
+
+            <div style={{ width: '0.5px', background: '#e2e8f0', alignSelf: 'stretch', margin: '6px 0', flexShrink: 0 }} />
+
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={messageText}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              placeholder={attachment ? 'Add a message with your photo (optional)…' : "Ask the coach or describe where you're stuck…"}
+              style={{
+                flex: 1, resize: 'none', fontSize: 13, lineHeight: 1.5,
+                padding: '9px 10px', border: 'none', background: 'transparent',
+                color: '#0f172a', outline: 'none', minHeight: 40, maxHeight: 120,
+                fontFamily: 'inherit',
+              }}
+            />
+
+            <button type="button" onClick={handleSend} disabled={!canSend} aria-label="Send" style={{
+              width: 40, minHeight: 40, border: 'none', background: 'none', flexShrink: 0,
+              cursor: canSend ? 'pointer' : 'default', paddingBottom: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: canSend ? '#3b82f6' : '#cbd5e1', transition: 'color 0.15s',
+            }}>
+              {sending
+                ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
+                : <Send style={{ width: 15, height: 15 }} />}
             </button>
           </div>
-        )}
-
-        {/* Composer */}
-        <div style={{
-          display: 'flex', alignItems: 'flex-end', margin: '8px 14px',
-          border: '0.5px solid #cbd5e1', borderRadius: 10, overflow: 'hidden',
-          background: '#fff',
-        }}>
-          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-
-          <button type="button" onClick={() => fileInputRef.current?.click()} title="Attach photo of your working" style={{
-            width: 40, minHeight: 40, border: 'none', background: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            color: attachment ? '#3b82f6' : '#94a3b8', paddingBottom: 1, transition: 'color 0.15s',
-          }}>
-            <Paperclip style={{ width: 16, height: 16 }} />
-          </button>
-
-          <div style={{ width: '0.5px', background: '#e2e8f0', alignSelf: 'stretch', margin: '6px 0', flexShrink: 0 }} />
-
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={messageText}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            placeholder={attachment ? 'Add a message with your photo (optional)…' : "Ask the coach or describe where you're stuck…"}
-            style={{
-              flex: 1, resize: 'none', fontSize: 13, lineHeight: 1.5,
-              padding: '9px 10px', border: 'none', background: 'transparent',
-              color: '#0f172a', outline: 'none', minHeight: 40, maxHeight: 120,
-              fontFamily: 'inherit',
-            }}
-          />
-
-          <button type="button" onClick={handleSend} disabled={!canSend} aria-label="Send" style={{
-            width: 40, minHeight: 40, border: 'none', background: 'none', flexShrink: 0,
-            cursor: canSend ? 'pointer' : 'default', paddingBottom: 1,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: canSend ? '#3b82f6' : '#cbd5e1', transition: 'color 0.15s',
-          }}>
-            {sending
-              ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
-              : <Send style={{ width: 15, height: 15 }} />}
-          </button>
         </div>
-
-        {/* <p style={{ fontSize: 11, color: '#94a3b8', padding: '0 14px 10px' }}>
-          ↵ to send · shift+↵ new line · coach gives hints, not answers
-        </p> */}
-      </div>
+      )}
     </div>
   );
 };

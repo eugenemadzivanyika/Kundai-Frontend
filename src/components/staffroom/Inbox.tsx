@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { StaffMessage, ChatMessage, ChatConversation, Student } from '../../types';
 import { staffMessageService } from '../../services/staffMessageService';
 import { chatService } from '../../services/chatService';
@@ -49,6 +50,13 @@ function formatTime(date: Date | string): string {
 
 function initials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function profileName(p: any): string {
+  if (!p) return 'Student';
+  if (p.user?.firstName) return `${p.user.firstName} ${p.user.lastName}`;
+  if (p.firstName) return `${p.firstName} ${p.lastName}`;
+  return 'Student';
 }
 
 function scoreColor(s: number): string {
@@ -295,7 +303,10 @@ const Bubble: React.FC<BubbleProps> = ({ msg }) => (
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 const Inbox: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'inbox' | 'chat'>('inbox');
+  const location = useLocation();
+  const deepLinkStudentId = (location.state as any)?.chatStudentId as string | undefined;
+
+  const [activeTab, setActiveTab] = useState<'inbox' | 'chat'>(deepLinkStudentId ? 'chat' : 'inbox');
 
   // ── Inbox state ──
   const [inboxMessages, setInboxMessages] = useState<StaffMessage[]>([]);
@@ -473,6 +484,13 @@ const Inbox: React.FC = () => {
     };
   }, [activeTab]);
 
+  // Auto-open a student's chat when navigated from classroom with state.chatStudentId
+  useEffect(() => {
+    if (deepLinkStudentId) {
+      handleSelectStudent(deepLinkStudentId);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!selectedStudentId || !socketRef.current || !currentUser) return;
     const chatId = `chat_${currentUser._id}_${selectedStudentId}`;
@@ -576,13 +594,21 @@ const Inbox: React.FC = () => {
     try {
       const saved = await chatService.sendMessage(selectedStudentId, content);
       setChatMessages(prev => [...prev, mapMessage({ ...(saved as any), senderRole: 'teacher' })]);
-      setConversations(prev =>
-        prev.map(c =>
-          c.studentId === selectedStudentId
-            ? { ...c, lastMessage: { content, timestamp: new Date(), senderRole: 'teacher' } }
-            : c
-        )
-      );
+      const updatedMsg = { content, timestamp: new Date(), senderRole: 'teacher' as const };
+      setConversations(prev => {
+        if (prev.some(c => c.studentId === selectedStudentId)) {
+          return prev.map(c =>
+            c.studentId === selectedStudentId ? { ...c, lastMessage: updatedMsg } : c
+          );
+        }
+        // First ever message to this student — insert at top of list
+        return [{
+          studentId: selectedStudentId,
+          studentName: profileName(selectedStudentProfile),
+          lastMessage: updatedMsg,
+          unreadCount: 0,
+        }, ...prev];
+      });
     } catch (err) {
       console.error('Failed to send message:', err);
       setNewMessage(content);
@@ -1088,12 +1114,14 @@ const Inbox: React.FC = () => {
                   justifyContent: 'center', fontSize: 11, fontWeight: 900, color: '#0f766e', flexShrink: 0,
                 }}
               >
-                {selectedConv ? initials(selectedConv.studentName) : '??'}
+                {selectedConv
+                  ? initials(selectedConv.studentName)
+                  : initials(profileName(selectedStudentProfile))}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 800, color: '#18181b' }}>
-                    {selectedConv?.studentName}
+                    {selectedConv?.studentName ?? profileName(selectedStudentProfile)}
                   </span>
                   {/* Online indicator — driven by socket presence */}
                   {selectedConv?.userId && onlineStudents.has(selectedConv.userId) && (

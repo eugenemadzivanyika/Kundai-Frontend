@@ -4,9 +4,10 @@ import { assessmentService } from '../../services/api';
 
 interface ResultsViewProps {
   student: Student;
+  courseId?: string;
 }
 
-const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
+const ResultsView: React.FC<ResultsViewProps> = ({ student, courseId }) => {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,8 +16,10 @@ const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
     const fetchResults = async () => {
       try {
         setLoading(true);
-        // Using the newly added service method
-        const data = await assessmentService.getStudentAssessmentsAndResults(student.id);
+        const data = await assessmentService.getAssessmentHistory(
+          student.id,
+          { subjectId: courseId }
+        );
         setResults(data);
         setError(null);
       } catch (err) {
@@ -28,7 +31,7 @@ const ResultsView: React.FC<ResultsViewProps> = ({ student }) => {
     };
 
     if (student.id) fetchResults();
-  }, [student.id]);
+  }, [student.id, courseId]);
 
   if (loading) return <div className="p-4 text-sm animate-pulse text-slate-500 italic">Syncing historical data...</div>;
   if (error) return <div className="p-4 text-sm text-red-500 font-bold">{error}</div>;

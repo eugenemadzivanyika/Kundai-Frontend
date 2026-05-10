@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { QuestionText, MathText } from '../components/ui/DiagramRenderer';
+import { QuestionText, MathText } from '../ui/DiagramRenderer';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Edit2, FileText, List, Loader2, ScanLine, Users } from 'lucide-react';
-import OcrReviewComponent, { CompiledSubmission } from '../components/ocr/OcrReviewComponent';
+import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
 import { toast } from 'sonner';
-import { assessmentService, courseService, submissionService } from '../services/api';
-import { Assessment, QuestionPart } from '../types';
-import TablePagination from '../components/ui/TablePagination';
-import { useClientPagination } from '../hooks/useClientPagination';
-import { getQuestionTypeInfo } from '../utils/questionTypeLabel';
+import { assessmentService, courseService, submissionService } from '../../services/api';
+import { Assessment, QuestionPart } from '../../types';
+import TablePagination from '../ui/TablePagination';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import { getQuestionTypeInfo } from '../../utils/questionTypeLabel';
 
 type DetailTab = 'questions' | 'submissions' | 'scheme';
 

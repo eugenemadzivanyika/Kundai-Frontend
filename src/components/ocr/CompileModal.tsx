@@ -20,7 +20,7 @@ interface CompileModalProps {
 }
 
 const SUBMIT_LABEL: Record<OcrReviewProps['mode'], string> = {
-  'teacher-mark':    'Submit Marks',
+  'teacher-mark':    'Mark',
   'student-submit':  'Submit Assignment',
   'resource-upload': 'Save Resource',
 };
@@ -39,7 +39,7 @@ export function CompileModal({
 }: CompileModalProps) {
   const submitLabel  = SUBMIT_LABEL[mode];
   const allDone      = pages.every(p => p.status === 'done' || p.status === 'error');
-  const showMapping  = mode === 'student-submit' && questions && questions.length > 0;
+  const showMapping  = (mode === 'student-submit' || mode === 'teacher-mark') && questions && questions.length > 0;
 
   return (
     <div

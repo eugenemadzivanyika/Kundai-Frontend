@@ -55,6 +55,10 @@ export function AIAssessmentModal({
   const [dropdownOpen, setDropdownOpen]         = useState(false);
   const dropdownRef                             = useRef<HTMLDivElement>(null);
 
+  // ── Class group targeting ─────────────────────────────────────────────────────
+  const [targetClassGroups, setTargetClassGroups] = useState<string[]>([]);
+  const availableClassGroups = (selectedCourse as any)?.classGroups ?? [];
+
   // ── Form data ─────────────────────────────────────────────────────────────────
 const defaultFormData = {
   name: '',
@@ -160,6 +164,7 @@ const defaultFormData = {
     setUploadedFile(null);
     setResourceId(null);
     setFormData(defaultFormData);
+    setTargetClassGroups([]);
   };
 
   // Deletes the saved draft then closes — called by Discard button and X during review
@@ -208,6 +213,7 @@ const defaultFormData = {
 
   const handleCourseSelect = (course: Course) => {
     setSelectedCourse(course);
+    setTargetClassGroups([]);
     setDropdownOpen(false);
     setCourseSearch('');
   };
@@ -257,6 +263,7 @@ setIsGenerating(true);
       questionTypeDistribution: formData.questionTypeDistribution,
       mathPaperType: formData.mathPaperType,
       uploadedFile: uploadedFile,        // The visual/PDF reference context
+      targetClassGroups,
     });
       if (generatedAssessment?.questions) {
         setFullAssessment(generatedAssessment);
@@ -507,6 +514,37 @@ setIsGenerating(true);
                 <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-0.5">Focusing On</p>
                 <h4 className="text-sm font-bold text-blue-900 leading-tight truncate">{selectedCourse.name}</h4>
                 <p className="text-xs text-blue-400 mt-0.5">ZIMSEC objectives from {selectedCourse.code}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Class group picker */}
+          {availableClassGroups.length > 0 && (
+            <div>
+              <label className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                Release to classes{' '}
+                <span className="text-gray-400 font-normal normal-case">(leave all unchecked = all classes)</span>
+              </label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {availableClassGroups.map((cg: any) => {
+                  const checked = targetClassGroups.includes(cg._id);
+                  return (
+                    <button
+                      key={cg._id}
+                      type="button"
+                      onClick={() => setTargetClassGroups(prev =>
+                        prev.includes(cg._id) ? prev.filter(id => id !== cg._id) : [...prev, cg._id]
+                      )}
+                      className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${
+                        checked
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {cg.stream ? `Form ${cg.form}${cg.stream}` : cg.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

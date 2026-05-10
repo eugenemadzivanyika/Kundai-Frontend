@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Course } from './ResourcesDashboard';
 
@@ -21,6 +21,8 @@ const I = {
   img:    ['M21 15l-5-5L5 20', 'M3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z'],
   video:  ['M23 7l-7 5 7 5V7z', 'M1 5h15a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H1a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
   file:   ['M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z', 'M13 2v7h7'],
+  chevD:  ['M6 9l6 6 6-6'],
+  chevR:  ['M9 18l6-6-6-6'],
 };
 
 const typeIcon = (t: string) =>
@@ -31,6 +33,7 @@ export interface SyllabusAttribute {
   id: string;
   topic: string;
   parentUnit: string;
+  level?: string | null;
   resources: number;
   linked: string[];
 }
@@ -58,6 +61,8 @@ interface CoverageViewProps {
   syllabus: Record<string, SyllabusAttribute[]>;
   filesByCourse: Record<string, LinkedFile[]>;
   onUpload: (course: Course) => void;
+  syllabusEmpty?: boolean;
+  allowedForms?: number[];
 }
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -81,6 +86,12 @@ export const LEGEND_ITEMS: [string, string][] = [
   ['#16a34a', 'Complete'],
 ];
 
+const parseFormLevel = (level: string | null | undefined): string => {
+  if (!level) return 'Unspecified';
+  const match = level.match(/\d+/);
+  return match ? `Form ${match[0]}` : level;
+};
+
 const FILE_TYPE_META: Record<string, { color: string; bg: string; border: string }> = {
   document: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
   image:    { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
@@ -90,10 +101,14 @@ const FILE_TYPE_META: Record<string, { color: string; bg: string; border: string
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const CoverageView: React.FC<CoverageViewProps> = ({
-  courses, selCourseId, syllabus, filesByCourse, onUpload,
+  courses, selCourseId, syllabus, filesByCourse, onUpload, syllabusEmpty, allowedForms = [],
 }) => {
-  const [filter, setFilter]     = useState<'all' | StatusKey>('all');
-  const [selGroup, setSelGroup] = useState<TopicGroup | null>(null);
+  const [filter, setFilter]           = useState<'all' | StatusKey>('all');
+  const [selGroup, setSelGroup]       = useState<TopicGroup | null>(null);
+  const [collapsedForms, setCollapsedForms] = useState<Set<string>>(new Set());
+  const [activeFormFilter, setActiveFormFilter] = useState<number | 'all'>('all');
+
+  useEffect(() => { setActiveFormFilter('all'); }, [selCourseId]);
 
   const course      = courses.find(c => c._id === selCourseId);
   const courseFiles = filesByCourse[selCourseId] || [];
@@ -114,14 +129,21 @@ const CoverageView: React.FC<CoverageViewProps> = ({
     }));
   }, [selCourseId, syllabus]);
 
+  // Bucket TopicGroup[] by form level for two-level render
+  const groupsByForm = useMemo<Record<string, TopicGroup[]>>(() => {
+    const attrs = syllabus[selCourseId] || [];
+    const formMap: Record<string, TopicGroup[]> = {};
+    for (const group of groups) {
+      const representative = attrs.find(a => (a.parentUnit || 'Uncategorized') === group.parentUnit);
+      const form = parseFormLevel(representative?.level);
+      (formMap[form] ??= []).push(group);
+    }
+    return formMap;
+  }, [selCourseId, syllabus, groups]);
+
   const nMissing = groups.filter(g => getTopicStatus(g.covered, g.total) === 'missing').length;
   const nPartial = groups.filter(g => getTopicStatus(g.covered, g.total) === 'partial').length;
   const nGood    = groups.filter(g => getTopicStatus(g.covered, g.total) === 'good').length;
-
-  const filteredGroups = groups.filter(g => {
-    if (filter === 'all') return true;
-    return getTopicStatus(g.covered, g.total) === filter;
-  });
 
   const FILTERS = [
     { key: 'all',     label: `All (${groups.length})`,   color: '#64748b' },
@@ -146,7 +168,7 @@ const CoverageView: React.FC<CoverageViewProps> = ({
       `}</style>
 
       {/* ── Filter bar ── */}
-      <div style={{ padding: '7px 14px', borderBottom: '1px solid #f1f5f9', background: '#fafafa', display: 'flex', gap: 6, flexShrink: 0 }}>
+      <div style={{ padding: '7px 14px', borderBottom: '1px solid #f1f5f9', background: '#fafafa', display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
         {FILTERS.map(f => (
           <button
             key={f.key}
@@ -162,81 +184,149 @@ const CoverageView: React.FC<CoverageViewProps> = ({
             {f.label}
           </button>
         ))}
+        {allowedForms.length > 1 && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, borderLeft: '1px solid #e2e8f0', paddingLeft: 8 }}>
+            {([{ key: 'all' as const, label: 'All Forms' }, ...allowedForms.map(f => ({ key: f as number, label: `Form ${f}` }))]).map(ft => (
+              <button
+                key={ft.key}
+                onClick={() => setActiveFormFilter(ft.key)}
+                style={{
+                  padding: '4px 10px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                  background: activeFormFilter === ft.key ? '#0f172a' : 'white',
+                  color: activeFormFilter === ft.key ? 'white' : '#64748b',
+                  border: `1.5px solid ${activeFormFilter === ft.key ? '#0f172a' : '#e2e8f0'}`,
+                  cursor: 'pointer', transition: 'all 0.12s',
+                }}
+              >
+                {ft.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Main: topic grid + detail panel ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-        {/* Topic group grid */}
+        {/* Topic group grid — form sections */}
         <div className="cv-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-            {filteredGroups.map(group => {
-              const status = getTopicStatus(group.covered, group.total);
-              const m = STATUS_META[status];
-              const isSelected = selGroup?.parentUnit === group.parentUnit;
-              const pct = group.total > 0 ? (group.covered / group.total) * 100 : 0;
-              return (
-                <motion.div
-                  key={group.parentUnit}
-                  layout
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="cv-card"
-                  onClick={() => setSelGroup(isSelected ? null : group)}
-                  style={{
-                    background: m.bg,
-                    border: `1.5px solid ${isSelected ? m.text : m.border}`,
-                    borderRadius: 10,
-                    padding: '11px 13px',
-                    cursor: 'pointer',
-                    transition: 'all 0.12s',
-                    boxShadow: isSelected ? `0 0 0 2px ${m.text}22` : 'none',
-                  }}
-                >
-                  {/* Status badge */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-                    <span style={{
-                      fontSize: 9, fontWeight: 800, color: m.badgeText,
-                      background: m.badge, border: `1px solid ${m.border}`,
-                      padding: '2px 7px', borderRadius: 20,
-                    }}>{m.label}</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: m.text }}>
-                      {group.covered}/{group.total}
-                    </span>
-                  </div>
-
-                  {/* Topic name */}
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8, lineHeight: 1.3 }}>
-                    {group.parentUnit}
-                  </div>
-
-                  {/* Coverage progress bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 99, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: m.text, borderRadius: 99, transition: 'width 0.5s ease' }} />
+          {syllabusEmpty ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>
+              No syllabus attributes found for this subject. Ask an admin to seed the curriculum.
+            </div>
+          ) : (
+            Object.entries(groupsByForm)
+              .filter(([form]) => {
+                if (activeFormFilter === 'all') return true;
+                const n = parseInt(form.match(/\d+/)?.[0] ?? '0');
+                return n === activeFormFilter;
+              })
+              .sort(([a], [b]) => {
+                if (a === 'Unspecified') return 1;
+                if (b === 'Unspecified') return -1;
+                return parseInt(a.match(/\d+/)?.[0] ?? '0') - parseInt(b.match(/\d+/)?.[0] ?? '0');
+              })
+              .map(([form, formGroups]) => {
+                const visibleGroups = formGroups.filter(g =>
+                  filter === 'all' || getTopicStatus(g.covered, g.total) === filter
+                );
+                const isCollapsed = collapsedForms.has(form);
+                const formCovered = formGroups.reduce((s, g) => s + g.covered, 0);
+                const formTotal   = formGroups.reduce((s, g) => s + g.total, 0);
+                return (
+                  <div key={form} style={{ marginBottom: 16 }}>
+                    {/* Form section header */}
+                    <div
+                      onClick={() => setCollapsedForms(prev => {
+                        const next = new Set(prev);
+                        next.has(form) ? next.delete(form) : next.add(form);
+                        return next;
+                      })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '7px 10px', marginBottom: 8,
+                        background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+                        cursor: 'pointer', userSelect: 'none' as const,
+                      }}
+                    >
+                      <Ico d={isCollapsed ? I.chevR : I.chevD} size={12} color="#64748b" />
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', flex: 1, letterSpacing: '0.01em' }}>{form}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b' }}>
+                        {formCovered}/{formTotal} covered
+                      </span>
                     </div>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: m.text, whiteSpace: 'nowrap' }}>
-                      {Math.round(pct)}%
-                    </span>
+                    {/* Form section body */}
+                    {!isCollapsed && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                        {visibleGroups.map(group => {
+                          const status = getTopicStatus(group.covered, group.total);
+                          const m = STATUS_META[status];
+                          const isSelected = selGroup?.parentUnit === group.parentUnit;
+                          const pct = group.total > 0 ? (group.covered / group.total) * 100 : 0;
+                          return (
+                            <motion.div
+                              key={group.parentUnit}
+                              layout
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.15 }}
+                              className="cv-card"
+                              onClick={() => setSelGroup(isSelected ? null : group)}
+                              style={{
+                                background: m.bg,
+                                border: `1.5px solid ${isSelected ? m.text : m.border}`,
+                                borderRadius: 10,
+                                padding: '11px 13px',
+                                cursor: 'pointer',
+                                transition: 'all 0.12s',
+                                boxShadow: isSelected ? `0 0 0 2px ${m.text}22` : 'none',
+                              }}
+                            >
+                              {/* Status badge */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                                <span style={{
+                                  fontSize: 9, fontWeight: 800, color: m.badgeText,
+                                  background: m.badge, border: `1px solid ${m.border}`,
+                                  padding: '2px 7px', borderRadius: 20,
+                                }}>{m.label}</span>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: m.text }}>
+                                  {group.covered}/{group.total}
+                                </span>
+                              </div>
+                              {/* Topic name */}
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8, lineHeight: 1.3 }}>
+                                {group.parentUnit}
+                              </div>
+                              {/* Coverage progress bar */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 99, overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, background: m.text, borderRadius: 99, transition: 'width 0.5s ease' }} />
+                                </div>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: m.text, whiteSpace: 'nowrap' }}>
+                                  {Math.round(pct)}%
+                                </span>
+                              </div>
+                              {/* Attribute count hint */}
+                              <div style={{ marginTop: 5, fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
+                                {group.total} attribute{group.total !== 1 ? 's' : ''}
+                                {group.covered > 0 && group.covered < group.total
+                                  ? ` · ${group.total - group.covered} need resources`
+                                  : group.covered === 0 ? ' · none covered yet' : ' · fully covered'}
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                        {visibleGroups.length === 0 && (
+                          <div style={{ gridColumn: '1/-1', padding: '12px 0', textAlign: 'center', color: '#94a3b8', fontSize: 12, fontStyle: 'italic' }}>
+                            No {filter} topics in this form.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Attribute count hint */}
-                  <div style={{ marginTop: 5, fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
-                    {group.total} attribute{group.total !== 1 ? 's' : ''}
-                    {group.covered > 0 && group.covered < group.total
-                      ? ` · ${group.total - group.covered} need resources`
-                      : group.covered === 0 ? ' · none covered yet' : ' · fully covered'}
-                  </div>
-                </motion.div>
-              );
-            })}
-            {filteredGroups.length === 0 && (
-              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>
-                No topics match this filter.
-              </div>
-            )}
-          </div>
+                );
+              })
+          )}
         </div>
 
         {/* ── Detail panel ── */}

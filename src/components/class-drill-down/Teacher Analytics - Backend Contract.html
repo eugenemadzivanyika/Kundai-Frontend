@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Teacher Analytics · Backend Contract</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root { --canvas:#f6f1e7; --paper:#fffaf2; --rule:#e7dcc8; --ink-hi:#2b1d10; --ink-mid:#4d3a26; --ink-lo:#846c52; --ink-faint:#ad9a80; --accent:#b85e2c; --get:#15784f; --post:#9a6418; --serif:'Source Serif 4',Georgia,serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 56px 28px 80px; background: var(--canvas); color: var(--ink-mid); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.55; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-family: var(--serif); font-size: 32px; font-weight: 700; color: var(--ink-hi); margin: 0 0 4px; letter-spacing: -.02em; }
+  .lede { font-size: 15px; color: var(--ink-lo); margin: 0 0 28px; }
+  h2 { font-family: var(--serif); font-size: 22px; font-weight: 700; color: var(--ink-hi); margin: 40px 0 14px; padding-top: 18px; border-top: 1px solid var(--rule); letter-spacing: -.01em; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--ink-hi); margin: 22px 0 8px; }
+  p { margin: 0 0 12px; }
+  code, .mono { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: rgba(176,90,40,.08); padding: 1px 5px; border-radius: 3px; color: var(--ink-hi); }
+  pre { background: #fffaf2; border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; color: var(--ink-mid); margin: 8px 0 16px; }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--get); }
+  pre .n { color: #2d5d8c; }
+  pre .c { color: var(--ink-faint); font-style: italic; }
+  .endpoint { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; margin: 10px 0 6px; }
+  .verb { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: .04em; color: #fffaf2; }
+  .verb.get { background: var(--get); }
+  .verb.post { background: var(--post); }
+  .verb.patch { background: #2d5d8c; }
+  .path { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--ink-hi); }
+  .ep-desc { font-size: 12.5px; color: var(--ink-lo); margin: 2px 0 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 10.5px; font-weight: 700; color: var(--ink-lo); text-transform: uppercase; letter-spacing: .06em; background: var(--paper); }
+  td:first-child { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); white-space: nowrap; }
+  td.req { color: var(--get); font-weight: 600; }
+  ul { margin: 4px 0 14px; padding-left: 20px; }
+  ul li { margin-bottom: 4px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 3px; background: rgba(176,90,40,.1); color: var(--accent); margin-right: 4px; }
+  .note { padding: 12px 14px; background: rgba(40,90,140,.06); border-left: 3px solid #2d5d8c; border-radius: 0 6px 6px 0; font-size: 13px; color: var(--ink-mid); margin: 10px 0 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Teacher Analytics — Backend Contract</h1>
+<p class="lede">Endpoint shapes the analytics dashboard consumes. All routes are authenticated as a teacher and scoped to classes that teacher is assigned to. All identifiers are server-issued. Responses are JSON.</p>
+
+<div class="note">
+  <b>Aggregation strategy.</b> Most endpoints are read-mostly aggregations over BKT mastery snapshots and submission rows. Cache aggressively (5–15 min TTL keyed by <code>{teacherId, classId, termId}</code>). Recompute on submission ingest webhook or BKT update event. Heatmap and trend endpoints should support <code>If-None-Match</code> with ETags.
+</div>
+
+<h2>1. Reference data</h2>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/me</span></div>
+<p class="ep-desc">Identity, classes the teacher owns, current term context.</p>
+<pre>{
+  <span class="k">"teacher"</span>: { <span class="k">"id"</span>: <span class="s">"t-001"</span>, <span class="k">"name"</span>: <span class="s">"Tendai Chigumba"</span>, <span class="k">"subjects"</span>: [<span class="s">"Mathematics"</span>], <span class="k">"avatar"</span>: <span class="s">"TC"</span> },
+  <span class="k">"classes"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"4A"</span>, <span class="k">"name"</span>: <span class="s">"Form 4 A"</span>, <span class="k">"stream"</span>: <span class="s">"Sciences"</span>, <span class="k">"size"</span>: <span class="n">32</span>, <span class="k">"periods"</span>: <span class="s">"Mon/Wed/Fri"</span> }
+  ],
+  <span class="k">"currentTerm"</span>: { <span class="k">"id"</span>: <span class="s">"t3-2025"</span>, <span class="k">"label"</span>: <span class="s">"Term 3 2025"</span>, <span class="k">"week"</span>: <span class="n">9</span>, <span class="k">"weeksTotal"</span>: <span class="n">12</span> }
+}</pre>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/skills</span></div>
+<p class="ep-desc">The skill graph for the class's subject + form (BKT skills are the unit of mastery tracking).</p>
+<pre>{
+  <span class="k">"skills"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"alg-quad"</span>, <span class="k">"code"</span>: <span class="s">"ALG-1"</span>, <span class="k">"name"</span>: <span class="s">"Quadratic equations"</span>,
+      <span class="k">"topic"</span>: <span class="s">"Algebra"</span>, <span class="k">"weight"</span>: <span class="n">0.85</span>, <span class="k">"paperRef"</span>: <span class="s">"P1 Q3,7"</span>,
+      <span class="k">"prerequisites"</span>: [<span class="s">"alg-basics"</span>] }
+  ]
+}</pre>
+
+<h2>2. Class overview (drill level 1)</h2>
+<p>Powers the <b>Class view</b>. One round-trip should be enough — bundle these into a single <code>/class-overview</code> endpoint OR keep them split for caching granularity.</p>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/overview</span></div>
+<p class="ep-desc">Headline KPIs, distributions, comparisons. Query params: <code>?termId=t3-2025</code></p>
+<pre>{
+  <span class="k">"kpis"</span>: {
+    <span class="k">"classMastery"</span>: <span class="n">0.58</span>,        <span class="c">// avg BKT mastery across all skills × students</span>
+    <span class="k">"classMasteryDelta"</span>: <span class="n">0.052</span>,   <span class="c">// vs previous week, signed</span>
+    <span class="k">"atRiskCount"</span>: <span class="n">7</span>,
+    <span class="k">"excellingCount"</span>: <span class="n">9</span>,
+    <span class="k">"masteredSkillsCount"</span>: <span class="n">3</span>,      <span class="c">// skills where >60% of class above 0.85</span>
+    <span class="k">"totalSkills"</span>: <span class="n">10</span>
+  },
+  <span class="k">"weeklyProgress"</span>: [
+    { <span class="k">"week"</span>: <span class="s">"W1"</span>, <span class="k">"classMastery"</span>: <span class="n">0.45</span>, <span class="k">"schoolMastery"</span>: <span class="n">0.52</span> }
+    <span class="c">// ... 12 entries for current term</span>
+  ],
+  <span class="k">"topicDifficulty"</span>: [
+    { <span class="k">"topic"</span>: <span class="s">"Algebra"</span>, <span class="k">"avgMastery"</span>: <span class="n">0.62</span>, <span class="k">"skillCount"</span>: <span class="n">3</span> }
+  ],
+  <span class="k">"scoreDistribution"</span>: {
+    <span class="k">"assessmentId"</span>: <span class="s">"a8"</span>,
+    <span class="k">"buckets"</span>: [{ <span class="k">"range"</span>: <span class="s">"0-29"</span>, <span class="k">"count"</span>: <span class="n">3</span> }],
+    <span class="k">"passRate"</span>: <span class="n">0.62</span>, <span class="k">"median"</span>: <span class="n">54</span>, <span class="k">"stdDev"</span>: <span class="n">15</span>
+  },
+  <span class="k">"benchmarks"</span>: { <span class="k">"classAvg"</span>: <span class="n">0.58</span>, <span class="k">"schoolAvg"</span>: <span class="n">0.61</span>, <span class="k">"nationalAvg"</span>: <span class="n">0.54</span> },
+  <span class="k">"siblingClasses"</span>: [
+    <span class="c">// other classes the same teacher owns — for class-vs-class comparison</span>
+    { <span class="k">"id"</span>: <span class="s">"4B"</span>, <span class="k">"name"</span>: <span class="s">"Form 4 B"</span>, <span class="k">"avgMastery"</span>: <span class="n">0.49</span>, <span class="k">"size"</span>: <span class="n">30</span> }
+  ],
+  <span class="k">"termTrend"</span>: [
+    { <span class="k">"termId"</span>: <span class="s">"t1-2025"</span>, <span class="k">"label"</span>: <span class="s">"Term 1 '25"</span>, <span class="k">"avgMastery"</span>: <span class="n">0.41</span>, <span class="k">"studentCount"</span>: <span class="n">88</span> }
+  ]
+}</pre>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/heatmap</span></div>
+<p class="ep-desc">Students × skills mastery grid. Powers the heatmap. Cache aggressively.</p>
+<pre>{
+  <span class="k">"students"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"s-4A-01"</span>, <span class="k">"name"</span>: <span class="s">"Tinashe Moyo"</span>, <span class="k">"avatar"</span>: <span class="s">"TM"</span>, <span class="k">"atRisk"</span>: false }
+  ],
+  <span class="k">"skills"</span>: [{ <span class="k">"id"</span>: <span class="s">"alg-quad"</span>, <span class="k">"code"</span>: <span class="s">"ALG-1"</span>, <span class="k">"name"</span>: <span class="s">"Quadratic equations"</span> }],
+  <span class="k">"matrix"</span>: { <span class="s">"s-4A-01"</span>: { <span class="s">"alg-quad"</span>: <span class="n">0.72</span> } }
+}</pre>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/misconceptions</span></div>
+<p class="ep-desc">Wrong-answer clusters detected by the grading engine. Aggregated from <code>submissions.wrongAnswerSignature</code> column or computed from item-response patterns.</p>
+<pre>[
+  { <span class="k">"id"</span>: <span class="s">"mc-001"</span>, <span class="k">"skillId"</span>: <span class="s">"alg-quad"</span>,
+    <span class="k">"label"</span>: <span class="s">"Sign error when factorising (b vs −b)"</span>,
+    <span class="k">"frequency"</span>: <span class="n">18</span>, <span class="c">// students affected</span>
+    <span class="k">"severity"</span>: <span class="s">"high"</span>, <span class="c">// "high" | "med" | "low"</span>
+    <span class="k">"exampleQuestion"</span>: <span class="s">"x² − 5x + 6 = 0"</span>,
+    <span class="k">"commonWrongAnswer"</span>: <span class="s">"x = −2, −3"</span>,
+    <span class="k">"affectedStudentIds"</span>: [<span class="s">"s-4A-03"</span>] }
+]</pre>
+
+<h2>3. Student roster (drill level 2)</h2>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/students</span></div>
+<p class="ep-desc">Roster with per-student aggregates. Server should support <code>?sort=overall&dir=desc&filter=at-risk&q=tina</code> to keep large rosters cheap.</p>
+<pre>{
+  <span class="k">"students"</span>: [
+    {
+      <span class="k">"id"</span>: <span class="s">"s-4A-01"</span>, <span class="k">"name"</span>: <span class="s">"Tinashe Moyo"</span>, <span class="k">"avatar"</span>: <span class="s">"TM"</span>,
+      <span class="k">"overall"</span>: <span class="n">0.71</span>,        <span class="c">// avg BKT mastery across all skills</span>
+      <span class="k">"velocity"</span>: <span class="n">0.018</span>,      <span class="c">// avg weekly mastery delta, signed</span>
+      <span class="k">"avgScore"</span>: <span class="n">68</span>,         <span class="c">// avg submission score (0-100)</span>
+      <span class="k">"submissions"</span>: <span class="n">14</span>, <span class="k">"onTime"</span>: <span class="n">12</span>,
+      <span class="k">"lastActiveDays"</span>: <span class="n">2</span>,
+      <span class="k">"atRisk"</span>: false, <span class="k">"excelling"</span>: true,
+      <span class="k">"flagged"</span>: false      <span class="c">// teacher's own intervention flag</span>
+    }
+  ],
+  <span class="k">"counts"</span>: { <span class="k">"all"</span>: <span class="n">32</span>, <span class="k">"atRisk"</span>: <span class="n">7</span>, <span class="k">"excelling"</span>: <span class="n">9</span>, <span class="k">"flagged"</span>: <span class="n">3</span> }
+}</pre>
+
+<h3>"At risk" classification rule</h3>
+<p>Server-side function — keep this consistent across all endpoints:</p>
+<ul>
+  <li><code>overall &lt; 0.45</code>, OR</li>
+  <li>Negative velocity on ≥ 4 skills over the last 4 weeks, OR</li>
+  <li><code>lastActiveDays &gt; 9</code> during an active term</li>
+</ul>
+
+<h2>4. Individual student (drill level 3)</h2>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/students/:studentId/profile</span></div>
+<pre>{
+  <span class="k">"student"</span>: { <span class="k">"id"</span>: <span class="s">"s-4A-01"</span>, <span class="k">"name"</span>: <span class="s">"Tinashe Moyo"</span>, <span class="k">"classId"</span>: <span class="s">"4A"</span>,
+                <span class="k">"guardianContact"</span>: { <span class="k">"email"</span>: <span class="s">"…"</span>, <span class="k">"phone"</span>: <span class="s">"…"</span> } },
+  <span class="k">"skillMastery"</span>: [
+    { <span class="k">"skillId"</span>: <span class="s">"alg-quad"</span>,
+      <span class="k">"mastery"</span>: <span class="n">0.72</span>,         <span class="c">// BKT P(L_n)</span>
+      <span class="k">"slip"</span>: <span class="n">0.08</span>, <span class="k">"guess"</span>: <span class="n">0.18</span>,  <span class="c">// BKT params (optional, for power users)</span>
+      <span class="k">"velocity"</span>: <span class="n">0.022</span>,        <span class="c">// 4-week delta</span>
+      <span class="k">"classAvg"</span>: <span class="n">0.62</span>,         <span class="c">// for vs-class comparison</span>
+      <span class="k">"lastUpdated"</span>: <span class="s">"2025-12-08T14:21:00Z"</span> }
+  ],
+  <span class="k">"weeklyProgress"</span>: [
+    { <span class="k">"week"</span>: <span class="s">"W1"</span>, <span class="k">"student"</span>: <span class="n">0.51</span>, <span class="k">"classMastery"</span>: <span class="n">0.45</span>, <span class="k">"schoolMastery"</span>: <span class="n">0.52</span> }
+  ],
+  <span class="k">"misconceptions"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"mc-001"</span>, <span class="k">"skillId"</span>: <span class="s">"alg-quad"</span>, <span class="k">"label"</span>: <span class="s">"Sign error..."</span>, <span class="k">"exampleQuestion"</span>: <span class="s">"…"</span> }
+  ]
+}</pre>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/students/:studentId/submissions</span></div>
+<p class="ep-desc">Submission timeline. Query: <code>?limit=8&before=2025-12-01</code></p>
+<pre>[
+  { <span class="k">"id"</span>: <span class="s">"sub-9421"</span>, <span class="k">"assessmentId"</span>: <span class="s">"a8"</span>, <span class="k">"assessmentName"</span>: <span class="s">"Vectors Practice"</span>,
+    <span class="k">"topics"</span>: [<span class="s">"Vectors"</span>], <span class="k">"submittedAt"</span>: <span class="s">"2025-12-10T09:14:00Z"</span>,
+    <span class="k">"score"</span>: <span class="n">42</span>, <span class="k">"gradedBy"</span>: <span class="s">"AI"</span>, <span class="c">// "AI" | "Teacher"</span>
+    <span class="k">"flagged"</span>: false,
+    <span class="k">"deepLink"</span>: <span class="s">"/submissions/sub-9421"</span> }
+]</pre>
+
+<h2>5. Actions (writes)</h2>
+
+<div class="endpoint"><span class="verb post">POST</span><span class="path">/api/teacher/students/:studentId/flag</span></div>
+<p class="ep-desc">Toggle the teacher's intervention flag on a student.</p>
+<pre>// Request
+{ <span class="k">"flagged"</span>: true, <span class="k">"reason"</span>: <span class="s">"Mastery declining 4 weeks running"</span> }
+
+// Response: 200 OK, returns updated student aggregate</pre>
+
+<div class="endpoint"><span class="verb post">POST</span><span class="path">/api/teacher/practice-assignments</span></div>
+<p class="ep-desc">Create a targeted practice assignment on a weak skill. Backend should generate a problem set from the skill bank.</p>
+<pre>// Request
+{ <span class="k">"studentIds"</span>: [<span class="s">"s-4A-01"</span>],     <span class="c">// or "*" for whole class</span>
+  <span class="k">"skillIds"</span>: [<span class="s">"alg-quad"</span>],
+  <span class="k">"itemCount"</span>: <span class="n">10</span>,
+  <span class="k">"dueAt"</span>: <span class="s">"2025-12-15T17:00:00Z"</span>,
+  <span class="k">"source"</span>: <span class="s">"weakest-skill"</span> }       <span class="c">// or "misconception:mc-001"</span>
+
+// Response: 201 Created
+{ <span class="k">"assignmentId"</span>: <span class="s">"pa-2031"</span>, <span class="k">"itemIds"</span>: [<span class="s">"i-…"</span>], <span class="k">"deepLink"</span>: <span class="s">"…"</span> }</pre>
+
+<div class="endpoint"><span class="verb post">POST</span><span class="path">/api/teacher/messages</span></div>
+<p class="ep-desc">Send a message to a student or guardian. Reuses your existing announcements/messaging service.</p>
+<pre>{ <span class="k">"to"</span>: { <span class="k">"studentId"</span>: <span class="s">"s-4A-01"</span>, <span class="k">"channel"</span>: <span class="s">"guardian-sms"</span> },
+  <span class="k">"subject"</span>: <span class="s">"Performance check-in"</span>, <span class="k">"body"</span>: <span class="s">"…"</span>,
+  <span class="k">"context"</span>: { <span class="k">"skillId"</span>: <span class="s">"alg-quad"</span>, <span class="k">"mastery"</span>: <span class="n">0.32</span> } }</pre>
+
+<div class="endpoint"><span class="verb get">GET</span><span class="path">/api/teacher/classes/:classId/report.pdf</span></div>
+<p class="ep-desc">Server-rendered PDF of the class overview. Same shape as <code>/overview</code> but rendered with your existing report templates. <code>?format=csv</code> for the roster table.</p>
+
+<h2>6. Source data &amp; aggregation notes</h2>
+
+<table>
+  <thead><tr><th>UI surface</th><th>Source table(s)</th><th>Aggregation</th></tr></thead>
+  <tbody>
+    <tr><td>skill mastery</td><td><code>bkt_state</code></td><td>Latest <code>P(L_n)</code> per <code>(student, skill)</code></td></tr>
+    <tr><td>velocity</td><td><code>bkt_state_history</code></td><td><code>(mastery_now − mastery_4w_ago) / 4</code></td></tr>
+    <tr><td>avg score</td><td><code>submissions</code></td><td><code>AVG(score)</code> over current term</td></tr>
+    <tr><td>misconceptions</td><td><code>submissions.wrong_answer_sig</code> + <code>misconception_clusters</code></td><td>Pre-computed nightly job; cluster by signature, count students, severity = f(frequency, skill weight)</td></tr>
+    <tr><td>topic difficulty</td><td><code>bkt_state</code> + <code>skills</code></td><td><code>AVG(mastery)</code> grouped by <code>topic</code></td></tr>
+    <tr><td>school avg</td><td><code>bkt_state</code></td><td>School-scoped <code>AVG(mastery)</code>, computed nightly into <code>analytics_school_daily</code></td></tr>
+    <tr><td>at-risk flag</td><td>derived</td><td>SQL view <code>v_student_risk</code> using rule above</td></tr>
+  </tbody>
+</table>
+
+<h2>7. New tables / views to add</h2>
+<ul>
+  <li><code>misconception_clusters</code> — <code>id, skill_id, label, signature_pattern, severity, example_question, common_wrong_answer, last_seen_at</code></li>
+  <li><code>misconception_assignments</code> — joins <code>(cluster_id, submission_id, student_id)</code> for traceability</li>
+  <li><code>analytics_class_daily</code> — denormalized daily snapshot: <code>class_id, term_id, day, avg_mastery, at_risk_count, excelling_count, ...</code></li>
+  <li><code>analytics_school_daily</code> — same shape, school-scoped, for benchmarks</li>
+  <li><code>teacher_student_flags</code> — <code>teacher_id, student_id, reason, created_at, resolved_at</code></li>
+  <li><code>v_student_risk</code> — view applying the at-risk classification rule</li>
+</ul>
+
+<h2>8. Realtime / freshness</h2>
+<p>The dashboard shows mastery numbers that should feel live but tolerate ~5 min staleness. Recommended approach:</p>
+<ul>
+  <li>BKT updates fire <code>bkt.updated</code> events → invalidate per-student cache</li>
+  <li>Submission ingest fires <code>submission.graded</code> → invalidate class-overview cache</li>
+  <li>Nightly cron computes <code>analytics_*_daily</code> for trend endpoints</li>
+  <li>Heatmap is read-once-per-page-load; no need for websocket push</li>
+</ul>
+
+<h2>9. Authorisation</h2>
+<ul>
+  <li>All <code>:classId</code> routes: assert <code>teacher_classes.teacher_id = current_user.id AND class_id = :classId</code></li>
+  <li>All <code>:studentId</code> routes: assert the student is in a class the teacher owns</li>
+  <li>Guardian contact details require <code>teacher.can_message_guardians = true</code></li>
+</ul>
+
+</div>
+</body>
+</html>

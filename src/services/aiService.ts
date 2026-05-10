@@ -32,6 +32,7 @@ export interface GenerateQuestionsParams {
   };
   mathPaperType?: 'paper1' | 'paper2' | 'both' | null;
   uploadedFile?: File | null;
+  targetClassGroups?: string[];
 }
 
 export const aiService = {
@@ -57,6 +58,7 @@ generateQuestions: async (params: GenerateQuestionsParams): Promise<Assessment> 
       dueTime: params.dueTime,
       questionTypeDistribution: params.questionTypeDistribution,
       mathPaperType: params.mathPaperType,
+      targetClassGroups: params.targetClassGroups || [],
     }),
   });
 },

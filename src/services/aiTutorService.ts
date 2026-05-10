@@ -6,8 +6,9 @@ import { fetchData } from './apiClient';
 export type AiTutorSession = {
   id: string;
   studentId: string;
-  subjectId: string;
-  status: string;
+  subjectId: string | null;
+  planId:    string | null;
+  status:    string;
 };
 
 export type AiTutorMessage = {
@@ -49,18 +50,18 @@ export type CreateAiTutorMessagePayload = {
 
 export const aiTutorService = {
   /**
-   * Returns an existing active session for (studentId, subjectId) or creates one.
-   * The third argument (senderId) is accepted but unused server-side — kept for
-   * call-site compatibility while the backend only needs studentId + subjectId.
+   * Returns an existing active session for (studentId, planId/subjectId) or creates one.
+   * Pass planId for plan-scoped sessions; subjectId as fallback for legacy callers.
    */
   getOrCreateSession: async (
     studentId: string,
     subjectId: string,
-    _senderId?: string
+    _senderId?: string,
+    planId?: string
   ): Promise<AiTutorSession> => {
     return fetchData<AiTutorSession>('/ai-tutor/sessions', {
       method: 'POST',
-      body: JSON.stringify({ studentId, subjectId }),
+      body: JSON.stringify({ studentId, subjectId, planId }),
     });
   },
 

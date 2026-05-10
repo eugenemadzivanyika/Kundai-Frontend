@@ -40,26 +40,28 @@ import {
   authService,
 } from '../../services/api';
 import { StudentTeacher } from '../../services/studentService';
-import StudentPlanView from '../student v1.2/StudentPlanView';
-import StudentAssignments from '../student v1.2/StudentAssignments';
-import StudentReportCard from '../student v1.2/StudentReportCard';
-import StudentPeerStudy from '../student v1.2/StudentPeerStudy';
-import StudentProfileSettings from '../student v1.2/StudentProfileSettings';
-import StudentSubjectsView from '../student v1.2/StudentSubjectsView';
-import StudentStats from '../student v1.2/StudentStats';
-import StudentMessages from '../student v1.2/StudentMessages';
-import StudentTutor from '../student v1.2/StudentTutor';
-import StudentMasteryGaps from '../student v1.2/StudentMasteryGaps';
-import { HomePanelKey, HomeProgressRow, NavItemKey } from '../student v1.2/dashboard/types';
-import { getStepIcon } from '../student v1.2/dashboard/icons';
+import StudentPlanView from './StudentPlanView';
+import StudentAssignments from './StudentAssignments';
+import StudentReportCard from './StudentReportCard';
+import StudentPeerStudy from './StudentPeerStudy';
+import StudentProfileSettings from './StudentProfileSettings';
+import StudentSubjectsView from './StudentSubjectsView';
+import StudentStats from './StudentStats';
+import StudentMessages from './StudentMessages';
+import StudentTutor from './StudentTutor';
+import StudentMasteryGaps from './StudentMasteryGaps';
+import PlanChatSessionList from './PlanChatSessionList';
+import type { PlanChatSessionSummary } from './PlanChatSessionList';
+import { HomePanelKey, HomeProgressRow, NavItemKey } from './dashboard/types';
+import { getStepIcon } from './dashboard/icons';
 import {
   buildHomeProgressRows,
   filterHomeProgressRows,
   formatProgressDate,
   getProgressExerciseMinutes,
   getProgressTotalLearningMinutes,
-} from '../student v1.2/dashboard/progress';
-import HomeTeachersPanel from '../student v1.2/dashboard/HomeTeachersPanel';
+} from './dashboard/progress';
+import HomeTeachersPanel from './dashboard/HomeTeachersPanel';
 import { reportService, StudentReportCardResponse } from '../../services/reportService';
 import { NotificationItem } from '../../services/notificationService';
 import { CalendarEvent } from '../../types/calendar';
@@ -221,6 +223,10 @@ const StudentDashboard: React.FC = () => {
 
   // Tutor prefill
   const [tutorPrefillMessage, setTutorPrefillMessage] = useState<string | undefined>(undefined);
+
+  // Plan chat sidebar
+  const [activeSessionId,     setActiveSessionId]     = useState<string | null>(null);
+  const [activeSessionStatus, setActiveSessionStatus] = useState<'active' | 'archived' | null>(null);
 
   const { selectedCourse, setSelectedCourse } = useAuth();
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1140,19 +1146,44 @@ const realPlanBySubjectId = useMemo(() => {
 
     switch (activeView) {
       case 'plan':
-        return activePlan ? (
-        <StudentPlanView 
-          plan={activePlan} 
-          studentId={student.id}
-          selectedSubjectId={selectedSubjectId}
-          initialStepIndex={planEntryStepIndex ?? undefined} 
-          onOpenMission={handleOpenMission}
-        />
-        ) : (
-          <div className="bg-white/90 rounded-2xl border border-amber-100/70 p-8 text-center shadow-sm">
-            <BookOpen className="w-14 h-14 text-amber-200 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-700 mb-2">No Active Plan</h3>
-            <p className="text-slate-500 text-sm">No plan available for the selected subject.</p>
+        return (
+          <div style={{ display: 'flex', height: '100%', background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            {/* Plan session sidebar */}
+            <aside style={{ width: 260, flexShrink: 0, borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 14px 8px', borderBottom: '0.5px solid #e2e8f0' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>My Plans</p>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <PlanChatSessionList
+                  studentId={student.id}
+                  activeSessionId={activeSessionId}
+                  onSelectSession={(s: PlanChatSessionSummary) => {
+                    setActiveSessionId(s.sessionId);
+                    setActiveSessionStatus(s.sessionStatus === 'archived' ? 'archived' : 'active');
+                    const matched = subjectPlans.find(p => p._id === s.planId);
+                    if (matched) setActivePlan(matched);
+                  }}
+                />
+              </div>
+            </aside>
+            {/* Plan content */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {activePlan ? (
+                <StudentPlanView
+                  plan={activePlan}
+                  studentId={student.id}
+                  selectedSubjectId={selectedSubjectId}
+                  initialStepIndex={planEntryStepIndex ?? undefined}
+                  onOpenMission={handleOpenMission}
+                />
+              ) : (
+                <div className="bg-white/90 rounded-2xl border border-amber-100/70 p-8 text-center shadow-sm m-6">
+                  <BookOpen className="w-14 h-14 text-amber-200 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-700 mb-2">No Active Plan</h3>
+                  <p className="text-slate-500 text-sm">Select a plan from the sidebar or ask your teacher to assign one.</p>
+                </div>
+              )}
+            </div>
           </div>
         );
 
@@ -1237,8 +1268,9 @@ const realPlanBySubjectId = useMemo(() => {
           <StudentTutor
             studentId={student.id}
             selectedSubjectId={selectedSubjectId}
-            subjects={displaySubjects}
-            activePlan={activePlan}
+            planId={activePlan?._id ?? null}
+            sessionStatus={activeSessionStatus ?? (activePlan?.status === 'Active' ? 'active' : activePlan ? 'archived' : null)}
+            activeStep={null}
             prefillMessage={tutorPrefillMessage}
             onPrefillApplied={() => setTutorPrefillMessage(undefined)}
           />

@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { studentService, developmentService } from '../../services/api';
 import { Student, DevelopmentPlan } from '../../types';
-import StudentChat from './StudentChat';
 import DevelopmentAttributesView from './DevelopmentAttributesView';
 import ResultsView from './ResultsView';
 import { useAuth } from '../../context/AuthContext';
@@ -18,7 +17,6 @@ const ClassroomView: React.FC = () => {
   const [students, setStudents] = useState<StudentWithPlan[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentWithPlan | null>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [showChat, setShowChat] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -77,7 +75,6 @@ const ClassroomView: React.FC = () => {
     }
     setSelectedStudent(student);
     setActivePanel(panel);
-    setShowChat(false);
   };
 
   const handleRowClick = (student: StudentWithPlan) => {
@@ -88,9 +85,7 @@ const ClassroomView: React.FC = () => {
 
   const handleChatClick = (e: React.MouseEvent, student: StudentWithPlan) => {
     e.stopPropagation();
-    setSelectedStudent(student);
-    setShowChat(true);
-    setActivePanel(null);
+    navigate('/staffroom', { state: { chatStudentId: student.id } });
   };
 
   const handlePlanClick = (e: React.MouseEvent, student: StudentWithPlan) => {
@@ -111,23 +106,6 @@ const ClassroomView: React.FC = () => {
     return (
       <div className="p-4 text-red-500 font-bold border border-red-200 rounded">
         Error: {error}
-      </div>
-    );
-  }
-
-  if (showChat && selectedStudent) {
-    return (
-      <div className="relative bg-white rounded-lg shadow p-4">
-        <button
-          onClick={() => setShowChat(false)}
-          className="absolute top-2 left-2 text-sm text-gray-500 hover:text-blue-500 z-10"
-        >
-          ← Back to Classroom
-        </button>
-        <StudentChat
-          studentId={selectedStudent.id}
-          studentName={getStudentName(selectedStudent)}
-        />
       </div>
     );
   }
@@ -233,7 +211,7 @@ const ClassroomView: React.FC = () => {
           >
             ✕
           </button>
-          <ResultsView student={selectedStudent} />
+          <ResultsView student={selectedStudent} courseId={selectedCourse?._id} />
         </div>
       )}
 
@@ -248,7 +226,7 @@ const ClassroomView: React.FC = () => {
           </button>
           <DevelopmentAttributesView
             student={selectedStudent}
-            courseId={selectedCourse?.id || selectedCourse?.code}
+            courseId={selectedCourse?._id}
             courseName={selectedCourse?.name}
           />
         </div>

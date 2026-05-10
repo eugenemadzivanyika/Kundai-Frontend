@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, Plus, Search, Filter } from 'lucide-react';
 import { toast } from 'sonner';
-import { assessmentService, courseService } from '../services/api';
-import { Course, Assessment } from '../types';
-import TablePagination from '../components/ui/TablePagination';
-import { useClientPagination } from '../hooks/useClientPagination';
-import { AIAssessmentModal } from '../components/assessments/AIAssessmentModal';
+import { assessmentService, courseService } from '../../services/api';
+import { Course, Assessment } from '../../types';
+import TablePagination from '../ui/TablePagination';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import { AIAssessmentModal } from './AIAssessmentModal';
+import HandwritingMarkModal from '../teacher/HandwritingMarkModal';
 
 // ── Type colour pills ──────────────────────────────────────────────────────
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -94,13 +95,14 @@ function StatsSummary({ row }: { row: any }) {
 }
 
 // ── Row actions (hover-reveal + kebab) ────────────────────────────────────
-function RowActions({ row, onView, onEdit, onAnalysis, onArchive, onDelete }: {
+function RowActions({ row, onView, onEdit, onAnalysis, onArchive, onDelete, onMark }: {
   row: any;
   onView: () => void;
   onEdit: () => void;
   onAnalysis: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  onMark: () => void;
 }) {
   const [kebabOpen, setKebabOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -140,9 +142,10 @@ function RowActions({ row, onView, onEdit, onAnalysis, onArchive, onDelete }: {
         </button>
       ))}
 
-      {/* Mark button — highlighted when there are unmarked submissions */}
+      {/* Mark button — opens handwriting mark flow */}
       {row.status === 'published' && (
         <button
+          onClick={onMark}
           style={{
             padding: '4px 9px', borderRadius: 6,
             border: `1.5px solid ${canMark ? '#f59e0b' : '#e2e8f0'}`,
@@ -253,6 +256,7 @@ const AssessmentsDashboardPage: React.FC = () => {
   const [modalOpen, setModalOpen]           = useState(false);
   const [deleteTarget, setDeleteTarget]     = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting]             = useState(false);
+  const [markingTarget, setMarkingTarget]   = useState<{ assessmentId: string } | null>(null);
 
   useEffect(() => {
     courseService.getTeachingCourses()
@@ -499,6 +503,7 @@ const AssessmentsDashboardPage: React.FC = () => {
                             onView={() => navigate(`/teacher/assessments/${row._id}`)}
                             onEdit={() => navigate(`/teacher/assessments/${row._id}/edit`)}
                             onAnalysis={() => navigate(`/teacher/assessments/analysis?assessmentId=${row._id}`)}
+                            onMark={() => setMarkingTarget({ assessmentId: row._id })}
                             onArchive={async () => {
                               try {
                                 await assessmentService.updateAssessment(row._id, { status: 'archived' as Assessment['status'] });
@@ -544,6 +549,15 @@ const AssessmentsDashboardPage: React.FC = () => {
           reloadRows();
         }}
       />
+
+      {markingTarget && (
+        <HandwritingMarkModal
+          isOpen={true}
+          assessmentId={markingTarget.assessmentId}
+          onClose={() => setMarkingTarget(null)}
+          onMarkComplete={() => { setMarkingTarget(null); reloadRows(); }}
+        />
+      )}
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (

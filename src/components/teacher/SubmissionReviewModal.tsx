@@ -6,7 +6,10 @@ import { toast } from 'sonner';
 interface SubmissionReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  submissionId: string;
+  /** Result ID (or legacy submission ID used as result ID). Use resultId for clarity in new code. */
+  submissionId?: string;
+  /** When provided, this result is fetched directly — skips any "Request AI Grade" prompt. */
+  resultId?: string;
   onReviewComplete: () => void;
   allSubmissionIds?: string[];
   onSwitchSubmission?: (id: string) => void;
@@ -457,9 +460,10 @@ const ConfirmGradeTab: React.FC<{
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
-  isOpen, onClose, submissionId, onReviewComplete,
+  isOpen, onClose, submissionId, resultId, onReviewComplete,
   allSubmissionIds = [], onSwitchSubmission,
 }) => {
+  const effectiveId = resultId ?? submissionId ?? '';
   const [result, setResult]         = useState<any>(null);
   const [submission, setSubmission] = useState<any>(null);
   const [loading, setLoading]       = useState(true);
@@ -468,25 +472,26 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
   const [teacherFeedback, setTeacherFeedback] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'analysis' | 'profile' | 'content' | 'feedback' | 'grade'>('analysis');
 
-  const currentIndex = allSubmissionIds.indexOf(submissionId);
+  const currentIndex = allSubmissionIds.indexOf(effectiveId);
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < allSubmissionIds.length - 1;
 
   useEffect(() => {
-    if (isOpen && submissionId) fetchData();
-  }, [isOpen, submissionId]);
+    if (isOpen && effectiveId) fetchData();
+  }, [isOpen, effectiveId]);
 
-  // Reset tab when navigating to a different student so the teacher
-  // always lands on the AI Analysis view rather than mid-way through
-  // the previous student's Confirm Grade form.
   useEffect(() => {
     setActiveTab('analysis');
-  }, [submissionId]);
+  }, [effectiveId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const currentResult = await assessmentService.getResultById(submissionId);
+      // If resultId is explicitly provided use the direct result endpoint;
+      // otherwise effectiveId is a submission ID so use the by-submission route.
+      const currentResult = resultId
+        ? await assessmentService.getResultById(resultId)
+        : await assessmentService.getSubmissionResult(effectiveId);
       setResult(currentResult);
       setEditedScore(currentResult.actualMark ?? currentResult.aiGradingSuggestion?.totalScore ?? 0);
       setTeacherFeedback(currentResult.teacherFeedback ?? '');

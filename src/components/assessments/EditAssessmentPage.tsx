@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Loader2, Plus, Trash2, Save, ArrowLeft, Sparkles, X, ChevronLeft, ChevronRight, Check, ChevronDown } from 'lucide-react';
-import { assessmentService, courseService, aiService } from '../services/api';
-import { Question } from '../types';
+import { assessmentService, courseService, aiService } from '../../services/api';
+import { Question } from '../../types';
 
 interface RawQPart {
   text?: string; type?: string; options?: string[];
