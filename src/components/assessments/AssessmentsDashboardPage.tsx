@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, Plus, Search, Filter } from 'lucide-react';
+import { BarChart2, Plus, Search, Filter, BookMarked } from 'lucide-react';
 import { toast } from 'sonner';
 import { assessmentService, courseService } from '../../services/api';
+import { fetchData } from '../../services/apiClient';
 import { Course, Assessment } from '../../types';
 import TablePagination from '../ui/TablePagination';
 import { useClientPagination } from '../../hooks/useClientPagination';
 import { AIAssessmentModal } from './AIAssessmentModal';
 import HandwritingMarkModal from '../teacher/HandwritingMarkModal';
+import ReteachCardsDashboard from './ReteachCardsDashboard';
 
 // ── Type colour pills ──────────────────────────────────────────────────────
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -245,10 +247,13 @@ function CompactStats({ rows }: { rows: any[] }) {
 const AssessmentsDashboardPage: React.FC = () => {
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab]           = useState<'assessments' | 'reteach'>('assessments');
   const [courses, setCourses]               = useState<Course[]>([]);
+  const [classGroups, setClassGroups]       = useState<any[]>([]);
   const [rows, setRows]                     = useState<any[]>([]);
   const [loading, setLoading]               = useState(true);
   const [selectedCourseId, setSelectedCourseId] = useState('all');
+  const [selectedClassGroupId, setSelectedClassGroupId] = useState('');
   const [selectedType, setSelectedType]     = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [searchQuery, setSearchQuery]       = useState('');
@@ -262,6 +267,13 @@ const AssessmentsDashboardPage: React.FC = () => {
     courseService.getTeachingCourses()
       .then((data) => setCourses(Array.isArray(data) ? data : []))
       .catch(() => setCourses([]));
+    fetchData<any[]>('/class-groups')
+      .then((data) => {
+        const groups = Array.isArray(data) ? data : [];
+        setClassGroups(groups);
+        if (groups.length > 0) setSelectedClassGroupId(groups[0]._id);
+      })
+      .catch(() => setClassGroups([]));
   }, []);
 
   useEffect(() => {
@@ -324,6 +336,69 @@ const AssessmentsDashboardPage: React.FC = () => {
       `}</style>
 
       <div className="flex flex-col h-[calc(100vh-160px)] p-3 overflow-hidden gap-2">
+
+        {/* ── Tab bar ── */}
+        <div className="shrink-0 flex items-center gap-1 border-b border-slate-200 pb-0">
+          {([
+            { key: 'assessments', label: 'Assessments', icon: BarChart2 },
+            { key: 'reteach',     label: 'Re-teach Cards', icon: BookMarked },
+          ] as const).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              style={{
+                padding: '7px 14px', borderRadius: '8px 8px 0 0',
+                border: '1.5px solid', borderBottom: 'none',
+                fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                borderColor: activeTab === key ? '#e2e8f0' : 'transparent',
+                background: activeTab === key ? 'white' : 'transparent',
+                color: activeTab === key ? '#1e40af' : '#64748b',
+                marginBottom: activeTab === key ? -1 : 0,
+              }}
+            >
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Re-teach Cards tab ── */}
+        {activeTab === 'reteach' && (
+          <div className="flex flex-col flex-1 min-h-0 gap-2">
+            {/* Selectors */}
+            <div className="shrink-0 flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm">
+              <select
+                value={selectedClassGroupId}
+                onChange={(e) => setSelectedClassGroupId(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+              >
+                {classGroups.length === 0
+                  ? <option value="">No classes found</option>
+                  : classGroups.map((g) => (
+                      <option key={g._id} value={g._id}>{g.name || `Form ${g.form}${g.stream}`}</option>
+                    ))
+                }
+              </select>
+              <select
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+              >
+                <option value="all">Select subject…</option>
+                {courses.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ReteachCardsDashboard
+                classId={selectedClassGroupId}
+                subjectId={selectedCourseId !== 'all' ? selectedCourseId : ''}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Assessments tab ── */}
+        {activeTab === 'assessments' && <>
 
         {/* ── Compact stats bar + action buttons ── */}
         <div className="shrink-0 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-sm">
@@ -538,6 +613,7 @@ const AssessmentsDashboardPage: React.FC = () => {
             />
           </div>
         </div>
+        </>}
       </div>
 
       <AIAssessmentModal

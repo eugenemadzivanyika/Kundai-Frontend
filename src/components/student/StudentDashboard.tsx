@@ -728,8 +728,57 @@ const realPlanBySubjectId = useMemo(() => {
 
   // ── Overview ──────────────────────────────────────────────────────────────────
 
+  const planActivatedNotifs = homeNotifications.filter(
+    (n) => !n.read && (n.notifType === 'plan_activated' || n.type === 'plan_activated')
+  );
+  const planPreemptedNotifs = homeNotifications.filter(
+    (n) => !n.read && (n.notifType === 'plan_preempted' || n.type === 'plan_preempted')
+  );
+
   const renderOverview = () => (
     <div className="space-y-4">
+      {/* Plan lifecycle banners */}
+      {planPreemptedNotifs.map((n) => (
+        <div key={n.id} className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+            <span className="font-semibold text-red-800">{n.title}</span>
+            <span className="text-red-700 hidden sm:inline">— {n.message}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { handleMarkNotificationRead(n.id); setViewWithTransition('plan'); }}
+              className="text-xs font-semibold px-3 py-1 rounded-full bg-red-600 text-white hover:bg-red-700"
+            >
+              View Plan
+            </button>
+            <button onClick={() => handleMarkNotificationRead(n.id)} className="text-red-400 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ))}
+      {planActivatedNotifs.map((n) => (
+        <div key={n.id} className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+            <span className="font-semibold text-green-800">{n.title}</span>
+            <span className="text-green-700 hidden sm:inline">— {n.message}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { handleMarkNotificationRead(n.id); setViewWithTransition('plan'); }}
+              className="text-xs font-semibold px-3 py-1 rounded-full bg-green-600 text-white hover:bg-green-700"
+            >
+              Start Now
+            </button>
+            <button onClick={() => handleMarkNotificationRead(n.id)} className="text-green-400 hover:text-green-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ))}
+
       {/* Streak banner */}
       <section className="relative left-1/2 right-1/2 w-screen -translate-x-1/2 border-y border-orange-100 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">

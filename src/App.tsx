@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Dashboard from './components/dashboard/Dashboard';
 import Inbox from './components/staffroom/Inbox';
@@ -21,6 +21,13 @@ import AdminSubjectsPage from './components/admin/pages/AdminSubjectsPage';
 import AdminClassesPage from './components/admin/pages/AdminClassesPage';
 import AdminCurriculumPage from './components/admin/pages/AdminCurriculumPage';
 import AdminTermForecastsPage from './components/admin/pages/AdminTermForecastsPage';
+import SchoolAdminLayout from './components/school-admin/SchoolAdminLayout';
+import SchoolDashboardPage from './components/school-admin/pages/SchoolDashboardPage';
+import SchoolTeachersPage from './components/school-admin/pages/SchoolTeachersPage';
+import SchoolStudentsPage from './components/school-admin/pages/SchoolStudentsPage';
+import SchoolClassesPage from './components/school-admin/pages/SchoolClassesPage';
+import SchoolSubjectsPage from './components/school-admin/pages/SchoolSubjectsPage';
+import SchoolBillingPage from './components/school-admin/pages/SchoolBillingPage';
 import AIResourceViewer from './components/classroom/AIResourceViewer';
 import AssessmentsDashboardPage from './components/assessments/AssessmentsDashboardPage';
 import AssessmentDetailPage from './components/assessments/AssessmentDetailPage';
@@ -30,7 +37,13 @@ import SysAdminDashboardPage from './components/sysadmin/pages/SysAdminDashboard
 import SysAdminSchoolsPage from './components/sysadmin/pages/SysAdminSchoolsPage';
 import SysAdminPackagesPage from './components/sysadmin/pages/SysAdminPackagesPage';
 import SysAdminSubscriptionsPage from './components/sysadmin/pages/SysAdminSubscriptionsPage';
- import TeacherProfilePage from './components/teacher/TeacherProfilePage';
+import TeacherProfilePage from './components/teacher/TeacherProfilePage';
+import ClassDrillDownDashboard from './components/class-drill-down/ClassDrillDownDashboard';
+
+function AnalyticsPage() {
+  const { classId } = useParams<{ classId: string }>();
+  return <ClassDrillDownDashboard classId={classId!} />;
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -112,9 +125,21 @@ function App() {
           </Route>
         )}
 
-        {/* --- School Admin Portal (own layout, own navigation) --- */}
+        {/* --- School Admin Portal (new design) --- */}
         {isAuthenticated && (
-          <Route path="/admin" element={<AdminLayout />}>
+          <Route path="/admin" element={<SchoolAdminLayout />}>
+            <Route index element={<SchoolDashboardPage />} />
+            <Route path="teachers" element={<SchoolTeachersPage />} />
+            <Route path="students" element={<SchoolStudentsPage />} />
+            <Route path="classes" element={<SchoolClassesPage />} />
+            <Route path="subjects" element={<SchoolSubjectsPage />} />
+            <Route path="billing" element={<SchoolBillingPage />} />
+          </Route>
+        )}
+
+        {/* --- Legacy School Admin (kept temporarily) --- */}
+        {isAuthenticated && (
+          <Route path="/legacy-admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboardPage />} />
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="subjects" element={<AdminSubjectsPage />} />
@@ -145,6 +170,7 @@ function App() {
             <Route path="teacher/assessments/marking-dashboard" element={<GradingDashboard />} />
             <Route path="/ai-content/:resourceId" element={<AIResourceViewer />} />
             <Route path="teacher/profile" element={<TeacherProfilePage />} />
+            <Route path="teacher/analytics/:classId" element={<AnalyticsPage />} />
           </Route>
         )}
 

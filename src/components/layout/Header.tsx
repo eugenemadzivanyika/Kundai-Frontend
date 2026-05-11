@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, LayoutGrid, Mail, Calendar, LogOut, Bell, ClipboardList } from 'lucide-react';
+import { Home, LayoutGrid, Mail, Calendar, LogOut, Bell, ClipboardList, BarChart2 } from 'lucide-react';
 import { authService, notificationService, courseService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import NotificationCenter from '../teacher/NotificationCenter';
@@ -90,9 +90,22 @@ useEffect(() => {
             </button>
           );
         })}
+        {(() => {
+          const defaultClassId = selectedCourse?.classGroups?.[0]?._id;
+          if (!defaultClassId) return null;
+          const isActive = location.pathname.startsWith('/teacher/analytics');
+          return (
+            <button
+              onClick={() => navigate(`/teacher/analytics/${defaultClassId}`)}
+              className={`flex items-center gap-2 py-2 px-5 rounded-md text-[11px] font-black uppercase transition-all ${isActive ? 'bg-blue-600 text-white shadow-md' : 'bg-[#ececed] text-gray-500 hover:bg-gray-200'}`}
+            >
+              <BarChart2 size={14} /> Analytics
+            </button>
+          );
+        })()}
       </nav>
 
-      <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
+      <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} onNavigate={(path) => { setShowNotifications(false); navigate(path); }} />
     </header>
   );
 };

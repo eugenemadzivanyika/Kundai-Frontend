@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { label: 'Term Forecasts',path: '/admin/term-forecasts', icon: CalendarRange },
 ];
 
+// Legacy layout — served at /legacy-admin/* while the new SchoolAdminLayout handles /admin/*
 const AdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
