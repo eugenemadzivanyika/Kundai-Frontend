@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Upload, X, GripVertical, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, GripVertical, AlertCircle, Image as ImageIcon, Plus } from 'lucide-react';
 
 export interface HandwritingFilePickerProps {
   onFilesSelected: (files: File[]) => void;
@@ -89,32 +89,34 @@ export const HandwritingFilePicker: React.FC<HandwritingFilePickerProps> = ({
         </button>
       </div>
 
-      {/* Drop zone */}
-      <div
-        className="mx-5 mt-4 flex-shrink-0 rounded-xl border-2 border-dashed transition-all duration-150 cursor-pointer flex flex-col items-center justify-center py-8 gap-3"
-        style={{
-          borderColor: dropHighlight ? '#3b82f6' : '#cbd5e1',
-          background:  dropHighlight ? '#eff6ff' : '#fafafa',
-        }}
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={e => { e.preventDefault(); setDropHighlight(true); }}
-        onDragLeave={() => setDropHighlight(false)}
-        onDrop={handleDrop}
-      >
-        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-          <Upload size={20} className="text-blue-500" />
-        </div>
-        <div className="text-center">
-          <p className="text-xs font-bold text-slate-700">Drop images here or click to browse</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">PNG · JPG · Multiple files accepted</p>
-        </div>
-        <button
-          className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white rounded-lg bg-blue-500 hover:bg-blue-600 transition-colors"
-          onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+      {/* Drop zone — only shown when no files selected yet */}
+      {files.length === 0 && (
+        <div
+          className="mx-5 mt-4 flex-shrink-0 rounded-xl border-2 border-dashed transition-all duration-150 cursor-pointer flex flex-col items-center justify-center py-8 gap-3"
+          style={{
+            borderColor: dropHighlight ? '#3b82f6' : '#cbd5e1',
+            background:  dropHighlight ? '#eff6ff' : '#fafafa',
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); setDropHighlight(true); }}
+          onDragLeave={() => setDropHighlight(false)}
+          onDrop={handleDrop}
         >
-          <Upload size={12} /> Browse Files
-        </button>
-      </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
+            <Upload size={20} className="text-blue-500" />
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-bold text-slate-700">Drop images here or click to browse</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">PNG · JPG · Multiple files accepted</p>
+          </div>
+          <button
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white rounded-lg bg-blue-500 hover:bg-blue-600 transition-colors"
+            onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
+          >
+            <Upload size={12} /> Browse Files
+          </button>
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -124,12 +126,20 @@ export const HandwritingFilePicker: React.FC<HandwritingFilePickerProps> = ({
         onChange={handleInput}
       />
 
-      {/* Preview grid */}
+      {/* Preview grid — shown once files are added */}
       {files.length > 0 && (
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">
-            {files.length} page{files.length !== 1 ? 's' : ''} selected — drag to reorder
-          </p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+              {files.length} page{files.length !== 1 ? 's' : ''} — drag to reorder
+            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-blue-600 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
+            >
+              <Plus size={11} /> Add more images
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             {files.map((file, idx) => (
               <div
@@ -146,17 +156,17 @@ export const HandwritingFilePicker: React.FC<HandwritingFilePickerProps> = ({
                   opacity: dragIdx === idx ? 0.5 : 1,
                 }}
               >
-                {/* Thumbnail */}
-                <div className="bg-slate-100 aspect-[3/4] overflow-hidden flex items-center justify-center">
+                {/* Thumbnail — min 160×220 */}
+                <div style={{ minHeight: 220, overflow: 'hidden', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                   {previews[idx] ? (
                     <img
                       src={previews[idx]}
                       alt={file.name}
-                      className="w-full h-full object-cover select-none"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', minHeight: 220, display: 'block' }}
                       draggable={false}
                     />
                   ) : (
-                    <ImageIcon size={24} className="text-slate-300" />
+                    <ImageIcon size={32} className="text-slate-300" />
                   )}
                 </div>
 
@@ -212,7 +222,7 @@ export const HandwritingFilePicker: React.FC<HandwritingFilePickerProps> = ({
             onClick={handleStart}
             className="px-4 py-2 text-xs font-extrabold text-white rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Start OCR
+            Extract Text
           </button>
         </div>
       </div>

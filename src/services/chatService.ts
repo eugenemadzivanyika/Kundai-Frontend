@@ -48,6 +48,7 @@ export const chatService = {
   getStudentConversations: async (): Promise<Array<{
     teacherId: string;
     teacherName: string;
+    teacherAvatarUrl?: string | null;
     courses: Array<{ code: string; name: string }>;
     chatId: string;
     lastMessage: { content: string; timestamp: string; senderRole: string } | null;

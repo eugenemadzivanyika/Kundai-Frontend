@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowLeft, Eye, CheckCircle } from 'lucide-react';
+import { Search, ArrowLeft, Eye, CheckCircle, PenLine } from 'lucide-react';
 import { submissionService, assessmentService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import SubmissionReviewModal from './SubmissionReviewModal';
+import HandwritingMarkModal from './HandwritingMarkModal';
 import { toast } from 'sonner';
 
 interface GradingStats {
@@ -127,6 +128,7 @@ const GradingDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedSubmission, setSelectedSubmission] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -237,7 +239,7 @@ const GradingDashboard: React.FC = () => {
       <SubmissionReviewModal
         isOpen={true}
         onClose={() => { setShowReviewModal(false); setSelectedSubmission(null); }}
-        submissionId={selectedSubmission}
+        resultId={selectedSubmission}
         onReviewComplete={fetchData}
         allSubmissionIds={siblingIds}
         onSwitchSubmission={(id) => setSelectedSubmission(id)}
@@ -277,6 +279,20 @@ const GradingDashboard: React.FC = () => {
             Mark & Review AI-assisted marking suggestions and release results to students
           </p>
         </div>
+        <button
+          onClick={() => setHandwritingOpen(true)}
+          style={{
+            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: '#16a34a', color: 'white',
+            border: 'none', borderRadius: 8,
+            padding: '7px 14px', fontSize: 12, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s', flexShrink: 0,
+          }}
+          onMouseOver={e => (e.currentTarget.style.background = '#15803d')}
+          onMouseOut={e => (e.currentTarget.style.background = '#16a34a')}
+        >
+          <PenLine size={13} /> Mark Handwritten
+        </button>
       </div>
 
       {/* Stat bar */}
@@ -444,37 +460,39 @@ const GradingDashboard: React.FC = () => {
 
                     {/* Action */}
                     <td style={{ padding: '9px 14px', textAlign: 'center' }}>
-                      {isReleased ? (
-                        <button
-                          onClick={() => handleReviewSubmission(result._id)}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            background: '#f8fafc', color: '#475569',
-                            border: '1.5px solid #e2e8f0', borderRadius: 7,
-                            padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
-                          onMouseOut={e => (e.currentTarget.style.background = '#f8fafc')}
-                        >
-                          <Eye size={12} /> View
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleReviewSubmission(result._id)}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            background: '#2563eb', color: 'white',
-                            border: 'none', borderRadius: 7,
-                            padding: '5px 12px', fontSize: 12, fontWeight: 600,
-                            cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = '#1d4ed8')}
-                          onMouseOut={e => (e.currentTarget.style.background = '#2563eb')}
-                        >
-                          <CheckCircle size={12} /> Grade
-                        </button>
-                      )}
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        {isReleased ? (
+                          <button
+                            onClick={() => handleReviewSubmission(result._id)}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                              background: '#f8fafc', color: '#475569',
+                              border: '1.5px solid #e2e8f0', borderRadius: 7,
+                              padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                              cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
+                            }}
+                            onMouseOver={e => (e.currentTarget.style.background = '#f1f5f9')}
+                            onMouseOut={e => (e.currentTarget.style.background = '#f8fafc')}
+                          >
+                            <Eye size={12} /> View
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleReviewSubmission(result._id)}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                              background: '#2563eb', color: 'white',
+                              border: 'none', borderRadius: 7,
+                              padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                              cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s',
+                            }}
+                            onMouseOver={e => (e.currentTarget.style.background = '#1d4ed8')}
+                            onMouseOut={e => (e.currentTarget.style.background = '#2563eb')}
+                          >
+                            <CheckCircle size={12} /> Grade
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -540,6 +558,13 @@ const GradingDashboard: React.FC = () => {
         )}
       </div>
 
+      {handwritingOpen && (
+        <HandwritingMarkModal
+          isOpen={true}
+          onClose={() => setHandwritingOpen(false)}
+          onMarkComplete={() => { setHandwritingOpen(false); fetchData(); }}
+        />
+      )}
     </div>
   );
 };

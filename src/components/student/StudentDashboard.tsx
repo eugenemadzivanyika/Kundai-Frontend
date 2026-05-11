@@ -45,6 +45,7 @@ import StudentAssignments from './StudentAssignments';
 import StudentReportCard from './StudentReportCard';
 import StudentPeerStudy from './StudentPeerStudy';
 import StudentProfileSettings from './StudentProfileSettings';
+import StudentProfilePage from './StudentProfilePage';
 import StudentSubjectsView from './StudentSubjectsView';
 import StudentStats from './StudentStats';
 import StudentMessages from './StudentMessages';
@@ -67,6 +68,7 @@ import { NotificationItem } from '../../services/notificationService';
 import { CalendarEvent } from '../../types/calendar';
 import { MasterySignalsSummary, StudentStreakSummary } from '../../services/developmentService';
 import { getActiveAuthToken } from '../../services/authSession';
+import { resolveAssetUrl } from '../../services/apiClient';
 
 // ─── Routing lookup ───────────────────────────────────────────────────────────
 
@@ -1287,9 +1289,8 @@ const realPlanBySubjectId = useMemo(() => {
 
       case 'profile':
         return (
-          <StudentProfileSettings
-            student={student}
-            onStudentUpdated={(updated) => setStudent(updated)}
+          <StudentProfilePage
+            onAvatarUpdated={(url) => setStudent((prev) => prev ? { ...prev, avatar: url } : prev)}
           />
         );
 
@@ -1386,7 +1387,7 @@ const realPlanBySubjectId = useMemo(() => {
                   className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
                   aria-haspopup="menu" aria-expanded={accountMenuOpen}>
                   <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-xs font-semibold ${student.avatar ? 'bg-slate-100 border border-slate-200 text-slate-600' : `bg-gradient-to-br ${avatarGradient} text-white`}`}>
-                    {student.avatar ? <img src={student.avatar} alt={`${student.firstName} avatar`} className="w-full h-full object-cover" /> : avatarInitials}
+                    {student.avatar ? <img src={resolveAssetUrl(student.avatar)} alt={`${student.firstName} avatar`} className="w-full h-full object-cover" /> : avatarInitials}
                   </div>
                   <span className="hidden md:block font-medium">{student.firstName} {student.lastName}</span>
                   <ChevronDown className={`w-4 h-4 transition ${accountMenuOpen ? 'rotate-180' : ''}`} />

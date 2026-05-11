@@ -25,6 +25,8 @@ interface StudentAssessmentRow {
   feedback: string | null;
   submittedAt: Date | null;
   difference: number | null;
+  gradingStatus: 'pending' | 'graded' | 'teacher_review' | null;
+  percentage: number | null;
 }
 
 const parseOptionalDate = (value?: string | null): Date | null => {
@@ -101,12 +103,15 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
 
         const mappedRows: StudentAssessmentRow[] = (Array.isArray(history) ? history : []).map((item) => {
           const maxScore = typeof item.maxScore === 'number' ? item.maxScore : null;
+          // Prefer actualMark; fall back to totalScore (for graded-but-unreleased), then legacy score
           const actualMark =
             typeof item.actualMark === 'number'
               ? item.actualMark
-              : typeof item.score === 'number'
-                ? item.score
-                : null;
+              : typeof item.totalScore === 'number'
+                ? item.totalScore
+                : typeof item.score === 'number'
+                  ? item.score
+                  : null;
           const expectedMark = typeof item.expectedMark === 'number' ? item.expectedMark : null;
           const difference =
             actualMark !== null && expectedMark !== null ? actualMark - expectedMark : null;
@@ -115,6 +120,12 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
             parseOptionalDate(item.gradedAt) ||
             parseOptionalDate(item.dueTime) ||
             parseOptionalDate(item.startTime);
+          const percentage =
+            typeof item.percentage === 'number'
+              ? item.percentage
+              : actualMark !== null && maxScore
+                ? Math.round((actualMark / maxScore) * 100 * 10) / 10
+                : null;
 
           return {
             id: item.enrollmentId || `${item.assessmentId}-${item.assignmentId || 'result'}`,
@@ -129,6 +140,8 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
             feedback: item.feedback || null,
             submittedAt,
             difference,
+            gradingStatus: item.gradingStatus ?? null,
+            percentage,
           };
         });
 
@@ -377,7 +390,10 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
                 const scorePercent = hasScoredResult
                   ? Math.round(((result.actualMark as number) / (result.maxScore as number)) * 100)
                   : null;
-                const gradeLabel = result.grade || deriveGradeFromPercent(scorePercent) || 'N/A';
+                const gradeLabel =
+                  result.grade ||
+                  (hasScoredResult ? deriveGradeFromPercent(result.percentage ?? scorePercent) : null) ||
+                  (result.gradingStatus === 'pending' || result.gradingStatus === null ? '—' : 'N/A');
                 return (
                   <tr key={result.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -399,8 +415,18 @@ const StudentResults: React.FC<StudentResultsProps> = ({ studentId, selectedSubj
                           <div className="font-semibold">
                             {result.actualMark}/{result.maxScore}
                           </div>
-                          <div className="text-xs text-gray-500">({scorePercent}%)</div>
+                          <div className="text-xs text-gray-500">
+                            ({result.percentage !== null ? Math.round(result.percentage) : scorePercent}%)
+                          </div>
                         </>
+                      ) : result.gradingStatus === 'pending' || result.gradingStatus === null ? (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                          Pending
+                        </span>
+                      ) : result.gradingStatus === 'teacher_review' ? (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                          Under Review
+                        </span>
                       ) : (
                         <span className="text-gray-400">N/A</span>
                       )}

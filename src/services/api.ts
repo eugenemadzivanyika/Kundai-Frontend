@@ -20,3 +20,4 @@ export * from './schoolService';
 export * from './termForecastService';
 export * from './curriculumService';
 export * from './handwritingService';
+export * from './profileService'

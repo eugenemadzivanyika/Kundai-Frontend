@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { useNavigate } from 'react-router-dom';
 
+import { resolveAssetUrl } from '../../services/apiClient';
+
 
 
 interface StudentAttribute {
@@ -35,6 +37,8 @@ attributes: StudentAttribute[];
 plans?: any[];
 
 activePlan?: string;
+
+avatarUrl?: string;
 
 }
 
@@ -154,15 +158,13 @@ className="flex flex-col flex-1 min-h-0"
 
 <div className="flex items-start mb-3">
 
-<div className="w-20 h-20 bg-black rounded-full flex items-center justify-center shrink-0">
+<div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-lg font-black text-white bg-black">
 
-<svg viewBox="0 0 24 24" width="40" height="40" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+{student.avatarUrl
 
-<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+  ? <img src={resolveAssetUrl(student.avatarUrl)} alt={student.firstName} className="w-full h-full object-cover" />
 
-<circle cx="12" cy="7" r="4"></circle>
-
-</svg>
+  : `${student.firstName?.[0] ?? ''}${student.lastName?.[0] ?? ''}`.toUpperCase() || '?'}
 
 </div>
 

@@ -13,6 +13,7 @@ import {
   GripHorizontal,
   MessageCircle,
   PlayCircle,
+  RotateCcw,
   Send,
   Sparkles,
   Target,
@@ -22,6 +23,11 @@ import { CourseAttribute, StudentAttribute, Subject } from '../../types';
 import { courseService } from '../../services/courseService';
 import { fetchAiData } from '../../services/apiClient';
 import { aiService } from '../../services/aiService';
+import {
+  generateAndPersistSubtopicNotes,
+  getSubjectNotes,
+  refreshSubtopicNotes,
+} from '../../services/subjectNotesService';
 import StudentPracticeRunner, { buildMockPracticeQuestions, PracticeQuestion, PracticeRunSummary } from './StudentPracticeRunner';
 
 // ─── Local placeholder types for removed external services ───────────────────
@@ -620,7 +626,7 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     void loadCurriculum();
   }, [activeSubject?.id, activeSubject?.name, studentId]);
 
-  // Fetch RAG-grounded notes when a 'learn' content item is opened
+  // Fetch notes when a 'learn' content item is opened — serve from DB if available, else generate and persist
   useEffect(() => {
     if (!detailState || !activeSubject) return;
     const topicId = detailState.topicId;
@@ -633,17 +639,35 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     const subjectMongoId = (activeSubject as any)._id as string | undefined;
     if (!subjectMongoId) return;
 
+    const topicName = matchedAttr.parent_unit || matchedAttr.name;
+    const subtopicName = matchedAttr.name;
+
     setNotesLoadingIds((prev) => new Set(prev).add(topicId));
 
-    aiService
-      .generateNotes(
-        subjectMongoId,
-        matchedAttr.name,
-        matchedAttr.name,
-        matchedAttr.level || 'O Level',
-      )
-      .then((result) => {
-        setNotesCache((prev) => ({ ...prev, [topicId]: result }));
+    getSubjectNotes(subjectMongoId)
+      .then(async (doc) => {
+        if (doc) {
+          const topic = doc.topics.find((t) => t.topicName === topicName);
+          const subtopic = topic?.subtopics.find((s) => s.subtopicName === subtopicName);
+          if (subtopic?.content) {
+            setNotesCache((prev) => ({
+              ...prev,
+              [topicId]: { notes: subtopic.content, sources: [], grounded_by_rag: false },
+            }));
+            return;
+          }
+        }
+        // No persisted notes — generate via AI and persist to DB
+        const result = await generateAndPersistSubtopicNotes(
+          subjectMongoId,
+          topicName,
+          subtopicName,
+          matchedAttr.level || 'O Level',
+        );
+        setNotesCache((prev) => ({
+          ...prev,
+          [topicId]: { notes: result.content, sources: result.sources, grounded_by_rag: result.grounded_by_rag },
+        }));
       })
       .catch(() => {
         setNotesCache((prev) => ({
@@ -655,6 +679,31 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
         setNotesLoadingIds((prev) => { const next = new Set(prev); next.delete(topicId); return next; });
       });
   }, [detailState?.topicId, activeSubject]);
+
+  const handleRefreshSubtopicNotes = useCallback(async (
+    topicId: string,
+    matchedAttr: CourseAttribute,
+    subjectMongoId: string,
+  ) => {
+    const topicName = matchedAttr.parent_unit || matchedAttr.name;
+    const subtopicName = matchedAttr.name;
+
+    setNotesCache((prev) => { const next = { ...prev }; delete next[topicId]; return next; });
+    setNotesLoadingIds((prev) => new Set(prev).add(topicId));
+
+    try {
+      await refreshSubtopicNotes(subjectMongoId, topicName, subtopicName);
+      const result = await generateAndPersistSubtopicNotes(subjectMongoId, topicName, subtopicName, matchedAttr.level || 'O Level');
+      setNotesCache((prev) => ({
+        ...prev,
+        [topicId]: { notes: result.content, sources: result.sources, grounded_by_rag: result.grounded_by_rag },
+      }));
+    } catch {
+      setNotesCache((prev) => ({ ...prev, [topicId]: { notes: '', sources: [], grounded_by_rag: false } }));
+    } finally {
+      setNotesLoadingIds((prev) => { const next = new Set(prev); next.delete(topicId); return next; });
+    }
+  }, []);
 
   useEffect(() => {
     setSelectedUnitIndex(0);
@@ -1296,6 +1345,23 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
     ? detailUnit.topics.find((topic) => topic.id === detailState?.topicId) || null
     : null;
   const detailItems = detailTopic ? getTopicContentItems(detailTopic) : [];
+
+  const isTeacherView = useMemo(() => {
+    try {
+      const role = JSON.parse(localStorage.getItem('user') || 'null')?.role;
+      return role === 'teacher' || role === 'admin';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const detailMatchedAttr = useMemo(() => {
+    if (!detailTopic || !activeSubject) return null;
+    const rawAttrs: CourseAttribute[] = (activeSubject as any)._courseAttributes || [];
+    return rawAttrs.find((a) => (a._id?.toString() || a.attribute_id) === detailTopic.id) || null;
+  }, [detailTopic, activeSubject]);
+
+  const detailSubjectMongoId = (activeSubject as any)?._id as string | undefined;
   const selectedDetailItem =
     detailItems.find((item) => item.id === detailState?.contentItemId) || detailItems[0] || null;
   const isDetailPracticeView = Boolean(
@@ -1580,7 +1646,20 @@ const StudentSubjectsView: React.FC<StudentSubjectsViewProps> = ({ studentId, se
                     )}
 
                     <div className="space-y-4 max-w-4xl">
-                      <h3 className="text-2xl font-semibold text-slate-900">{detailTopic.title}</h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-2xl font-semibold text-slate-900">{detailTopic.title}</h3>
+                        {isTeacherView && detailMatchedAttr && detailSubjectMongoId && (
+                          <button
+                            type="button"
+                            title="Refresh AI notes for this topic"
+                            onClick={() => void handleRefreshSubtopicNotes(detailTopic.id, detailMatchedAttr, detailSubjectMongoId)}
+                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Refresh
+                          </button>
+                        )}
+                      </div>
                       {notesLoadingIds.has(detailTopic.id) ? (
                         <div className="space-y-3 animate-pulse">
                           {[...Array(5)].map((_, i) => (

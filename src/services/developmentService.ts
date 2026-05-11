@@ -75,6 +75,14 @@ export const developmentService = {
   deletePlan: (planId: string) =>
     fetchData<{ message: string }>(`/development/plans/${planId}`, { method: 'DELETE' }),
 
+  getPlanStatus: (planId: string) =>
+    fetchData<{ planId: string; status: 'generating' | 'ready' | 'failed'; percentComplete: number }>(
+      `/development/plans/${planId}/status`
+    ),
+
+  regeneratePlanMissions: (planId: string) =>
+    fetchData<Record<string, unknown>>(`/development/plans/${planId}/generate`, { method: 'POST' }),
+
   // ── Mastery signals ──────────────────────────────────────────────────────────
 
   getMasterySignalsSummary: (studentId: string) =>

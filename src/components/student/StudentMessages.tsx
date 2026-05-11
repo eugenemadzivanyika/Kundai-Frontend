@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChatMessage } from '../../types';
 import { chatService } from '../../services/api';
 import { Send, MessageCircle, BookOpen, User, ChevronRight } from 'lucide-react';
+import { resolveAssetUrl } from '../../services/apiClient';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
@@ -13,6 +14,7 @@ interface StudentMessagesProps {
 interface Conversation {
   teacherId: string;
   teacherName: string;
+  teacherAvatarUrl?: string | null;
   courses: Array<{ code: string; name: string }>;
   chatId: string;
   lastMessage: { content: string; timestamp: string; senderRole: string } | null;
@@ -245,8 +247,10 @@ const StudentMessages: React.FC<StudentMessagesProps> = ({ studentId }) => {
                 }`}
               >
                 {/* Avatar */}
-                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                  {getInitials(conv.teacherName)}
+                <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white text-xs font-bold shrink-0 ${conv.teacherAvatarUrl ? 'bg-slate-200' : `bg-gradient-to-br ${color}`}`}>
+                  {conv.teacherAvatarUrl
+                    ? <img src={resolveAssetUrl(conv.teacherAvatarUrl)} alt={conv.teacherName} className="w-full h-full object-cover" />
+                    : getInitials(conv.teacherName)}
                 </div>
 
                 {/* Info */}
@@ -293,8 +297,10 @@ const StudentMessages: React.FC<StudentMessagesProps> = ({ studentId }) => {
               const idx = conversations.findIndex(c => c.teacherId === activeConv.teacherId);
               const color = TEACHER_COLORS[idx % TEACHER_COLORS.length];
               return (
-                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
-                  {getInitials(activeConv.teacherName)}
+                <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-white text-sm font-bold shrink-0 ${activeConv.teacherAvatarUrl ? 'bg-slate-200' : `bg-gradient-to-br ${color}`}`}>
+                  {activeConv.teacherAvatarUrl
+                    ? <img src={resolveAssetUrl(activeConv.teacherAvatarUrl)} alt={activeConv.teacherName} className="w-full h-full object-cover" />
+                    : getInitials(activeConv.teacherName)}
                 </div>
               );
             })()}

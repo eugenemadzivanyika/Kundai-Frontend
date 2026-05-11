@@ -103,8 +103,9 @@ const devProfiles = await Promise.all(
         lastName: student.user?.lastName || student.id,
         form: student.form || 1,
         overall: devData.overallMastery || student.overall || 0, // Use freshly calculated overall
-        potentialOverall: 90, 
-        plans: plans, 
+        potentialOverall: 90,
+        avatarUrl: student.user?.avatarUrl || '',
+        plans: plans,
         activePlan: activePlanObj ? activePlanObj.title : 'None',
         // SURGICAL FIX: Map the aggregated unitMasteries instead of flat attributes
         attributes: devData.unitMasteries && devData.unitMasteries.length > 0
@@ -126,6 +127,7 @@ const devProfiles = await Promise.all(
         lastName: student.user?.lastName || student.id,
         form: student.form || 1,
         overall: student.overall || 0,
+        avatarUrl: student.user?.avatarUrl || '',
         attributes: [{ name: "Sync Error", value: 0 }]
       };
     }

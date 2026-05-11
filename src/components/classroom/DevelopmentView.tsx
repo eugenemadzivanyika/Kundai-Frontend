@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DevelopmentPlan, Student, SkillColor } from '../../types';
 import { studentService, developmentService } from '../../services/api';
-import { Activity, Plus, ChevronDown, Zap, Check, MoreVertical, Trash2, AlertTriangle, Pause } from 'lucide-react';
+import { Activity, Plus, ChevronDown, Zap, Check, MoreVertical, Trash2, AlertTriangle, Pause, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DevelopmentViewProps {
@@ -39,6 +39,7 @@ type TargetAttrDoc = { attributeId?: string; initialMastery?: number; name?: str
 type PlanDoc = {
   _id: string;
   status?: string;
+  generationStatus?: 'generating' | 'ready' | 'failed';
   title?: string;
   name?: string;
   description?: string;
@@ -260,6 +261,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
   const [openKebabId, setOpenKebabId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   const asDoc = (dp: DevelopmentPlan | null): PlanDoc | null =>
@@ -328,8 +330,9 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
         setSelectedStudent(studentData);
         const plansData = await developmentService.getAllPlansForStudent(initialStudentId);
         setAllStudentDevelopmentPlans(plansData);
+        const generatingPlan = plansData.find(p => (asDoc(p) as PlanDoc)?.generationStatus === 'generating');
         const activePlan = plansData.find(p => asDoc(p)?.status === 'Active');
-        setCurrentDisplayPlan(activePlan || plansData[0] || null);
+        setCurrentDisplayPlan(generatingPlan || activePlan || plansData[0] || null);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load student development data.');
       } finally {
@@ -347,8 +350,9 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
       setSelectedStudent(studentData);
       const plansData = await developmentService.getAllPlansForStudent(newStudentId);
       setAllStudentDevelopmentPlans(plansData);
+      const generatingPlan = plansData.find(p => (asDoc(p) as PlanDoc)?.generationStatus === 'generating');
       const activePlan = plansData.find(p => asDoc(p)?.status === 'Active');
-      setCurrentDisplayPlan(activePlan || plansData[0] || null);
+      setCurrentDisplayPlan(generatingPlan || activePlan || plansData[0] || null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load data for selected student.');
     } finally {
@@ -447,6 +451,58 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
     }
   };
 
+  const handleRetryGeneration = async () => {
+    const planDoc = asDoc(currentDisplayPlan);
+    if (!planDoc?._id) return;
+    setIsRetrying(true);
+    try {
+      await developmentService.regeneratePlanMissions(planDoc._id);
+      const optimistic = { ...currentDisplayPlan, generationStatus: 'generating' } as DevelopmentPlan;
+      setCurrentDisplayPlan(optimistic);
+      setAllStudentDevelopmentPlans(prev =>
+        prev.map(p => (asDoc(p)?._id === planDoc._id ? optimistic : p))
+      );
+    } catch {
+      toast.error('Failed to retry generation. Please try again.');
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  // ── Polling: watch the current plan while it is generating ───────────────────
+  useEffect(() => {
+    const planDoc = asDoc(currentDisplayPlan);
+    if (planDoc?.generationStatus !== 'generating' || !planDoc._id) return;
+
+    const planId = planDoc._id;
+    const intervalId = setInterval(async () => {
+      try {
+        const statusData = await developmentService.getPlanStatus(planId);
+        if (statusData.status === 'ready') {
+          clearInterval(intervalId);
+          const plansData = await developmentService.getAllPlansForStudent(initialStudentId);
+          setAllStudentDevelopmentPlans(plansData);
+          const refreshed = plansData.find(p => asDoc(p)?._id === planId);
+          if (refreshed) setCurrentDisplayPlan(refreshed);
+          toast.success('Plan generation complete — missions are ready.');
+        } else if (statusData.status === 'failed') {
+          clearInterval(intervalId);
+          const markFailed = (p: DevelopmentPlan) =>
+            asDoc(p)?._id === planId
+              ? ({ ...p, generationStatus: 'failed' } as DevelopmentPlan)
+              : p;
+          setAllStudentDevelopmentPlans(prev => prev.map(markFailed));
+          setCurrentDisplayPlan(prev => (asDoc(prev)?._id === planId ? markFailed(prev!) : prev));
+          toast.error('Plan generation failed. You can retry from the plan view.');
+        }
+      } catch {
+        // network blip — keep polling
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [(asDoc(currentDisplayPlan) as PlanDoc | null)?.generationStatus, (asDoc(currentDisplayPlan) as PlanDoc | null)?._id]);
+
   const getCurrentSkills = (): SkillDoc[] =>
     getPlanSkills(currentDisplayPlan).map((skill: SkillDoc) => ({
       ...skill,
@@ -497,6 +553,16 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
 
   return (
     <>
+    <style>{`
+      @keyframes shimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+    `}</style>
     <div style={{
       height: 'calc(100vh - 160px)',
       display: 'grid',
@@ -544,22 +610,39 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
             const kebabOpen = openKebabId === planId;
             return (
               <div key={planId} style={{ position: 'relative' }}>
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handlePlanSelect(planItem)}
+                  onKeyDown={e => e.key === 'Enter' && handlePlanSelect(planItem)}
                   style={{
                     width: '100%', padding: '9px 10px', borderRadius: 9,
                     border: `1.5px solid ${isSelected ? '#5eead4' : '#e4e4e7'}`,
                     background: isSelected ? '#f0fdfa' : '#fafafa',
                     cursor: 'pointer', textAlign: 'left',
                     display: 'flex', flexDirection: 'column', gap: 5,
-                    transition: 'all 0.12s',
+                    transition: 'all 0.12s', boxSizing: 'border-box',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                     <span style={{ fontSize: 10, fontWeight: 800, color: isSelected ? '#0f766e' : '#3f3f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                       {getPlanName(planItem)}
                     </span>
-                    <StatusPill status={planItem.status || 'Draft'} />
+                    {(asDoc(planItem) as PlanDoc)?.generationStatus === 'generating' ? (
+                      <span style={{
+                        fontSize: 7, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.07em',
+                        background: '#f0fdfa', color: '#0d9488', border: '1px solid #99f6e4',
+                        padding: '2px 6px', borderRadius: 20, whiteSpace: 'nowrap', animation: 'pulse 1.5s ease-in-out infinite',
+                      }}>Generating…</span>
+                    ) : (asDoc(planItem) as PlanDoc)?.generationStatus === 'failed' ? (
+                      <span style={{
+                        fontSize: 7, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.07em',
+                        background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca',
+                        padding: '2px 6px', borderRadius: 20, whiteSpace: 'nowrap',
+                      }}>Failed</span>
+                    ) : (
+                      <StatusPill status={planItem.status || 'Draft'} />
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); setOpenKebabId(kebabOpen ? null : planId); }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#a1a1aa', display: 'flex', alignItems: 'center', flexShrink: 0 }}
@@ -578,7 +661,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
                   {progress === 0 && (planItem.status as string) === 'Draft' && (
                     <span style={{ fontSize: 8, color: '#a1a1aa', fontStyle: 'italic' }}>Not yet activated</span>
                   )}
-                </button>
+                </div>
                 {kebabOpen && (
                   <div style={{
                     position: 'absolute', right: 0, top: '100%', zIndex: 50,
@@ -628,7 +711,7 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
       <div style={{ background: 'white', borderRadius: 12, border: '1.5px solid #e4e4e7', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
         {currentDisplayPlan ? (
           <>
-            {/* Plan header */}
+            {/* Plan header — always visible */}
             <div style={{ padding: '14px 18px 12px', borderBottom: '1px solid #f4f4f5', background: '#fafafa', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -728,45 +811,95 @@ const DevelopmentView: React.FC<DevelopmentViewProps> = ({ studentId: propStuden
               </div>
             </div>
 
-            {/* Body: scrollable */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-              {/* Skills */}
-              {mainSkills.length > 0 && (
-                <div>
-                  <div style={SECTION_STYLE}>Skill Breakdown<div style={DIVIDER_STYLE} /></div>
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(mainSkills.length, 4)}, 1fr)`, gap: 8 }}>
-                    {mainSkills.map((skill, si) => (
-                      <SkillCard
-                        key={si}
-                        skill={skill}
-                        expanded={expandedSkill === si}
-                        onToggle={() => setExpandedSkill(prev => prev === si ? null : si)}
-                      />
-                    ))}
+            {/* Body: scrollable — gated on generationStatus */}
+            {planData?.generationStatus === 'generating' ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, padding: 32 }}>
+                <Activity size={30} style={{ color: '#0d9488', animation: 'spin 1.2s linear infinite' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: '#18181b' }}>Generating Plan…</div>
+                  <div style={{ fontSize: 11, color: '#71717a', marginTop: 5, lineHeight: 1.5, maxWidth: 280 }}>
+                    AI is building missions and personalised content. This usually takes 30–60 seconds.
                   </div>
                 </div>
-              )}
-
-              {/* Missions */}
-              {planMissions.length > 0 && (
-                <div>
-                  <div style={SECTION_STYLE}>Missions<div style={DIVIDER_STYLE} /></div>
-                  <ol style={{ display: 'flex', flexDirection: 'column', gap: 6, listStyle: 'none', padding: 0, margin: 0 }}>
-                    {planMissions.map((mission: MissionDoc, i: number) => (
-                      <MissionRow key={mission._id ?? i} mission={mission} index={i} />
-                    ))}
-                  </ol>
+                {/* Animated progress bar */}
+                <div style={{ width: '75%', height: 6, background: '#e4e4e7', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 99,
+                    background: 'linear-gradient(90deg, #0d9488 0%, #5eead4 50%, #0d9488 100%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.8s ease-in-out infinite',
+                  }} />
                 </div>
-              )}
-
-              {mainSkills.length === 0 && planMissions.length === 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, color: '#a1a1aa', gap: 6 }}>
-                  <Activity size={24} />
-                  <span style={{ fontSize: 12, fontStyle: 'italic' }}>No content generated yet.</span>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                  Polling every 3 s…
                 </div>
-              )}
-            </div>
+              </div>
+            ) : planData?.generationStatus === 'failed' ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={20} color="#b91c1c" />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: '#18181b' }}>Generation Failed</div>
+                  <div style={{ fontSize: 11, color: '#71717a', marginTop: 5, lineHeight: 1.5, maxWidth: 280 }}>
+                    The AI service encountered an error building this plan. You can retry below.
+                  </div>
+                </div>
+                <button
+                  onClick={handleRetryGeneration}
+                  disabled={isRetrying}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: isRetrying ? '#a1a1aa' : '#0d9488', color: 'white', border: 'none',
+                    borderRadius: 9, padding: '8px 18px', fontSize: 10, fontWeight: 900,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    cursor: isRetrying ? 'not-allowed' : 'pointer', transition: 'background 0.15s',
+                  }}
+                >
+                  <RefreshCw size={12} style={{ animation: isRetrying ? 'spin 0.8s linear infinite' : 'none' }} />
+                  {isRetrying ? 'Retrying…' : 'Retry Generation'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Skills */}
+                {mainSkills.length > 0 && (
+                  <div>
+                    <div style={SECTION_STYLE}>Skill Breakdown<div style={DIVIDER_STYLE} /></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(mainSkills.length, 4)}, 1fr)`, gap: 8 }}>
+                      {mainSkills.map((skill, si) => (
+                        <SkillCard
+                          key={si}
+                          skill={skill}
+                          expanded={expandedSkill === si}
+                          onToggle={() => setExpandedSkill(prev => prev === si ? null : si)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missions */}
+                {planMissions.length > 0 && (
+                  <div>
+                    <div style={SECTION_STYLE}>Missions<div style={DIVIDER_STYLE} /></div>
+                    <ol style={{ display: 'flex', flexDirection: 'column', gap: 6, listStyle: 'none', padding: 0, margin: 0 }}>
+                      {planMissions.map((mission: MissionDoc, i: number) => (
+                        <MissionRow key={mission._id ?? i} mission={mission} index={i} />
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {mainSkills.length === 0 && planMissions.length === 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, color: '#a1a1aa', gap: 6 }}>
+                    <Activity size={24} />
+                    <span style={{ fontSize: 12, fontStyle: 'italic' }}>No content generated yet.</span>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#a1a1aa', gap: 8 }}>

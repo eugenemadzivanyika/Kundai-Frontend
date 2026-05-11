@@ -49,6 +49,16 @@ export async function fetchData<T = any>(endpoint: string, options: RequestInit 
 
 export { API_URL };
 
+// Converts a server-relative path like /uploads/avatars/foo.jpeg into an
+// absolute URL pointing at the backend origin, so <img src> works from the
+// Vite dev server (different port) or any other host.
+const BACKEND_ORIGIN = API_URL.replace(/\/api$/, '');
+export const resolveAssetUrl = (url?: string | null): string => {
+  if (!url) return '';
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  return `${BACKEND_ORIGIN}${url}`;
+};
+
 
 /**
  * Like fetchData but targets the Python AI service instead of the Node API.

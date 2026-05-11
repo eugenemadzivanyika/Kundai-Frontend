@@ -465,6 +465,7 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
 }) => {
   const effectiveId = resultId ?? submissionId ?? '';
   const [result, setResult]         = useState<any>(null);
+  const [fetchError, setFetchError] = useState(false);
   const [submission, setSubmission] = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -487,8 +488,7 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
   const fetchData = async () => {
     try {
       setLoading(true);
-      // If resultId is explicitly provided use the direct result endpoint;
-      // otherwise effectiveId is a submission ID so use the by-submission route.
+      setFetchError(false);
       const currentResult = resultId
         ? await assessmentService.getResultById(resultId)
         : await assessmentService.getSubmissionResult(effectiveId);
@@ -502,6 +502,7 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
       }
     } catch (error) {
       console.error('Fetch Error:', error);
+      setFetchError(true);
       toast.error('Failed to load grading details');
     } finally {
       setLoading(false);
@@ -535,6 +536,24 @@ const SubmissionReviewModal: React.FC<SubmissionReviewModalProps> = ({
   };
 
   if (!isOpen) return null;
+
+  if (fetchError) {
+    return (
+      <div style={{ height: 'calc(100vh - 160px)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', flexDirection: 'column', gap: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>✗</div>
+        <p style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', margin: 0 }}>Failed to load grading details</p>
+        <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>The result record could not be found.</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={fetchData} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: '#2563eb', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Retry
+          </button>
+          <button onClick={onClose} style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Go back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !result) {
     return (

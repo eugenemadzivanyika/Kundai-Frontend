@@ -30,6 +30,7 @@ import SysAdminDashboardPage from './components/sysadmin/pages/SysAdminDashboard
 import SysAdminSchoolsPage from './components/sysadmin/pages/SysAdminSchoolsPage';
 import SysAdminPackagesPage from './components/sysadmin/pages/SysAdminPackagesPage';
 import SysAdminSubscriptionsPage from './components/sysadmin/pages/SysAdminSubscriptionsPage';
+ import TeacherProfilePage from './components/teacher/TeacherProfilePage';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -143,6 +144,7 @@ function App() {
             <Route path="teacher/assessments/:id/edit" element={<EditAssessmentPage />} />
             <Route path="teacher/assessments/marking-dashboard" element={<GradingDashboard />} />
             <Route path="/ai-content/:resourceId" element={<AIResourceViewer />} />
+            <Route path="teacher/profile" element={<TeacherProfilePage />} />
           </Route>
         )}
 

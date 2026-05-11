@@ -60,15 +60,18 @@ useEffect(() => {
           />
         )}
 
-        <div className="flex gap-2">
-          <button onClick={() => setShowNotifications(true)} className="relative bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-gray-200">
-            <Bell size={18} />
-            {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{unreadCount}</span>}
-          </button>
-          <button onClick={() => { authService.logout(); navigate('/login'); }} className="bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600">
-            <LogOut size={18} />
-          </button>
-        </div>
+
+   <div className="flex gap-2 items-center">
+     <button onClick={() => setShowNotifications(true)} className="relative bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-gray-200">
+       <Bell size={18} />
+       {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{unreadCount}</span>}
+     </button>
+
+<button onClick={() => { authService.logout(); navigate('/login'); }} className="bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600">
+       <LogOut size={18} />
+     </button>
+   </div>
+
       </div>
 
       <nav className="flex gap-1 mt-3">

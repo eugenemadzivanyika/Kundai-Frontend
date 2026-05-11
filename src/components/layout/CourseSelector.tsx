@@ -1,7 +1,10 @@
 // src/components/layout/CourseSelector.tsx
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, X, User, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, X, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/api';
+import { resolveAssetUrl } from '../../services/apiClient';
 
 interface ClassGroup {
   _id: string;
@@ -19,6 +22,9 @@ interface CourseSelectorProps {
 
 const CourseSelector: React.FC<CourseSelectorProps> = ({ userName, courses, selectedCourse, onSelect }) => {
   const { selectedClassGroups, setSelectedClassGroups } = useAuth();
+  const navigate = useNavigate();
+  const currentUser = authService.getCurrentUser() as any;
+  const teacherInitials = `${currentUser?.firstName?.[0] ?? ''}${currentUser?.lastName?.[0] ?? ''}`.toUpperCase() || '?';
   const [isOpen, setIsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingCourse, setPendingCourse] = useState<any | null>(null);
@@ -77,9 +83,17 @@ const CourseSelector: React.FC<CourseSelectorProps> = ({ userName, courses, sele
         className="relative bg-[#ececed] p-1 flex items-center shadow-sm rounded-l-lg pr-12"
         style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 40px) 100%, 0% 100%)' }}
       >
-        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white shrink-0">
-          <User size={20} />
-        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/teacher/profile')}
+          title="My profile"
+          className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-xs font-bold hover:ring-2 hover:ring-blue-400 transition-all"
+          style={{ background: currentUser?.avatarUrl ? 'transparent' : '#000', color: 'white' }}
+        >
+          {currentUser?.avatarUrl
+            ? <img src={resolveAssetUrl(currentUser.avatarUrl)} alt="avatar" className="w-full h-full object-cover" />
+            : teacherInitials}
+        </button>
         <div className="ml-3 min-w-[140px]">
           <h2 className="text-sm font-black truncate uppercase tracking-tight">Mr. {userName}</h2>
           <button

@@ -17,13 +17,13 @@ import type { Student } from '../../types';
 export interface HandwritingMarkModalProps {
   isOpen: boolean;
   onClose: () => void;
-  assessmentId: string;
+  assessmentId?: string;
   studentId?: string;
   submissionId?: string;
   onMarkComplete?: () => void;
 }
 
-type MarkPhase = 'selecting' | 'picking' | 'reviewing' | 'grading' | 'confirming';
+type MarkPhase = 'selecting_assessment' | 'selecting' | 'picking' | 'reviewing' | 'grading' | 'confirming';
 
 // ── Student selector ───────────────────────────────────────────────────────
 
@@ -132,28 +132,129 @@ const StudentSelector: React.FC<{
   );
 };
 
+// ── Assessment selector ────────────────────────────────────────────────────
+
+const AssessmentSelector: React.FC<{
+  onSelect: (assessmentId: string, assessmentName: string) => void;
+  onCancel: () => void;
+}> = ({ onSelect, onCancel }) => {
+  const [assessments, setAssessments] = useState<any[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    assessmentService.getAssessmentsByCourseId('all')
+      .then(setAssessments)
+      .catch(() => toast.error('Failed to load assessments'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = assessments.filter(a => {
+    const q = search.toLowerCase();
+    return (
+      (a.name ?? '').toLowerCase().includes(q) ||
+      (a.type ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', background: 'white', minHeight: 0, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Select Assessment</div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Choose the assessment you are marking</div>
+        </div>
+        <button onClick={onCancel} style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+          <X size={16} />
+        </button>
+      </div>
+      <div style={{ padding: '10px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or type…"
+            style={{ width: '100%', borderRadius: 8, border: '1.5px solid #e2e8f0', padding: '7px 10px 7px 30px', fontSize: 13, color: '#334155', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          />
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', maxHeight: 380 }}>
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8' }}>
+            <Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite', color: '#3b82f6' }} />
+            <span style={{ fontSize: 12 }}>Loading assessments…</span>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 12 }}>
+            No assessments match your search
+          </div>
+        ) : (
+          filtered.map(a => (
+            <button
+              key={a._id}
+              onClick={() => onSelect(a._id, a.name)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 20px', background: 'none', border: 'none',
+                borderBottom: '1px solid #f8fafc', cursor: 'pointer',
+                fontFamily: 'inherit', textAlign: 'left', transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            >
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: '#eff6ff', border: '1.5px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#2563eb', flexShrink: 0 }}>
+                {(a.type ?? 'A')[0].toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{a.type ?? 'Assessment'} · {a.totalPoints ?? '?'} pts</div>
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0 }}>→</div>
+            </button>
+          ))
+        )}
+      </div>
+      <div style={{ padding: '10px 20px', borderTop: '1px solid #f1f5f9', flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={onCancel}
+          style={{ padding: '7px 16px', borderRadius: 8, border: '1.5px solid #e2e8f0', background: 'white', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ── Main Modal ─────────────────────────────────────────────────────────────
 
 const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
   isOpen,
   onClose,
-  assessmentId,
+  assessmentId: propAssessmentId,
   studentId: propStudentId,
   onMarkComplete,
 }) => {
-  const [phase, setPhase]         = useState<MarkPhase>(propStudentId ? 'picking' : 'selecting');
-  const [studentId, setStudentId] = useState<string | null>(propStudentId ?? null);
+  const initialPhase: MarkPhase = propAssessmentId
+    ? (propStudentId ? 'picking' : 'selecting')
+    : 'selecting_assessment';
+  const [phase, setPhase]             = useState<MarkPhase>(initialPhase);
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(propAssessmentId ?? null);
+  const [studentId, setStudentId]       = useState<string | null>(propStudentId ?? null);
   const [pickedFiles, setPickedFiles]   = useState<File[] | null>(null);
   const [questions, setQuestions]       = useState<OcrQuestion[]>([]);
   const [resultId, setResultId]         = useState<string | null>(null);
   const [gradeError, setGradeError]     = useState<string | null>(null);
 
-  // Fetch assessment questions on open
+  // Fetch assessment questions once an assessmentId is known
   const fetchedRef = useRef(false);
   useEffect(() => {
-    if (!isOpen || fetchedRef.current) return;
+    if (!isOpen || !selectedAssessmentId || fetchedRef.current) return;
     fetchedRef.current = true;
-    assessmentService.getAssessmentWithQuestions(assessmentId)
+    assessmentService.getAssessmentWithQuestions(selectedAssessmentId)
       .then(assessment => {
         const rawQuestions: any[] = Array.isArray(assessment.questions)
           ? (assessment.questions as any[])
@@ -168,19 +269,20 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
         setQuestions(qs);
       })
       .catch(() => {});
-  }, [isOpen, assessmentId]);
+  }, [isOpen, selectedAssessmentId]);
 
   // Reset when closed
   useEffect(() => {
     if (!isOpen) {
-      setPhase(propStudentId ? 'picking' : 'selecting');
+      setPhase(initialPhase);
+      setSelectedAssessmentId(propAssessmentId ?? null);
       setStudentId(propStudentId ?? null);
       setPickedFiles(null);
       setResultId(null);
       setGradeError(null);
       fetchedRef.current = false;
     }
-  }, [isOpen, propStudentId]);
+  }, [isOpen]);
 
   const handleStudentSelected = useCallback((student: Student) => {
     setStudentId(student._id);
@@ -194,19 +296,15 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
 
   // Called by OcrReviewComponent when teacher clicks "Mark" in teacher-mark mode
   const handleOcrSubmit = useCallback(async (data: CompiledSubmission) => {
-    if (!studentId) return;
-    // POST to create/upsert the submission
+    if (!studentId || !selectedAssessmentId) return;
     const result = await submitHandwrittenAnswers(
-      assessmentId,
+      selectedAssessmentId,
       studentId,
       data.answers ?? []
     );
     const submissionId = result.submissionId;
 
-    // Transition to grading spinner
     setPhase('grading');
-
-    // Call ASAG
     setGradeError(null);
     try {
       const gradeResult = await aiService.suggestAIGrade(submissionId);
@@ -215,7 +313,7 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
     } catch {
       setGradeError('AI grading failed. Please retry.');
     }
-  }, [assessmentId, studentId]);
+  }, [selectedAssessmentId, studentId]);
 
   const handleRetryGrading = async () => {
     // handleOcrSubmit already set phase to 'grading' then failed
@@ -263,7 +361,7 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
           overflow:      'hidden',
           width:         phase === 'reviewing' ? '100%' : 560,
           maxWidth:      phase === 'reviewing' ? '100%' : 560,
-          height:        phase === 'reviewing' ? '100%' : phase === 'picking' ? 560 : undefined,
+          height:        phase === 'reviewing' ? '100%' : (['picking', 'selecting', 'selecting_assessment'].includes(phase)) ? 560 : undefined,
           maxHeight:     phase === 'reviewing' ? '100%' : '88vh',
           margin:        phase === 'reviewing' ? 0 : 'auto',
           alignSelf:     phase === 'reviewing' ? 'stretch' : 'center',
@@ -271,7 +369,18 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
         onClick={e => e.stopPropagation()}
       >
 
-        {/* ── Selecting ── */}
+        {/* ── Select assessment ── */}
+        {phase === 'selecting_assessment' && (
+          <AssessmentSelector
+            onSelect={(id) => {
+              setSelectedAssessmentId(id);
+              setPhase('selecting');
+            }}
+            onCancel={onClose}
+          />
+        )}
+
+        {/* ── Select student ── */}
         {phase === 'selecting' && (
           <StudentSelector
             onSelect={handleStudentSelected}
@@ -291,10 +400,11 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
         {phase === 'reviewing' && pickedFiles && (
           <OcrReviewComponent
             mode="teacher-mark"
-            assessmentId={assessmentId}
+            assessmentId={selectedAssessmentId ?? ''}
             studentId={studentId ?? undefined}
             questions={questions.length ? questions : undefined}
             initialFiles={pickedFiles}
+            skipOrderConfirm
             onSubmit={handleOcrSubmit}
             onCancel={() => setPhase('picking')}
           />

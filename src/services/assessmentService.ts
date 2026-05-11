@@ -11,7 +11,26 @@ export const assessmentService = {
 
   getAssessmentHistory: async (studentId: string, params: { subjectId?: string }) => {
     const query = params.subjectId ? `?subjectId=${params.subjectId}` : '';
-    return fetchData<any[]>(`/students/${studentId}/assessment-history${query}`);
+    return fetchData<Array<{
+      enrollmentId: string;
+      assignmentId: string;
+      assessmentId: string;
+      assessmentName: string;
+      assessmentType: string;
+      subjectId: string | null;
+      dueTime: string | null;
+      published: boolean;
+      maxScore: number | null;
+      submissionId: string | null;
+      submittedAt: string | null;
+      status: string;
+      gradingStatus: 'pending' | 'graded' | 'teacher_review';
+      totalScore: number | null;
+      actualMark: number | null;
+      percentage: number | null;
+      grade: string | null;
+      feedback: string | null;
+    }>>(`/students/${studentId}/assessment-history${query}`);
   },
 
   getAssessment: async (id: string): Promise<Assessment> => {

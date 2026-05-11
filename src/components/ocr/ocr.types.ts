@@ -72,6 +72,8 @@ export interface OcrReviewProps {
   questions?: OcrQuestion[];
   /** Files to begin processing immediately when the component opens */
   initialFiles?: File[];
+  /** Skip the OrderConfirmModal step — process initial files directly */
+  skipOrderConfirm?: boolean;
   onSubmit?: (data: CompiledSubmission) => void | Promise<void>;
   onCancel?: () => void;
 }

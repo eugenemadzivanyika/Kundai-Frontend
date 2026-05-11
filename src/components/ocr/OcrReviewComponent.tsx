@@ -115,6 +115,7 @@ const MODE_CONFIG = {
 const OcrReviewComponent: React.FC<OcrReviewProps> = ({
   mode,
   initialFiles,
+  skipOrderConfirm,
   questions,
   onSubmit,
   onCancel,
@@ -326,8 +327,13 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
 
   const initialFilesRef = useRef(initialFiles);
   useEffect(() => {
-    if (initialFilesRef.current?.length) queueFiles(initialFilesRef.current);
-  }, [queueFiles]);
+    if (!initialFilesRef.current?.length) return;
+    if (skipOrderConfirm) {
+      processFiles(initialFilesRef.current);
+    } else {
+      queueFiles(initialFilesRef.current);
+    }
+  }, [queueFiles, processFiles, skipOrderConfirm]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     queueFiles(Array.from(e.target.files ?? []));
