@@ -59,10 +59,22 @@ export interface Subscription {
   createdAt: string;
 }
 
+export interface PlatformOverview {
+  totalSchools: number;
+  activeSubscriptions: number;
+  trialSchools: number;
+  suspendedSubscriptions: number;
+  mrr: number;
+  churnedThisMonth: number;
+  seatsSold: number;
+  recentSchools: School[];
+}
+
 const BASE = '/sys-admin';
 
 export const sysAdminService = {
   // Dashboard
+  getOverview: (): Promise<PlatformOverview> => fetchData(`${BASE}/overview`),
   getSummary: (): Promise<SysAdminSummary> => fetchData(`${BASE}/summary`),
 
   // Schools

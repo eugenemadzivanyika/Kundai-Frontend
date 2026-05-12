@@ -114,7 +114,17 @@ function SyllabusUploadRow({ subject, onUploaded }: SyllabusUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  // mirrors AdminSubjectsPage's lastExtractResult — stays true after the job is queued
+  const [extractQueued, setExtractQueued] = useState(false);
+  // confirm re-extraction when topics already exist
+  const [confirmReextract, setConfirmReextract] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [extractError, setExtractError] = useState('');
+
+  const topicCount: number = subject.topicCount ?? 0;
+  const hasSyllabus = !!subject.syllabusFile?.url;
+  // topics already exist from a previous successful extraction
+  const hasTopics = topicCount > 0;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,6 +134,8 @@ function SyllabusUploadRow({ subject, onUploaded }: SyllabusUploadProps) {
     try {
       const updated = await subjectService.uploadSyllabus(subject.id, file);
       onUploaded({ ...subject, syllabusFile: updated.syllabusFile });
+      // reset queued state when syllabus is replaced so extraction can be re-triggered
+      setExtractQueued(false);
     } catch (err: any) {
       setUploadError(err.message ?? 'Upload failed');
     } finally {
@@ -132,41 +144,92 @@ function SyllabusUploadRow({ subject, onUploaded }: SyllabusUploadProps) {
     }
   };
 
-  const handleExtract = async () => {
+  const doExtract = async () => {
+    setConfirmReextract(false);
     setExtracting(true);
+    setExtractQueued(false);
+    setExtractError('');
     try {
       await subjectService.extractAttributes(subject.id);
-      alert('Topic extraction started. You\'ll receive a notification when topics are ready.');
+      // matches AdminSubjectsPage: set queued=true so the "running in background" indicator stays visible
+      setExtractQueued(true);
     } catch (err: any) {
-      alert(err.message ?? 'Extraction failed');
+      setExtractError(err.message ?? 'Extraction failed');
     } finally {
       setExtracting(false);
     }
   };
 
-  const hasSyllabus = !!subject.syllabusFile?.url;
+  const handleExtractClick = () => {
+    // if topics already exist, ask for confirmation before overwriting
+    if (hasTopics && !extractQueued) {
+      setConfirmReextract(true);
+    } else {
+      doExtract();
+    }
+  };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      {hasSyllabus ? (
-        <>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--forest)', fontWeight: 600 }}>
-            <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 5l-6 6-3-3" /></svg>
-            {subject.syllabusFile.name}
-          </span>
-          <button onClick={() => inputRef.current?.click()} style={{ padding: '3px 9px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: 'var(--ink-3)', fontFamily: 'inherit' }}>Replace</button>
-          <button onClick={handleExtract} disabled={extracting} style={{ padding: '3px 9px', background: 'var(--plum-soft)', border: '1px solid color-mix(in srgb, var(--plum) 25%, transparent)', borderRadius: 4, cursor: extracting ? 'not-allowed' : 'pointer', fontSize: 11, color: 'var(--plum)', fontWeight: 600, fontFamily: 'inherit' }}>
-            {extracting ? 'Starting…' : '✨ Extract topics'}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {hasSyllabus ? (
+          <>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--forest)', fontWeight: 600 }}>
+              <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 5l-6 6-3-3" /></svg>
+              {subject.syllabusFile.name}
+            </span>
+            <button onClick={() => inputRef.current?.click()} style={{ padding: '3px 9px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: 'var(--ink-3)', fontFamily: 'inherit' }}>Replace</button>
+
+            {/* show topic count badge if extraction already done */}
+            {hasTopics && !extractQueued && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: 'var(--forest-soft)', color: 'var(--forest)' }}>
+                <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 5l-6 6-3-3" /></svg>
+                {topicCount} topic{topicCount !== 1 ? 's' : ''} extracted
+              </span>
+            )}
+
+            <button
+              onClick={handleExtractClick}
+              disabled={extracting || extractQueued}
+              style={{ padding: '3px 9px', background: 'var(--plum-soft)', border: '1px solid color-mix(in srgb, var(--plum) 25%, transparent)', borderRadius: 4, cursor: (extracting || extractQueued) ? 'not-allowed' : 'pointer', fontSize: 11, color: 'var(--plum)', fontWeight: 600, fontFamily: 'inherit', opacity: extractQueued ? 0.6 : 1 }}
+            >
+              {extracting ? 'Starting…' : hasTopics ? '↺ Re-extract' : '✨ Extract topics'}
+            </button>
+          </>
+        ) : (
+          <button onClick={() => inputRef.current?.click()} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'var(--gold-soft)', border: '1px solid color-mix(in srgb, var(--gold) 25%, transparent)', borderRadius: 4, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 11.5, color: 'var(--gold-deep)', fontWeight: 600, fontFamily: 'inherit' }}>
+            <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 13h10" /></svg>
+            {uploading ? 'Uploading…' : 'Upload syllabus'}
           </button>
-        </>
-      ) : (
-        <button onClick={() => inputRef.current?.click()} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'var(--gold-soft)', border: '1px solid color-mix(in srgb, var(--gold) 25%, transparent)', borderRadius: 4, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 11.5, color: 'var(--gold-deep)', fontWeight: 600, fontFamily: 'inherit' }}>
-          <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 10V3M5 6l3-3 3 3M3 13h10" /></svg>
-          {uploading ? 'Uploading…' : 'Upload syllabus'}
-        </button>
+        )}
+        {uploadError && <span style={{ fontSize: 11, color: 'var(--terracotta)' }}>{uploadError}</span>}
+        <input ref={inputRef} type="file" accept=".pdf,.doc,.docx,.odt" style={{ display: 'none' }} onChange={handleFileChange} />
+      </div>
+
+      {/* Inline re-extraction confirmation — shown instead of a modal to keep the table layout clean */}
+      {confirmReextract && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--gold-soft)', border: '1px solid color-mix(in srgb, var(--gold) 35%, transparent)', borderRadius: 5, fontSize: 11.5 }}>
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="var(--gold-deep)" strokeWidth="1.5" strokeLinecap="round"><path d="M8 1l7 14H1L8 1zM8 6v4M8 11.5v.5" /></svg>
+          <span style={{ color: 'var(--gold-deep)' }}>This will replace the existing {topicCount} topic{topicCount !== 1 ? 's' : ''}. Continue?</span>
+          <button onClick={doExtract} style={{ padding: '2px 10px', background: 'var(--gold-deep)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit' }}>Re-extract</button>
+          <button onClick={() => setConfirmReextract(false)} style={{ padding: '2px 8px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
+        </div>
       )}
-      {uploadError && <span style={{ fontSize: 11, color: 'var(--terracotta)' }}>{uploadError}</span>}
-      <input ref={inputRef} type="file" accept=".pdf,.doc,.docx,.odt" style={{ display: 'none' }} onChange={handleFileChange} />
+
+      {/* "Running in background" indicator — matches AdminSubjectsPage lastExtractResult display */}
+      {extractQueued && !extracting && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--sky)', background: 'var(--sky-soft)', border: '1px solid color-mix(in srgb, var(--sky) 25%, transparent)', borderRadius: 4, padding: '3px 9px' }}>
+          <svg width={10} height={10} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+            <path d="M8 1v3M8 12v3M1 8h3M12 8h3M3.05 3.05l2.12 2.12M10.83 10.83l2.12 2.12M3.05 12.95l2.12-2.12M10.83 5.17l2.12-2.12" />
+          </svg>
+          Extraction running in the background — check notifications for results.
+        </div>
+      )}
+      {extractError && (
+        <span style={{ fontSize: 11, color: 'var(--terracotta)' }}>{extractError}</span>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

@@ -41,6 +41,7 @@ interface SubjectRow {
   teachers?: string[];
   syllabusFile: SyllabusFile | null;
   subjectResources: SubjectResource[];
+  topicCount: number;
 }
 
 interface SubjectFormState {
@@ -187,6 +188,7 @@ const AdminSubjectsPage: React.FC = () => {
   const [uploadingResource, setUploadingResource] = useState(false);
   const [extractingAttributes, setExtractingAttributes] = useState(false);
   const [lastExtractResult, setLastExtractResult] = useState(false);
+  const [confirmReextract, setConfirmReextract] = useState(false);
   const [deletingResourceId, setDeletingResourceId] = useState<string | null>(null);
   const [subjectToDelete, setSubjectToDelete] = useState<SubjectRow | null>(null);
   const [codeFilter, setCodeFilter] = useState('');
@@ -246,6 +248,7 @@ const AdminSubjectsPage: React.FC = () => {
         teachers: Array.isArray(item.teachers) ? item.teachers : [],
         syllabusFile: item.syllabusFile || null,
         subjectResources: Array.isArray(item.subjectResources) ? item.subjectResources : [],
+        topicCount: item.topicCount ?? 0,
       }));
       setSubjects(mapped);
     } catch (err: any) {
@@ -379,10 +382,11 @@ const AdminSubjectsPage: React.FC = () => {
     }
   };
 
-  const handleExtractAttributes = async () => {
+  const doExtractAttributes = async () => {
     if (!editingId) return;
+    setConfirmReextract(false);
     setExtractingAttributes(true);
-    setLastExtractResult(null);
+    setLastExtractResult(false);
     try {
       await subjectService.extractAttributes(editingId);
       setLastExtractResult(true);
@@ -391,6 +395,15 @@ const AdminSubjectsPage: React.FC = () => {
       toast.error(err?.message || 'Failed to start extraction');
     } finally {
       setExtractingAttributes(false);
+    }
+  };
+
+  const handleExtractAttributes = () => {
+    const topicCount = editingSubject ? (editingSubject as any).topicCount ?? 0 : 0;
+    if (topicCount > 0 && !lastExtractResult) {
+      setConfirmReextract(true);
+    } else {
+      doExtractAttributes();
     }
   };
 
@@ -603,7 +616,7 @@ const AdminSubjectsPage: React.FC = () => {
       </div>
 
       {/* Subject form modal */}
-      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { setIsFormOpen(false); setLastExtractResult(false); } }}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { setIsFormOpen(false); setLastExtractResult(false); setConfirmReextract(false); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? `Edit Subject — ${editingSubject?.code || ''}` : 'Create Subject'}</DialogTitle>
@@ -789,32 +802,58 @@ const AdminSubjectsPage: React.FC = () => {
                 </>
               )}
               {/* AI extraction panel — only shown when syllabus is present */}
-              {editingSubject?.syllabusFile && (
-                <div className="border rounded-lg p-4 bg-indigo-50 border-indigo-200 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-indigo-800">Extract Curriculum Topics</p>
-                    <p className="text-xs text-indigo-600 mt-0.5">
-                      Use AI to analyse the syllabus and automatically populate curriculum topics for this subject.
-                      Existing topics will be replaced.
-                    </p>
-                  </div>
-                  {lastExtractResult && !extractingAttributes && (
-                    <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md">
-                      <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />
-                      Extraction is running in the background. Check your notifications for the result.
+              {editingSubject?.syllabusFile && (() => {
+                const topicCount = (editingSubject as any).topicCount ?? 0;
+                const hasTopics = topicCount > 0;
+                return (
+                  <div className="border rounded-lg p-4 bg-indigo-50 border-indigo-200 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-indigo-800">Extract Curriculum Topics</p>
+                      <p className="text-xs text-indigo-600 mt-0.5">
+                        Use AI to analyse the syllabus and automatically populate curriculum topics for this subject.
+                        {hasTopics
+                          ? ` This subject already has ${topicCount} extracted topic${topicCount !== 1 ? 's' : ''} — re-extracting will replace them.`
+                          : ' No topics have been extracted yet.'}
+                      </p>
                     </div>
-                  )}
-                  <button
-                    type="button"
-                    disabled={extractingAttributes}
-                    onClick={handleExtractAttributes}
-                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-md"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${extractingAttributes ? 'animate-spin' : ''}`} />
-                    {extractingAttributes ? 'Extracting topics…' : 'Extract Topics from Syllabus'}
-                  </button>
-                </div>
-              )}
+                    {/* existing-topics badge */}
+                    {hasTopics && !lastExtractResult && (
+                      <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-md">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        {topicCount} topic{topicCount !== 1 ? 's' : ''} already extracted from this syllabus.
+                      </div>
+                    )}
+                    {/* confirmation prompt */}
+                    {confirmReextract && !extractingAttributes && (
+                      <div className="flex items-center gap-3 px-3 py-2 bg-amber-50 border border-amber-300 rounded-md text-xs text-amber-800">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                        <span>This will replace the existing {topicCount} topic{topicCount !== 1 ? 's' : ''}. Continue?</span>
+                        <button type="button" onClick={doExtractAttributes} className="ml-auto bg-amber-600 hover:bg-amber-700 text-white font-medium px-3 py-1 rounded text-xs">
+                          Re-extract
+                        </button>
+                        <button type="button" onClick={() => setConfirmReextract(false)} className="bg-white border border-gray-300 text-gray-700 font-medium px-3 py-1 rounded text-xs">
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {lastExtractResult && !extractingAttributes && (
+                      <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md">
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                        Extraction is running in the background. Check your notifications for the result.
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={extractingAttributes || lastExtractResult}
+                      onClick={handleExtractAttributes}
+                      className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-md"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${extractingAttributes ? 'animate-spin' : ''}`} />
+                      {extractingAttributes ? 'Extracting topics…' : hasTopics ? 'Re-extract Topics' : 'Extract Topics from Syllabus'}
+                    </button>
+                  </div>
+                );
+              })()}
 
               <div className="flex justify-end pt-2 border-t">
                 <button type="button" onClick={() => setIsFormOpen(false)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-5 py-2 rounded-md text-sm">

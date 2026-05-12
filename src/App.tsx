@@ -10,7 +10,6 @@ import GradingDashboard from './components/teacher/GradingDashboard';
 import Login from './components/pages/Login';
 import MainLayout from './components/layout/MainLayout';
 import AdminLayout from './components/layout/AdminLayout';
-import SysAdminLayout from './components/layout/SysAdminLayout';
 import StudentDashboard from './components/student/StudentDashboard';
 import NotFound from './components/pages/NotFound';
 import DevelopmentPage from './components/classroom/DevelopmentPage';
@@ -28,15 +27,20 @@ import SchoolStudentsPage from './components/school-admin/pages/SchoolStudentsPa
 import SchoolClassesPage from './components/school-admin/pages/SchoolClassesPage';
 import SchoolSubjectsPage from './components/school-admin/pages/SchoolSubjectsPage';
 import SchoolBillingPage from './components/school-admin/pages/SchoolBillingPage';
+import SchoolSettingsPage from './components/school-admin/pages/SchoolSettingsPage';
 import AIResourceViewer from './components/classroom/AIResourceViewer';
 import AssessmentsDashboardPage from './components/assessments/AssessmentsDashboardPage';
 import AssessmentDetailPage from './components/assessments/AssessmentDetailPage';
 import AssessmentAnalysisPage from './components/assessments/AssessmentAnalysisPage';
 import EditAssessmentPage from './components/assessments/EditAssessmentPage';
-import SysAdminDashboardPage from './components/sysadmin/pages/SysAdminDashboardPage';
-import SysAdminSchoolsPage from './components/sysadmin/pages/SysAdminSchoolsPage';
-import SysAdminPackagesPage from './components/sysadmin/pages/SysAdminPackagesPage';
-import SysAdminSubscriptionsPage from './components/sysadmin/pages/SysAdminSubscriptionsPage';
+import SysAdminShell from './components/sysadmin/SysAdminShell';
+import PlatformDashboardPage from './components/sysadmin/pages/PlatformDashboardPage';
+import SchoolsListPage from './components/sysadmin/pages/SchoolsListPage';
+import SchoolDetailPage from './components/sysadmin/pages/SchoolDetailPage';
+import SubscriptionsPage from './components/sysadmin/pages/SubscriptionsPage';
+import PackagesPage from './components/sysadmin/pages/PackagesPage';
+import LandingPage from './pages/LandingPage';
+import RegisterPage from './pages/RegisterPage';
 import TeacherProfilePage from './components/teacher/TeacherProfilePage';
 import ClassDrillDownDashboard from './components/class-drill-down/ClassDrillDownDashboard';
 
@@ -60,7 +64,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated && location.pathname !== '/login') {
+    const publicPaths = ['/', '/login', '/register'];
+    if (!isAuthenticated && !publicPaths.includes(location.pathname)) {
       navigate('/login', { replace: true });
     }
   }, [isAuthenticated, location.pathname, navigate]);
@@ -115,13 +120,34 @@ function App() {
         <Route path="/student/stats" element={renderStudentDashboard()} />
         <Route path="/student/mastery" element={renderStudentDashboard()} />
 
+        {/* --- Public routes --- */}
+        <Route path="/" element={
+          isAuthenticated ? (
+            (() => {
+              const userStr = localStorage.getItem('user');
+              const user = userStr ? JSON.parse(userStr) : null;
+              if (user?.role === 'sys_admin') return <Navigate to="/sys-admin" replace />;
+              if (user?.role === 'admin') return <Navigate to="/admin" replace />;
+              if (user?.role === 'teacher') return <Navigate to="/dashboard" replace />;
+              if (user?.role === 'student') return <Navigate to="/student/home" replace />;
+              return <Navigate to="/dashboard" replace />;
+            })()
+          ) : (
+            <LandingPage />
+          )
+        } />
+        <Route path="/register" element={
+          isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />
+        } />
+
         {/* --- Sys Admin Portal --- */}
         {isAuthenticated && (
-          <Route path="/sys-admin" element={<SysAdminLayout />}>
-            <Route index element={<SysAdminDashboardPage />} />
-            <Route path="schools" element={<SysAdminSchoolsPage />} />
-            <Route path="packages" element={<SysAdminPackagesPage />} />
-            <Route path="subscriptions" element={<SysAdminSubscriptionsPage />} />
+          <Route path="/sys-admin" element={<SysAdminShell />}>
+            <Route index element={<PlatformDashboardPage />} />
+            <Route path="schools" element={<SchoolsListPage />} />
+            <Route path="schools/:schoolId" element={<SchoolDetailPage />} />
+            <Route path="packages" element={<PackagesPage />} />
+            <Route path="subscriptions" element={<SubscriptionsPage />} />
           </Route>
         )}
 
@@ -134,6 +160,7 @@ function App() {
             <Route path="classes" element={<SchoolClassesPage />} />
             <Route path="subjects" element={<SchoolSubjectsPage />} />
             <Route path="billing" element={<SchoolBillingPage />} />
+            <Route path="settings" element={<SchoolSettingsPage />} />
           </Route>
         )}
 

@@ -93,6 +93,16 @@ export const adminService = {
     URL.revokeObjectURL(url);
   },
 
+  // School billing
+  getSchoolBilling: (): Promise<any> => fetchData('/admin/billing'),
+  requestBillingContact: (message: string): Promise<any> =>
+    fetchData('/admin/billing/contact', { method: 'POST', body: JSON.stringify({ message }) }),
+
+  // School settings
+  getSchoolSettings: (): Promise<any> => fetchData('/admin/settings'),
+  updateSchoolSettings: (payload: Record<string, unknown>): Promise<any> =>
+    fetchData('/admin/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+
   bulkCreateStudents: async (file: File): Promise<BulkUploadResult> => {
     const token = localStorage.getItem('token');
     const formData = new FormData();

@@ -38,20 +38,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const user = response.user;
 
       // 1. Identify Roles
+      const isSysAdmin = user.role === 'sys_admin';
       const isStudent = user.role === 'student';
       const isStaff = user.role === 'teacher' || user.role === 'admin';
 
-      // 2. Portal Validation: Prevent 'Staff' from entering via 'Student' portal and vice-versa
-      if (selectedPortal === 'student' && !isStudent) {
-        // authService.logout(); 
-        setError('This is a Staff account. Please switch to the Staff portal to sign in.');
-        return;
-      }
-
-      if (selectedPortal === 'staff' && !isStaff) {
-        // authService.logout();
-        setError('This is a Student account. Please switch to the Student portal to sign in.');
-        return;
+      // 2. Portal Validation — sys_admin bypasses portal check entirely
+      if (!isSysAdmin) {
+        if (selectedPortal === 'student' && !isStudent) {
+          setError('This is a Staff account. Please switch to the Staff portal to sign in.');
+          return;
+        }
+        if (selectedPortal === 'staff' && !isStaff) {
+          setError('This is a Student account. Please switch to the Student portal to sign in.');
+          return;
+        }
       }
 
       // 3. Success: Trigger the onLogin prop from App.tsx
