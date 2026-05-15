@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fetchData } from '../../../services/apiClient';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -75,91 +75,446 @@ function CapacityBar({ used, total }: { used: number; total: number }) {
 }
 
 // ── Payment modal ─────────────────────────────────────────────────────────────
-function PaymentModal({ pkg, onClose }: { pkg: BillingPackage; onClose: () => void }) {
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+type PayStep = 'method' | 'phone' | 'processing' | 'polling' | 'innbucks' | 'otp' | 'done';
 
-  const handlePay = async () => {
+const PAY_METHODS = [
+  { id: 'ecocash',   label: 'EcoCash',            group: 'mobile' },
+  { id: 'onemoney',  label: 'OneMoney',           group: 'mobile' },
+  { id: 'innbucks',  label: 'InnBucks',           group: 'mobile' },
+  { id: 'omari',     label: "O'mari",             group: 'mobile' },
+  { id: 'vmc',       label: 'Visa / Mastercard',  group: 'card'   },
+  { id: 'zimswitch', label: 'Zimswitch',          group: 'card'   },
+  { id: 'web',       label: 'Paynow web checkout',group: 'web'    },
+] as const;
+
+function Spinner() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function PaymentModal({ pkg, onClose, onPaid }: { pkg: BillingPackage; onClose: () => void; onPaid: () => void }) {
+  const [step, setStep]               = useState<PayStep>('method');
+  const [method, setMethod]           = useState('');
+  const [phone, setPhone]             = useState('');
+  const [otp, setOtp]                 = useState('');
+  const [err, setErr]                 = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [reference, setReference]     = useState('');
+  const [subscriptionId, setSubId]    = useState('');
+  // InnBucks
+  const [authCode, setAuthCode]       = useState('');
+  const [deepLink, setDeepLink]       = useState('');
+  const [qrCode, setQrCode]           = useState('');
+  // O'mari
+  const [remoteotpurl, setRemoteOtpUrl]   = useState('');
+  const [otpreference, setOtpReference]   = useState('');
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  useEffect(() => () => stopPolling(), []);
+
+  const startPolling = (ref: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const r: any = await fetchData(`/paynow/status?ref=${encodeURIComponent(ref)}`);
+        if (r.paid) {
+          stopPolling();
+          setStep('done');
+        }
+      } catch {
+        // silently retry
+      }
+    }, 3000);
+  };
+
+  // Calls /admin/billing/initiate to create the pending subscription and returns
+  // { redirectUrl, reference, subscriptionId }.
+  const initiate = async () => {
+    const res: any = await fetchData('/admin/billing/initiate', {
+      method: 'POST',
+      body: JSON.stringify({ packageId: pkg._id }),
+    });
+    setReference(res.reference);
+    setSubId(res.subscriptionId);
+    return res as { redirectUrl: string; reference: string; subscriptionId: string };
+  };
+
+  const handleSelectMethod = async (m: string) => {
+    setMethod(m);
+    setErr('');
+
+    if (m === 'web') {
+      setLoading(true);
+      setStep('processing');
+      try {
+        const res = await initiate();
+        window.location.href = res.redirectUrl;
+      } catch (e: any) {
+        setErr(e.message ?? 'Failed to initiate payment');
+        setStep('method');
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (m === 'vmc' || m === 'zimswitch') {
+      setStep('processing');
+      setLoading(true);
+      try {
+        const { reference: ref, subscriptionId: subId } = await initiate();
+        await fetchData('/paynow/express/card', {
+          method: 'POST',
+          body: JSON.stringify({ method: m, subscriptionId: subId }),
+        });
+        setStep('polling');
+        startPolling(ref);
+      } catch (e: any) {
+        setErr(e.message ?? 'Card payment failed');
+        setStep('method');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Mobile methods: go to phone input step
+    setStep('phone');
+  };
+
+  const handleMobilePay = async () => {
+    if (!phone.trim()) { setErr('Phone number is required'); return; }
     setLoading(true);
     setErr('');
+    setStep('processing');
+
     try {
-      const res: any = await fetchData('/admin/billing/initiate', {
-        method: 'POST',
-        body: JSON.stringify({ packageId: pkg._id }),
-      });
-      // Full-page redirect to Paynow checkout
-      window.location.href = res.redirectUrl;
+      const { reference: ref, subscriptionId: subId } = await initiate();
+
+      if (method === 'ecocash' || method === 'onemoney') {
+        await fetchData('/paynow/express/mobile', {
+          method: 'POST',
+          body: JSON.stringify({ phone: phone.trim(), method, subscriptionId: subId }),
+        });
+        setStep('polling');
+        startPolling(ref);
+
+      } else if (method === 'innbucks') {
+        const r: any = await fetchData('/paynow/express/innbucks', {
+          method: 'POST',
+          body: JSON.stringify({ phone: phone.trim(), subscriptionId: subId }),
+        });
+        setAuthCode(r.authorizationCode ?? '');
+        setDeepLink(r.deepLinkUrl ?? '');
+        setQrCode(r.qrCode ?? '');
+        setStep('innbucks');
+        startPolling(ref);
+
+      } else if (method === 'omari') {
+        const r: any = await fetchData('/paynow/express/omari', {
+          method: 'POST',
+          body: JSON.stringify({ phone: phone.trim(), subscriptionId: subId }),
+        });
+        setRemoteOtpUrl(r.remoteotpurl ?? '');
+        setOtpReference(r.otpreference ?? '');
+        setStep('otp');
+      }
     } catch (e: any) {
-      setErr(e.message ?? 'Failed to initiate payment');
+      setErr(e.message ?? 'Payment initiation failed');
+      setStep('phone');
+    } finally {
       setLoading(false);
     }
   };
 
-  return (
+  const handleOtpSubmit = async () => {
+    if (!otp.trim()) { setErr('OTP is required'); return; }
+    setLoading(true);
+    setErr('');
+    setStep('processing');
+    try {
+      await fetchData('/paynow/express/omari/otp', {
+        method: 'POST',
+        body: JSON.stringify({ remoteotpurl, otp: otp.trim() }),
+      });
+      setStep('polling');
+      startPolling(reference);
+    } catch (e: any) {
+      setErr(e.message ?? 'Invalid OTP');
+      setStep('otp');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    stopPolling();
+    onClose();
+  };
+
+  const handleDone = () => {
+    onPaid();
+    onClose();
+  };
+
+  // ── Shared modal shell ────────────────────────────────────────────────────
+  const canClose = !loading && step !== 'processing';
+
+  const shell = (title: string, subtitle: string, body: React.ReactNode) => (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 40 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 440, background: 'var(--paper)', borderRadius: 8, border: '1px solid var(--rule)', zIndex: 50, boxShadow: '0 8px 40px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div onClick={canClose ? handleClose : undefined} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 40 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 460, background: 'var(--paper)', borderRadius: 8, border: '1px solid var(--rule)', zIndex: 50, boxShadow: '0 8px 40px rgba(0,0,0,0.15)', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
           <div>
-            <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>Upgrade to {pkg.name}</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>Secure checkout via Paynow Zimbabwe</p>
+            <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>{title}</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>{subtitle}</p>
           </div>
-          <button onClick={onClose} disabled={loading} style={{ padding: 6, background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)', lineHeight: 0 }}>
-            <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
-          </button>
-        </div>
-
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Package summary */}
-          <div style={{ padding: '14px 16px', background: 'var(--paper-shade)', borderRadius: 6, border: '1px solid var(--rule-soft)' }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>Order summary</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-              <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 16, fontWeight: 700, color: 'var(--ink-1)' }}>{pkg.name}</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, fontWeight: 700, color: 'var(--forest)' }}>${pkg.totalPrice.toFixed(2)}</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-              {pkg.studentLimit.toLocaleString()} students · ${pkg.pricePerStudent}/student · {cycleLong(pkg.billingCycle)}
-            </div>
-          </div>
-
-          {/* Feature list */}
-          {pkg.features.length > 0 && (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {pkg.features.map((f, i) => (
-                <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
-                  <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--forest)', marginTop: 2, flexShrink: 0 }}><path d="M2 8l4 4 8-8" /></svg>
-                  {f}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {err && (
-            <div style={{ padding: '8px 12px', background: 'var(--terracotta-soft)', borderRadius: 5, color: 'var(--terracotta)', fontSize: 12 }}>{err}</div>
-          )}
-
-          {/* Paynow notice */}
-          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-            You will be redirected to Paynow to complete payment. Once confirmed, your subscription will be activated automatically.
-          </p>
-
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button onClick={onClose} disabled={loading} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
-            <button onClick={handlePay} disabled={loading} style={{ padding: '8px 22px', background: loading ? 'var(--forest-soft)' : 'var(--forest)', color: loading ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {loading && (
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                </svg>
-              )}
-              {loading ? 'Redirecting…' : 'Pay with Paynow'}
+          {canClose && (
+            <button onClick={handleClose} style={{ padding: 6, background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)', lineHeight: 0 }}>
+              <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
             </button>
-          </div>
+          )}
+        </div>
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+          {body}
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </>
   );
+
+  // ── Order summary reused across steps ────────────────────────────────────
+  const orderSummary = (
+    <div style={{ padding: '12px 14px', background: 'var(--paper-shade)', borderRadius: 6, border: '1px solid var(--rule-soft)' }}>
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 6 }}>Order summary</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 15, fontWeight: 700, color: 'var(--ink-1)' }}>{pkg.name}</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, fontWeight: 700, color: 'var(--forest)' }}>${pkg.totalPrice.toFixed(2)}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>
+        {pkg.studentLimit.toLocaleString()} students · ${pkg.pricePerStudent}/student · {cycleLong(pkg.billingCycle)}
+      </div>
+    </div>
+  );
+
+  const errBanner = err ? (
+    <div style={{ padding: '8px 12px', background: 'var(--terracotta-soft)', borderRadius: 5, color: 'var(--terracotta)', fontSize: 12 }}>{err}</div>
+  ) : null;
+
+  // ── Step: method selection ────────────────────────────────────────────────
+  if (step === 'method') {
+    const groups = [
+      { label: 'Mobile wallets', ids: ['ecocash', 'onemoney', 'innbucks', 'omari'] },
+      { label: 'Card (saved token required)', ids: ['vmc', 'zimswitch'] },
+      { label: 'Web checkout', ids: ['web'] },
+    ];
+
+    return shell(
+      `Upgrade to ${pkg.name}`,
+      'Choose a payment method to continue',
+      <>
+        {orderSummary}
+        {errBanner}
+        {groups.map(grp => (
+          <div key={grp.label}>
+            <div style={{ fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>{grp.label}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+              {PAY_METHODS.filter(m => grp.ids.includes(m.id)).map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => handleSelectMethod(m.id)}
+                  style={{ padding: '10px 12px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-1)', fontFamily: 'inherit', textAlign: 'left', transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--forest)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--rule)')}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          Card express checkout requires a saved card token. If you haven't paid by card before, choose <b>Paynow web checkout</b> first — your card will be saved for future express payments.
+        </p>
+      </>
+    );
+  }
+
+  // ── Step: phone input ─────────────────────────────────────────────────────
+  if (step === 'phone') {
+    const methodLabel = PAY_METHODS.find(m => m.id === method)?.label ?? method;
+    return shell(
+      methodLabel,
+      'Enter the mobile number registered with this wallet',
+      <>
+        {orderSummary}
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', display: 'block', marginBottom: 6 }}>Mobile number</label>
+          <input
+            type="tel"
+            placeholder="e.g. 0771234567"
+            value={phone}
+            onChange={e => { setPhone(e.target.value); setErr(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleMobilePay()}
+            autoFocus
+            style={{ width: '100%', padding: '9px 12px', border: `1px solid ${err ? 'var(--terracotta)' : 'var(--rule)'}`, borderRadius: 5, fontSize: 14, fontFamily: 'inherit', background: 'var(--paper)', color: 'var(--ink-1)', boxSizing: 'border-box', outline: 'none' }}
+          />
+        </div>
+        {errBanner}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={() => { setStep('method'); setErr(''); }} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Back</button>
+          <button onClick={handleMobilePay} disabled={loading} style={{ padding: '8px 22px', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {loading && <Spinner />}
+            {loading ? 'Starting…' : 'Pay now'}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // ── Step: processing ──────────────────────────────────────────────────────
+  if (step === 'processing') {
+    return shell(
+      'Processing…',
+      'Please wait while we connect to Paynow',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '12px 0' }}>
+        <Spinner />
+        <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>Connecting to payment gateway…</span>
+      </div>
+    );
+  }
+
+  // ── Step: polling (EcoCash / OneMoney / Card) ─────────────────────────────
+  if (step === 'polling') {
+    const methodLabel = PAY_METHODS.find(m => m.id === method)?.label ?? method;
+    return shell(
+      'Waiting for payment',
+      `${methodLabel} · ${reference}`,
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--forest-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulse 2s ease-in-out infinite' }}>
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="var(--forest)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10" /><path d="M12 6v6l4 2" />
+          </svg>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-1)', marginBottom: 4 }}>Awaiting confirmation</div>
+          {phone && <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>A payment prompt was sent to <b style={{ color: 'var(--ink-2)' }}>{phone}</b></div>}
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>Approve the prompt on your phone. This page will update automatically.</div>
+        </div>
+        <button onClick={handleClose} style={{ padding: '7px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', fontFamily: 'inherit' }}>
+          Close and check later
+        </button>
+      </div>
+    );
+  }
+
+  // ── Step: innbucks code display ───────────────────────────────────────────
+  if (step === 'innbucks') {
+    return shell(
+      'InnBucks payment',
+      `Reference: ${reference}`,
+      <>
+        <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>Open InnBucks and enter this authorization code</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 32, fontWeight: 700, color: 'var(--ink-1)', letterSpacing: '0.15em', padding: '12px 16px', background: 'var(--paper-shade)', borderRadius: 7, border: '1px solid var(--rule-soft)', display: 'inline-block' }}>
+            {authCode}
+          </div>
+        </div>
+
+        {qrCode && (
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <img src={qrCode} alt="QR code" width={120} height={120} style={{ borderRadius: 6, border: '1px solid var(--rule-soft)' }} />
+          </div>
+        )}
+
+        {deepLink && (
+          <a
+            href={deepLink}
+            style={{ display: 'block', textAlign: 'center', padding: '9px 14px', background: 'var(--forest)', color: '#fbf8f1', borderRadius: 5, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
+          >
+            Open InnBucks app
+          </a>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--paper-shade)', borderRadius: 5 }}>
+          <Spinner />
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Waiting for payment confirmation…</span>
+        </div>
+
+        <button onClick={handleClose} style={{ padding: '7px 0', background: 'transparent', border: 0, cursor: 'pointer', fontSize: 12, color: 'var(--ink-3)', fontFamily: 'inherit', textAlign: 'center', width: '100%' }}>
+          Close and check later
+        </button>
+      </>
+    );
+  }
+
+  // ── Step: O'mari OTP ──────────────────────────────────────────────────────
+  if (step === 'otp') {
+    return shell(
+      "O'mari — enter OTP",
+      'A one-time password has been sent to your phone',
+      <>
+        {otpreference && (
+          <div style={{ padding: '10px 12px', background: 'var(--paper-shade)', borderRadius: 5, fontSize: 12, color: 'var(--ink-3)' }}>
+            OTP reference: <b style={{ color: 'var(--ink-2)', fontFamily: "'JetBrains Mono', monospace" }}>{otpreference}</b>
+          </div>
+        )}
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', display: 'block', marginBottom: 6 }}>Enter the OTP from your SMS</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="e.g. 123456"
+            value={otp}
+            onChange={e => { setOtp(e.target.value); setErr(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleOtpSubmit()}
+            autoFocus
+            style={{ width: '100%', padding: '9px 12px', border: `1px solid ${err ? 'var(--terracotta)' : 'var(--rule)'}`, borderRadius: 5, fontSize: 18, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.2em', background: 'var(--paper)', color: 'var(--ink-1)', boxSizing: 'border-box', outline: 'none' }}
+          />
+        </div>
+        {errBanner}
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          After 5 failed attempts Paynow will cancel this transaction and you will need to restart.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={() => { setStep('phone'); setErr(''); setOtp(''); }} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Back</button>
+          <button onClick={handleOtpSubmit} disabled={loading} style={{ padding: '8px 22px', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 5, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {loading && <Spinner />}
+            {loading ? 'Verifying…' : 'Confirm OTP'}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  // ── Step: done ────────────────────────────────────────────────────────────
+  if (step === 'done') {
+    return shell(
+      'Payment confirmed',
+      'Your subscription is now active',
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--forest-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width={24} height={24} viewBox="0 0 16 16" fill="none" stroke="var(--forest)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l4 4 8-8" /></svg>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--forest)', marginBottom: 4 }}>Payment successful</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Your school now has full access to <b style={{ color: 'var(--ink-2)' }}>{pkg.name}</b>.</div>
+        </div>
+        <button onClick={handleDone} style={{ padding: '9px 28px', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Payment result banner ─────────────────────────────────────────────────────
@@ -437,7 +792,7 @@ const SchoolBillingPage: React.FC = () => {
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>Available packages</h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--ink-3)' }}>
-              Select a package and pay securely via Paynow to activate immediately
+              Select a package and pay via EcoCash, InnBucks, card, or Paynow web checkout
             </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
@@ -461,7 +816,13 @@ const SchoolBillingPage: React.FC = () => {
       )}
 
       {/* Payment modal */}
-      {paymentPkg && <PaymentModal pkg={paymentPkg} onClose={() => setPaymentPkg(null)} />}
+      {paymentPkg && (
+        <PaymentModal
+          pkg={paymentPkg}
+          onClose={() => setPaymentPkg(null)}
+          onPaid={() => { setPaymentResult({ paid: true }); loadBilling(); }}
+        />
+      )}
     </div>
   );
 };
