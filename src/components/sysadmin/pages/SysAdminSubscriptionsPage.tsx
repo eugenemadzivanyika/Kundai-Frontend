@@ -1,9 +1,69 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { CreditCard, Plus, Edit2, Trash2, X, AlertCircle } from 'lucide-react';
 import { sysAdminService, Subscription, School, SubscriptionPackage } from '../../../services/sysAdminService';
 import { useToast } from '../../ui/use-toast';
 
 const STATUS_OPTIONS = ['trial', 'active', 'suspended', 'expired', 'cancelled'];
+
+const SUSPENSION_REASONS = [
+  { code: 'non_payment',      label: 'Non-payment — outstanding invoice' },
+  { code: 'trial_expired',    label: 'Trial period ended — no conversion' },
+  { code: 'policy_violation', label: 'Platform policy violation' },
+  { code: 'school_request',   label: 'School requested suspension' },
+  { code: 'fraud_review',     label: 'Fraud or misuse under review' },
+  { code: 'other',            label: 'Other (please specify below)' },
+];
+
+interface SuspendReasonModalProps {
+  onCancel: () => void;
+  onConfirm: (reason: string, note: string) => void;
+  loading: boolean;
+}
+const SuspendReasonModal: React.FC<SuspendReasonModalProps> = ({ onCancel, onConfirm, loading }) => {
+  const [reason, setReason] = useState('non_payment');
+  const [note, setNote]     = useState('');
+  const canConfirm = reason !== 'other' || note.trim().length > 0;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-amber-400" />
+            <h2 className="text-sm font-bold text-white">Suspend subscription</h2>
+          </div>
+          <button onClick={onCancel} className="text-slate-500 hover:text-white"><X size={16} /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide">Reason</label>
+            <select value={reason} onChange={(e) => setReason(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500/50">
+              {SUSPENSION_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide">
+              Note {reason === 'other' ? <span className="text-red-400">*</span> : <span className="text-slate-600">(optional)</span>}
+            </label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3}
+              placeholder={reason === 'other' ? 'Describe the reason…' : 'Additional context (optional)'}
+              className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none placeholder:text-slate-600" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-700">
+          <button onClick={onCancel} disabled={loading}
+            className="px-4 py-2 text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-500 rounded-lg transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(reason, note)} disabled={loading || !canConfirm}
+            className="px-4 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {loading ? 'Suspending…' : 'Confirm suspension'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
   trial: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
@@ -31,6 +91,8 @@ const EMPTY_FORM = {
   paymentRef: '',
   notes: '',
   status: 'active' as string,
+  suspensionReason: 'non_payment',
+  suspensionNote: '',
 };
 
 const schoolName = (s: School | string) => (typeof s === 'string' ? s : s.name);
@@ -46,6 +108,8 @@ const SysAdminSubscriptionsPage: React.FC = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [pendingSuspend, setPendingSuspend] = useState<Subscription | null>(null);
+  const [suspending, setSuspending] = useState(false);
   const { toast } = useToast();
 
   const load = () => {
@@ -84,6 +148,8 @@ const SysAdminSubscriptionsPage: React.FC = () => {
       paymentRef: sub.paymentRef || '',
       notes: sub.notes || '',
       status: sub.status,
+      suspensionReason: sub.suspensionReason || 'non_payment',
+      suspensionNote: sub.suspensionNote || '',
     });
     setShowModal(true);
   };
@@ -106,6 +172,10 @@ const SysAdminSubscriptionsPage: React.FC = () => {
           paymentRef: form.paymentRef,
           notes: form.notes,
           status: form.status as any,
+          ...(form.status === 'suspended' && {
+            suspensionReason: form.suspensionReason,
+            suspensionNote:   form.suspensionNote,
+          }),
         });
         toast.success('Subscription updated');
       } else {
@@ -142,13 +212,32 @@ const SysAdminSubscriptionsPage: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (sub: Subscription, status: string) => {
+  const handleStatusChange = (sub: Subscription, status: string) => {
+    if (status === 'suspended') {
+      setPendingSuspend(sub);
+      return;
+    }
+    sysAdminService.changeSubscriptionStatus(sub._id, { status })
+      .then(() => { toast.success('Status updated'); load(); })
+      .catch(() => toast.error('Failed to update status'));
+  };
+
+  const handleConfirmSuspend = async (reason: string, note: string) => {
+    if (!pendingSuspend) return;
+    setSuspending(true);
     try {
-      await sysAdminService.updateSubscription(sub._id, { status: status as any });
-      toast.success('Status updated');
+      await sysAdminService.changeSubscriptionStatus(pendingSuspend._id, {
+        status: 'suspended',
+        suspensionReason: reason,
+        suspensionNote: note,
+      });
+      setPendingSuspend(null);
+      toast.success('Subscription suspended');
       load();
     } catch {
-      toast.error('Failed to update status');
+      toast.error('Failed to suspend subscription');
+    } finally {
+      setSuspending(false);
     }
   };
 
@@ -156,6 +245,13 @@ const SysAdminSubscriptionsPage: React.FC = () => {
 
   return (
     <div className="space-y-5 mt-4">
+      {pendingSuspend && (
+        <SuspendReasonModal
+          onCancel={() => setPendingSuspend(null)}
+          onConfirm={handleConfirmSuspend}
+          loading={suspending}
+        />
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <CreditCard size={18} className="text-emerald-400" />
@@ -337,13 +433,34 @@ const SysAdminSubscriptionsPage: React.FC = () => {
               </div>
 
               {editing && (
-                <div>
-                  <label className="block text-slate-400 text-xs font-medium mb-1">Status</label>
-                  <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                    className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-emerald-500">
-                    {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-1">Status</label>
+                    <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                      className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-emerald-500">
+                      {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  {form.status === 'suspended' && (
+                    <>
+                      <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1">Suspension reason <span className="text-red-400">*</span></label>
+                        <select value={form.suspensionReason} onChange={(e) => setForm((f) => ({ ...f, suspensionReason: e.target.value }))}
+                          className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-amber-500">
+                          {SUSPENSION_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 text-xs font-medium mb-1">
+                          Suspension note {form.suspensionReason === 'other' ? <span className="text-red-400">*</span> : <span className="text-slate-600">(optional)</span>}
+                        </label>
+                        <textarea value={form.suspensionNote} onChange={(e) => setForm((f) => ({ ...f, suspensionNote: e.target.value }))}
+                          rows={2} placeholder={form.suspensionReason === 'other' ? 'Describe the reason…' : 'Additional context (optional)'}
+                          className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-amber-500 resize-none" />
+                      </div>
+                    </>
+                  )}
+                </>
               )}
 
               <div>

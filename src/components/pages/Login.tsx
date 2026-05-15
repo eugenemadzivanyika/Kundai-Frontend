@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,11 +19,31 @@ interface LoginProps {
   onLogin: () => void;
 }
 
+interface SuspensionNotice { reason: string; note: string; }
+
+const SUSPENSION_REASON_LABELS: Record<string, string> = {
+  non_payment:      'Non-payment — outstanding invoice',
+  trial_expired:    'Trial period ended without conversion to a paid plan',
+  policy_violation: 'Platform policy violation',
+  school_request:   'Suspension requested by your school',
+  fraud_review:     'Account under fraud/misuse review',
+  other:            'Please contact your school administrator for details',
+};
+
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedPortal, setSelectedPortal] = useState<'staff' | 'student'>('student');
+  const [suspensionNotice, setSuspensionNotice] = useState<SuspensionNotice | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('suspension_notice');
+    if (raw) {
+      try { setSuspensionNotice(JSON.parse(raw)); } catch { /* ignore */ }
+      sessionStorage.removeItem('suspension_notice');
+    }
+  }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema)
@@ -146,6 +166,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             {/* Right Column: Login Form */}
             <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-xl">
+
+              {suspensionNotice && (
+                <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                  <p className="font-bold text-amber-800">Your school account has been suspended</p>
+                  <p className="mt-1 text-amber-700">
+                    {SUSPENSION_REASON_LABELS[suspensionNotice.reason] ?? 'Please contact your school administrator.'}
+                  </p>
+                  {suspensionNotice.note && (
+                    <p className="mt-1 text-amber-600 text-xs">{suspensionNotice.note}</p>
+                  )}
+                  <p className="mt-2 text-amber-600 text-xs">To reinstate access, contact <strong>support@kundai.com</strong>.</p>
+                </div>
+              )}
+
               <div className="mb-8 space-y-4 text-center">
                 <h2 className="text-3xl font-bold text-slate-900">Welcome back</h2>
                 

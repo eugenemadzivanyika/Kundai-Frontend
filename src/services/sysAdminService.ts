@@ -27,6 +27,7 @@ export interface School {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  seatsUsed?: number;
 }
 
 export interface SubscriptionPackage {
@@ -56,6 +57,10 @@ export interface Subscription {
   amountPaid: number;
   paymentRef?: string;
   notes?: string;
+  suspensionReason?: string;
+  suspensionNote?: string;
+  statusChangedAt?: string;
+  statusChangedBy?: string | { _id: string; firstName: string; lastName: string };
   createdAt: string;
 }
 
@@ -74,6 +79,16 @@ export interface SchoolStats {
   teachers: number;
   students: number;
   classes: number;
+  admins: number;
+  seatsUsed: number;
+  seatsLicensed: number;
+  utilizationPct: number;
+  seatHistory: { month: string; count: number }[];
+  aiUsage: {
+    gradedThisTerm: number;
+    tutorSessions: number;
+    ocrJobs: number;
+  };
 }
 
 export interface PlatformSettings {
@@ -105,7 +120,21 @@ export const sysAdminService = {
   // Schools
   getSchools: (): Promise<School[]> => fetchData(`${BASE}/schools`),
   getSchool: (id: string): Promise<School> => fetchData(`${BASE}/schools/${id}`),
-  createSchool: (data: Partial<School>): Promise<School> =>
+  createSchool: (data: {
+    name: string; email: string; phone?: string; address?: string;
+    registrationNumber?: string; primaryContact?: { name?: string; email?: string; phone?: string };
+    notes?: string;
+    adminFirstName?: string; adminLastName?: string; adminEmail?: string;
+    planId?: string;
+    startOnTrial?: boolean;
+    trialDays?: number;
+    billingCycle?: 'monthly' | 'termly' | 'annually';
+    studentLimit?: number;
+    amountDue?: number;
+    paymentRef?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<School & { defaultPassword?: string }> =>
     fetchData(`${BASE}/schools`, { method: 'POST', body: JSON.stringify(data) }),
   updateSchool: (id: string, data: Partial<School>): Promise<School> =>
     fetchData(`${BASE}/schools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -137,12 +166,17 @@ export const sysAdminService = {
     notes?: string;
   }): Promise<Subscription> =>
     fetchData(`${BASE}/subscriptions`, { method: 'POST', body: JSON.stringify(data) }),
-  updateSubscription: (id: string, data: Partial<Subscription> & { packageId?: string }): Promise<Subscription> =>
+  updateSubscription: (id: string, data: Partial<Subscription> & { packageId?: string; suspensionReason?: string; suspensionNote?: string }): Promise<Subscription> =>
     fetchData(`${BASE}/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  changeSubscriptionStatus: (id: string, data: { status: string; suspensionReason?: string; suspensionNote?: string }): Promise<Subscription> =>
+    fetchData(`${BASE}/subscriptions/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSubscription: (id: string): Promise<{ message: string }> =>
     fetchData(`${BASE}/subscriptions/${id}`, { method: 'DELETE' }),
   extendTrial: (id: string, days: number): Promise<Subscription> =>
     fetchData(`${BASE}/subscriptions/${id}/extend-trial`, { method: 'POST', body: JSON.stringify({ days }) }),
+
+  // School subscriptions (with statusChangedBy populated)
+  getSchoolSubscriptions: (id: string): Promise<Subscription[]> => fetchData(`${BASE}/schools/${id}/subscriptions`),
 
   // School stats & actions
   getSchoolStats: (id: string): Promise<SchoolStats> => fetchData(`${BASE}/schools/${id}/stats`),

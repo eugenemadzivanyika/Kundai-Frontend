@@ -15,10 +15,14 @@ const NAV_ITEMS = [
 ];
 
 const TYPE_LABELS: Record<string, string> = {
-  school_registered:    'New school registered',
-  subscription_created: 'Subscription created',
-  subscription_expired: 'Subscription expired',
-  payment_received:     'Payment received',
+  school_registered:       'New school registered',
+  subscription_created:    'Subscription created',
+  subscription_expired:    'Subscription expired',
+  payment_received:        'Payment received',
+  subscription_trial:      'Trial started',
+  subscription_active:     'Subscription activated',
+  subscription_suspended:  'Subscription suspended',
+  subscription_cancelled:  'Subscription cancelled',
 };
 
 function formatRelativeTime(iso: string): string {
@@ -73,6 +77,14 @@ const SysAdminShell: React.FC = () => {
         const { notifications: notifs, unreadCount: count } = await sysAdminService.getNotifications({ limit: 20 });
         setNotifications(notifs);
         setUnreadCount(count);
+        // Mark each unread notification as read on view
+        if (count > 0) {
+          notifs
+            .filter((n) => !n.read)
+            .forEach((n) => sysAdminService.markNotificationRead(n._id).catch(() => {}));
+          setUnreadCount(0);
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        }
       } catch { /* silent */ } finally {
         setNotifLoading(false);
       }

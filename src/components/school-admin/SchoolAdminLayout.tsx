@@ -156,6 +156,13 @@ function Avatar({ name, tone = 'forest', size = 32 }: { name: string; tone?: str
   );
 }
 
+interface SubStatus {
+  status: 'trial' | 'active' | 'suspended' | 'expired' | 'cancelled' | null;
+  endDate: string | null;
+  suspensionReason: string | null;
+  suspensionNote: string | null;
+}
+
 // ── Layout component ─────────────────────────────────────────────────────────
 const SchoolAdminLayout: React.FC = () => {
   const navigate = useNavigate();
@@ -163,12 +170,23 @@ const SchoolAdminLayout: React.FC = () => {
   const currentUser = authService.getCurrentUser();
   const userName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Admin';
   const [schoolName, setSchoolName] = useState('School Portal');
+  const [subStatus, setSubStatus] = useState<SubStatus>({ status: null, endDate: null, suspensionReason: null, suspensionNote: null });
   const [notifOpen, setNotifOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
   useEffect(() => {
     adminService.getSchoolSettings?.()
-      .then((d: any) => { if (d?.school?.name) setSchoolName(d.school.name); })
+      .then((d: any) => {
+        if (d?.school?.name) setSchoolName(d.school.name);
+        if (d?.subscription) {
+          setSubStatus({
+            status: d.subscription.status ?? null,
+            endDate: d.subscription.endDate ?? null,
+            suspensionReason: d.subscription.suspensionReason ?? null,
+            suspensionNote: d.subscription.suspensionNote ?? null,
+          });
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -281,6 +299,66 @@ const SchoolAdminLayout: React.FC = () => {
             )}
           </button>
         </header>
+
+        {/* Status banners */}
+        {subStatus.status === 'suspended' && (
+          <div style={{ background: 'rgba(120,53,15,0.25)', borderBottom: '1px solid rgba(217,119,6,0.5)', padding: '12px 28px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>⚠️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: '#fbbf24', fontSize: 13 }}>Account Suspended</div>
+              <div style={{ color: '#fde68a', fontSize: 12, marginTop: 2 }}>
+                Your school's Kundai subscription is currently suspended. Teachers and students cannot access the platform.
+              </div>
+              {subStatus.suspensionReason && (
+                <div style={{ color: '#fcd34d', fontSize: 12, marginTop: 2 }}>
+                  Reason: {subStatus.suspensionReason.replace(/_/g, ' ')}
+                  {subStatus.suspensionNote ? ` — ${subStatus.suspensionNote}` : ''}
+                </div>
+              )}
+              <div style={{ color: '#fde68a', fontSize: 12, marginTop: 4 }}>
+                To reinstate: contact <strong>support@kundai.com</strong> or your account manager.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {subStatus.status === 'expired' && (
+          <div style={{ background: 'rgba(127,29,29,0.25)', borderBottom: '1px solid rgba(239,68,68,0.4)', padding: '12px 28px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>⛔</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, color: '#f87171', fontSize: 13 }}>Subscription Expired</div>
+              <div style={{ color: '#fca5a5', fontSize: 12, marginTop: 2 }}>
+                {subStatus.endDate
+                  ? `Your subscription ended on ${new Date(subStatus.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+                  : 'Your subscription has expired.'}
+                {' '}Renew to restore access for teachers and students.
+              </div>
+              <div style={{ color: '#fca5a5', fontSize: 12, marginTop: 4 }}>
+                Contact: <strong>support@kundai.com</strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {subStatus.status === 'trial' && subStatus.endDate && (() => {
+          const daysLeft = Math.round((new Date(subStatus.endDate).getTime() - Date.now()) / 86_400_000);
+          const expiryStr = new Date(subStatus.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+          return (
+            <div style={{ background: 'rgba(12,74,110,0.25)', borderBottom: '1px solid rgba(56,189,248,0.35)', padding: '10px 28px', display: 'flex', gap: 12, alignItems: 'center' }}>
+              <span style={{ fontSize: 15, lineHeight: 1 }}>🕐</span>
+              <div style={{ flex: 1, color: '#7dd3fc', fontSize: 12 }}>
+                <strong style={{ color: '#38bdf8' }}>Trial</strong>
+                {' '}— {daysLeft > 0 ? `${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining` : 'expires today'} · Expires {expiryStr}
+              </div>
+              <a
+                href="mailto:support@kundai.com?subject=Upgrade%20to%20paid%20subscription"
+                style={{ color: '#38bdf8', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none' }}
+              >
+                Upgrade to paid →
+              </a>
+            </div>
+          );
+        })()}
 
         {/* Page content */}
         <main style={{ flex: 1, padding: '24px 28px 60px', overflowY: 'auto' }}>

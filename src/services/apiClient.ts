@@ -45,6 +45,19 @@ export async function fetchData<T = any>(endpoint: string, options: RequestInit 
     });
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
+
+      // Redirect blocked school users to login with a suspension notice
+      if (response.status === 403 && errorBody.code === 'SCHOOL_SUSPENDED') {
+        sessionStorage.setItem('suspension_notice', JSON.stringify({
+          reason: errorBody.reason || '',
+          note:   errorBody.note   || '',
+        }));
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return undefined as unknown as T;
+      }
+
       throw { response: { data: errorBody }, message: `HTTP error! status: ${response.status}` };
     }
     return response.json();
