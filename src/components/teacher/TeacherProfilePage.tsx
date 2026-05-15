@@ -125,13 +125,15 @@ const TeacherProfilePage: React.FC = () => {
       const updated = await profileService.updateMyProfile(form);
       setProfile(updated);
 
-      // Refresh cached user name for Header
+      // Refresh cached user for Header (name + gender for title display)
       const cached = authService.getCurrentUser();
       if (cached) {
+        const genderUpdate = (updated as any).teacherProfile?.gender;
         localStorage.setItem('user', JSON.stringify({
           ...cached,
           firstName: updated.firstName,
           lastName: updated.lastName,
+          ...(genderUpdate !== undefined && { gender: genderUpdate }),
         }));
       }
       setSuccess(true);

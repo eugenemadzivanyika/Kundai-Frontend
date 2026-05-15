@@ -26,6 +26,7 @@ import SchoolTeachersPage from './components/school-admin/pages/SchoolTeachersPa
 import SchoolStudentsPage from './components/school-admin/pages/SchoolStudentsPage';
 import SchoolClassesPage from './components/school-admin/pages/SchoolClassesPage';
 import SchoolSubjectsPage from './components/school-admin/pages/SchoolSubjectsPage';
+import SchoolReportsPage from './components/school-admin/pages/SchoolReportsPage';
 import SchoolBillingPage from './components/school-admin/pages/SchoolBillingPage';
 import SchoolSettingsPage from './components/school-admin/pages/SchoolSettingsPage';
 import AIResourceViewer from './components/classroom/AIResourceViewer';
@@ -34,11 +35,12 @@ import AssessmentDetailPage from './components/assessments/AssessmentDetailPage'
 import AssessmentAnalysisPage from './components/assessments/AssessmentAnalysisPage';
 import EditAssessmentPage from './components/assessments/EditAssessmentPage';
 import SysAdminShell from './components/sysadmin/SysAdminShell';
-import PlatformDashboardPage from './components/sysadmin/pages/PlatformDashboardPage';
-import SchoolsListPage from './components/sysadmin/pages/SchoolsListPage';
+import SysAdminDashboardPage from './components/sysadmin/pages/SysAdminDashboardPage';
+import SysAdminSchoolsPage from './components/sysadmin/pages/SysAdminSchoolsPage';
 import SchoolDetailPage from './components/sysadmin/pages/SchoolDetailPage';
-import SubscriptionsPage from './components/sysadmin/pages/SubscriptionsPage';
-import PackagesPage from './components/sysadmin/pages/PackagesPage';
+import SysAdminSubscriptionsPage from './components/sysadmin/pages/SysAdminSubscriptionsPage';
+import SysAdminPackagesPage from './components/sysadmin/pages/SysAdminPackagesPage';
+import SysAdminSettingsPage from './components/sysadmin/pages/SysAdminSettingsPage';
 import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import TeacherProfilePage from './components/teacher/TeacherProfilePage';
@@ -47,6 +49,13 @@ import ClassDrillDownDashboard from './components/class-drill-down/ClassDrillDow
 function AnalyticsPage() {
   const { classId } = useParams<{ classId: string }>();
   return <ClassDrillDownDashboard classId={classId!} />;
+}
+
+function RequireRole({ role, children }: { role: string; children: React.ReactNode }) {
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  if (!user || user.role !== role) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 function App() {
@@ -142,23 +151,25 @@ function App() {
 
         {/* --- Sys Admin Portal --- */}
         {isAuthenticated && (
-          <Route path="/sys-admin" element={<SysAdminShell />}>
-            <Route index element={<PlatformDashboardPage />} />
-            <Route path="schools" element={<SchoolsListPage />} />
+          <Route path="/sys-admin" element={<RequireRole role="sys_admin"><SysAdminShell /></RequireRole>}>
+            <Route index element={<SysAdminDashboardPage />} />
+            <Route path="schools" element={<SysAdminSchoolsPage />} />
             <Route path="schools/:schoolId" element={<SchoolDetailPage />} />
-            <Route path="packages" element={<PackagesPage />} />
-            <Route path="subscriptions" element={<SubscriptionsPage />} />
+            <Route path="packages" element={<SysAdminPackagesPage />} />
+            <Route path="subscriptions" element={<SysAdminSubscriptionsPage />} />
+            <Route path="settings" element={<SysAdminSettingsPage />} />
           </Route>
         )}
 
         {/* --- School Admin Portal (new design) --- */}
         {isAuthenticated && (
-          <Route path="/admin" element={<SchoolAdminLayout />}>
+          <Route path="/admin" element={<RequireRole role="admin"><SchoolAdminLayout /></RequireRole>}>
             <Route index element={<SchoolDashboardPage />} />
             <Route path="teachers" element={<SchoolTeachersPage />} />
             <Route path="students" element={<SchoolStudentsPage />} />
             <Route path="classes" element={<SchoolClassesPage />} />
             <Route path="subjects" element={<SchoolSubjectsPage />} />
+            <Route path="reports" element={<SchoolReportsPage />} />
             <Route path="billing" element={<SchoolBillingPage />} />
             <Route path="settings" element={<SchoolSettingsPage />} />
           </Route>

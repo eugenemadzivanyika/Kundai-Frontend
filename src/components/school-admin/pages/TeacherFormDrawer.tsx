@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { classService, ClassItem } from '../../../services/classService';
 import { subjectService } from '../../../services/api';
 import { fetchData } from '../../../services/apiClient';
+import { useToast } from '../../ui/use-toast';
+import { TeacherUser } from '../types/schoolAdmin';
 
 export interface TeacherPayload {
   firstName: string;
@@ -16,13 +18,13 @@ export interface TeacherPayload {
   qualifications: string;
   teachingCertificate: string;
   yearsOfExperience: number;
-  gender: string;
+  gender: 'Male' | 'Female' | 'Other' | '';
   subjectAssignments: { subject: string; classes: string[] }[];
 }
 
 interface Props {
   open: boolean;
-  editUser?: any;
+  editUser?: TeacherUser | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -54,28 +56,31 @@ const inputStyle: React.CSSProperties = {
 };
 
 const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }) => {
+  const { toast } = useToast();
   const [form, setForm] = useState<TeacherPayload>(BLANK);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const isEdit = !!editUser;
 
   useEffect(() => {
     if (!open) return;
+    setLoadError('');
     Promise.all([
       subjectService.getSubjects(),
       classService.getClasses(),
     ]).then(([subs, cls]) => {
       setSubjects(subs.map((s: any) => ({ id: s.id, name: s.name, code: s.code })));
       setClasses(cls);
-    }).catch(() => {});
+    }).catch(() => setLoadError('Could not load subjects and classes. Check your connection and try again.'));
   }, [open]);
 
   useEffect(() => {
     if (editUser) {
-      const tp = editUser.teacherProfile ?? {};
+      const tp = editUser.teacherProfile;
       setForm({
         firstName: editUser.firstName ?? '',
         lastName: editUser.lastName ?? '',
@@ -83,16 +88,16 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
         password: '',
         phoneNumber: editUser.phoneNumber ?? '',
         role: 'teacher',
-        staffNumber: tp.staffNumber ?? '',
-        position: tp.position ?? '',
-        department: tp.department ?? '',
-        qualifications: tp.qualifications ?? '',
-        teachingCertificate: tp.teachingCertificate ?? '',
-        yearsOfExperience: tp.yearsOfExperience ?? 0,
-        gender: tp.gender ?? '',
-        subjectAssignments: tp.subjectAssignments?.map((sa: any) => ({
-          subject: sa.subject?._id ?? sa.subject ?? '',
-          classes: (sa.classes ?? []).map((c: any) => c._id ?? c),
+        staffNumber: tp?.staffNumber ?? '',
+        position: tp?.position ?? '',
+        department: tp?.department ?? '',
+        qualifications: tp?.qualifications ?? '',
+        teachingCertificate: tp?.teachingCertificate ?? '',
+        yearsOfExperience: tp?.yearsOfExperience ?? 0,
+        gender: (tp?.gender ?? '') as TeacherPayload['gender'],
+        subjectAssignments: tp?.subjectAssignments?.map(sa => ({
+          subject: typeof sa.subject === 'object' ? (sa.subject?._id ?? '') : sa.subject ?? '',
+          classes: (sa.classes ?? []).map(c => typeof c === 'object' ? (c._id ?? '') : c),
         })) ?? [],
       });
     } else {
@@ -130,6 +135,7 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
       const payload: any = {
         ...form,
         yearsOfExperience: Number(form.yearsOfExperience) || 0,
+        subjectAssignments: form.subjectAssignments.filter((sa) => sa.subject),
       };
       if (isEdit && !payload.password) delete payload.password;
       if (isEdit) {
@@ -137,10 +143,17 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
       } else {
         await fetchData('/admin/users', { method: 'POST', body: JSON.stringify(payload) });
       }
+      toast.success(isEdit ? 'Teacher updated successfully.' : 'Teacher created successfully.');
       onSaved();
       onClose();
     } catch (err: any) {
-      setError(err.message ?? 'Failed to save teacher');
+      const msg: string = err.message ?? '';
+      const friendly = msg.includes('enum value') && msg.includes('gender')
+        ? 'Invalid gender value — please select Male, Female, or Other.'
+        : msg.includes('duplicate') || msg.includes('E11000')
+          ? 'A user with that email already exists.'
+          : msg || 'Failed to save teacher';
+      setError(friendly);
     } finally {
       setSaving(false);
     }
@@ -177,6 +190,10 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+          {loadError && (
+            <div style={{ padding: '10px 14px', background: 'var(--gold-soft)', border: '1px solid color-mix(in srgb, var(--gold) 25%, transparent)', borderRadius: 5, color: 'var(--gold-deep)', fontSize: 12.5 }}>{loadError}</div>
+          )}
+
           {/* Account */}
           <section>
             <div style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--rule-soft)' }}>Account details</div>
@@ -199,8 +216,9 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
               <Field label="Gender">
                 <select style={inputStyle} value={form.gender} onChange={e => set('gender', e.target.value)}>
                   <option value="">— select —</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
                 </select>
               </Field>
             </div>
@@ -287,21 +305,21 @@ const TeacherFormDrawer: React.FC<Props> = ({ open, editUser, onClose, onSaved }
               {error}
             </div>
           )}
-        </form>
 
-        {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--rule-soft)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit as any}
-            disabled={saving}
-            style={{ padding: '8px 20px', background: saving ? 'var(--forest-soft)' : 'var(--forest)', color: saving ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
-          >
-            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create teacher'}
-          </button>
-        </div>
+          {/* Footer inside form so Enter submits and type="submit" works */}
+          <div style={{ paddingTop: 8, borderTop: '1px solid var(--rule-soft)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{ padding: '8px 20px', background: saving ? 'var(--forest-soft)' : 'var(--forest)', color: saving ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
+            >
+              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create teacher'}
+            </button>
+          </div>
+        </form>
       </div>
     </>
   );

@@ -4,8 +4,9 @@ import {
   ChevronLeft, Mail, Phone, MapPin,
   Building2, Users, TrendingUp, Calendar,
   AlertCircle, CheckCircle, Package, RefreshCw,
+  GraduationCap, Briefcase, BookOpen, KeyRound, CalendarPlus,
 } from 'lucide-react';
-import { sysAdminService, School, Subscription, SubscriptionPackage } from '../../../services/sysAdminService';
+import { sysAdminService, School, Subscription, SubscriptionPackage, SchoolStats } from '../../../services/sysAdminService';
 import { useToast } from '../../ui/use-toast';
 
 type Tab = 'overview' | 'subscriptions' | 'billing';
@@ -34,9 +35,12 @@ const SchoolDetailPage: React.FC = () => {
   const { schoolId } = useParams<{ schoolId: string }>();
   const [school, setSchool] = useState<School | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [stats, setStats] = useState<SchoolStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('overview');
   const [suspending, setSuspending] = useState(false);
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [extendingTrial, setExtendingTrial] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -45,13 +49,15 @@ const SchoolDetailPage: React.FC = () => {
     Promise.all([
       sysAdminService.getSchool(schoolId),
       sysAdminService.getSubscriptions(),
+      sysAdminService.getSchoolStats(schoolId),
     ])
-      .then(([s, allSubs]) => {
+      .then(([s, allSubs, st]) => {
         setSchool(s);
         setSubscriptions(allSubs.filter((sub) => {
           const schoolRef = sub.school;
           return typeof schoolRef === 'string' ? schoolRef === schoolId : (schoolRef as any)?._id === schoolId;
         }));
+        setStats(st);
       })
       .catch(() => toast.error('Failed to load school details'))
       .finally(() => setLoading(false));
@@ -82,6 +88,45 @@ const SchoolDetailPage: React.FC = () => {
       toast.error('Failed to reactivate school');
     } finally {
       setSuspending(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!school) return;
+    if (!window.confirm(`Reset admin password for "${school.name}"? The admin will receive a temporary password.`)) return;
+    setResettingPwd(true);
+    try {
+      const result = await sysAdminService.resetAdminPassword(school._id);
+      toast.success(`Password reset. Temp password: ${result.temporaryPassword} (sent to ${result.email})`);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to reset password');
+    } finally {
+      setResettingPwd(false);
+    }
+  };
+
+  const handleExtendTrial = async () => {
+    if (!school) return;
+    const activeSub = school.activeSubscription as any;
+    if (!activeSub) {
+      toast.error('No active subscription to extend');
+      return;
+    }
+    const daysStr = window.prompt('Extend trial by how many days?', '14');
+    if (!daysStr) return;
+    const days = parseInt(daysStr);
+    if (isNaN(days) || days < 1) { toast.error('Enter a valid number of days'); return; }
+    setExtendingTrial(true);
+    try {
+      await sysAdminService.extendTrial(activeSub._id, days);
+      // Reload school to reflect new end date
+      const updated = await sysAdminService.getSchool(school._id);
+      setSchool(updated);
+      toast.success(`Trial extended by ${days} day${days > 1 ? 's' : ''}`);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to extend trial');
+    } finally {
+      setExtendingTrial(false);
     }
   };
 
@@ -157,7 +202,9 @@ const SchoolDetailPage: React.FC = () => {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+
+          {/* Quick actions */}
+          <div className="flex flex-wrap gap-2">
             {school.active ? (
               <button
                 onClick={handleSuspend}
@@ -173,6 +220,22 @@ const SchoolDetailPage: React.FC = () => {
                 className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
               >
                 <CheckCircle size={13} /> {suspending ? 'Reactivating…' : 'Reactivate'}
+              </button>
+            )}
+            <button
+              onClick={handleResetPassword}
+              disabled={resettingPwd}
+              className="flex items-center gap-1.5 border border-slate-600 text-slate-300 hover:bg-slate-700 text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+            >
+              <KeyRound size={13} /> {resettingPwd ? 'Resetting…' : 'Reset password'}
+            </button>
+            {activeSub && (activeSub.status === 'trial' || activeSub.status === 'expired') && (
+              <button
+                onClick={handleExtendTrial}
+                disabled={extendingTrial}
+                className="flex items-center gap-1.5 border border-sky-600/50 text-sky-400 hover:bg-sky-600/10 text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+              >
+                <CalendarPlus size={13} /> {extendingTrial ? 'Extending…' : 'Extend trial'}
               </button>
             )}
             <button
@@ -205,12 +268,22 @@ const SchoolDetailPage: React.FC = () => {
       {/* Overview tab */}
       {tab === 'overview' && (
         <div className="space-y-4">
+          {/* Subscription KPIs */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <Kpi label="Active package" value={pkg?.name ?? '—'} sub={activeSub ? `${activeSub.studentLimit?.toLocaleString()} seats licensed` : 'No active subscription'} icon={Package} accent="bg-indigo-600" />
             <Kpi label="Subscriptions" value={subscriptions.length} sub={`${subscriptions.filter((s) => s.status === 'active').length} active`} icon={TrendingUp} accent="bg-emerald-600" />
             <Kpi label="Renews in" value={daysUntilExpiry !== null ? `${daysUntilExpiry} days` : '—'} sub={activeSub?.endDate ? new Date(activeSub.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''} icon={Calendar} accent={daysUntilExpiry !== null && daysUntilExpiry <= 14 ? 'bg-amber-600' : 'bg-sky-600'} />
             <Kpi label="Onboarded" value={new Date(school.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} sub={`${Math.round((Date.now() - new Date(school.createdAt).getTime()) / 86_400_000)} days ago`} icon={Building2} accent="bg-slate-600" />
           </div>
+
+          {/* Usage stats */}
+          {stats && (
+            <div className="grid grid-cols-3 gap-4">
+              <Kpi label="Teachers" value={stats.teachers} icon={Briefcase} accent="bg-cyan-700" />
+              <Kpi label="Students" value={stats.students} icon={GraduationCap} accent="bg-violet-700" />
+              <Kpi label="Classes" value={stats.classes} icon={BookOpen} accent="bg-amber-700" />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">

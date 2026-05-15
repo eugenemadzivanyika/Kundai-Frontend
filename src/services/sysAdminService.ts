@@ -70,7 +70,32 @@ export interface PlatformOverview {
   recentSchools: School[];
 }
 
+export interface SchoolStats {
+  teachers: number;
+  students: number;
+  classes: number;
+}
+
+export interface PlatformSettings {
+  _id: string;
+  trialDurationDays: number;
+  defaultPackageId: SubscriptionPackage | null;
+  platformName: string;
+}
+
+export interface SysNotification {
+  _id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  readAt?: string;
+  createdAt: string;
+  data?: Record<string, any>;
+}
+
 const BASE = '/sys-admin';
+const NOTIF_BASE = '/notifications';
 
 export const sysAdminService = {
   // Dashboard
@@ -116,4 +141,29 @@ export const sysAdminService = {
     fetchData(`${BASE}/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSubscription: (id: string): Promise<{ message: string }> =>
     fetchData(`${BASE}/subscriptions/${id}`, { method: 'DELETE' }),
+  extendTrial: (id: string, days: number): Promise<Subscription> =>
+    fetchData(`${BASE}/subscriptions/${id}/extend-trial`, { method: 'POST', body: JSON.stringify({ days }) }),
+
+  // School stats & actions
+  getSchoolStats: (id: string): Promise<SchoolStats> => fetchData(`${BASE}/schools/${id}/stats`),
+  resetAdminPassword: (id: string): Promise<{ message: string; email: string; temporaryPassword: string }> =>
+    fetchData(`${BASE}/schools/${id}/reset-password`, { method: 'POST' }),
+
+  // Platform settings
+  getPlatformSettings: (): Promise<PlatformSettings> => fetchData(`${BASE}/platform-settings`),
+  updatePlatformSettings: (data: Partial<Pick<PlatformSettings, 'trialDurationDays' | 'platformName'> & { defaultPackageId: string | null }>): Promise<PlatformSettings> =>
+    fetchData(`${BASE}/platform-settings`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Sys admin personal profile
+  updateProfile: (data: { firstName?: string; lastName?: string; phoneNumber?: string; email?: string; currentPassword?: string; newPassword?: string }): Promise<any> =>
+    fetchData(`${BASE}/profile`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Notifications
+  getNotifications: (params?: { unreadOnly?: boolean; limit?: number }): Promise<{ notifications: SysNotification[]; unreadCount: number }> =>
+    fetchData(`${NOTIF_BASE}?${new URLSearchParams({ ...(params?.unreadOnly ? { unreadOnly: 'true' } : {}), limit: String(params?.limit ?? 20) }).toString()}`),
+  getUnreadCount: (): Promise<{ count: number }> => fetchData(`${NOTIF_BASE}/unread-count`),
+  markNotificationRead: (id: string): Promise<SysNotification> =>
+    fetchData(`${NOTIF_BASE}/${id}/read`, { method: 'PUT' }),
+  markAllNotificationsRead: (): Promise<{ message: string }> =>
+    fetchData(`${NOTIF_BASE}/read-all`, { method: 'PUT' }),
 };

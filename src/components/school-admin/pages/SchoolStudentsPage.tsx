@@ -3,6 +3,8 @@ import { adminService } from '../../../services/api';
 import { classService, ClassItem } from '../../../services/classService';
 import BulkStudentUpload from '../../admin/components/BulkStudentUpload';
 import { fetchData } from '../../../services/apiClient';
+import { useToast } from '../../ui/use-toast';
+import { StudentUser } from '../types/schoolAdmin';
 
 function Avatar({ name, size = 30 }: { name: string; size?: number }) {
   const TONES = ['forest', 'plum', 'sky', 'gold', 'terracotta'];
@@ -51,32 +53,78 @@ const inputStyle: React.CSSProperties = {
   outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 
-function AddStudentDrawer({ open, classes, onClose, onSaved }: { open: boolean; classes: ClassItem[]; onClose: () => void; onSaved: () => void }) {
+function StudentDrawer({
+  open,
+  classes,
+  editUser,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  classes: ClassItem[];
+  editUser?: StudentUser | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
   const [form, setForm] = useState<AddStudentForm>(BLANK_STUDENT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const isEdit = !!editUser;
 
-  useEffect(() => { if (open) { setForm(BLANK_STUDENT); setError(''); } }, [open]);
+  useEffect(() => {
+    if (open) {
+      if (editUser) {
+        const sp = editUser.studentProfile;
+        setForm({
+          firstName: editUser.firstName ?? '',
+          lastName: editUser.lastName ?? '',
+          email: editUser.email ?? '',
+          password: '',
+          form: String(sp?.form ?? 1),
+          classGroupId: typeof sp?.classGroup === 'object' ? (sp?.classGroup?._id ?? '') : (sp?.classGroup ?? ''),
+          gender: sp?.gender ?? '',
+          guardianName: sp?.guardianName ?? '',
+          guardianPhone: sp?.guardianPhone ?? '',
+        });
+      } else {
+        setForm(BLANK_STUDENT);
+      }
+      setError('');
+    }
+  }, [open, editUser]);
 
   const set = (k: keyof AddStudentForm, v: string) => setForm(f => ({ ...f, [k]: v }));
 
+  // Filter classes to those matching the selected form level
+  const matchingClasses = classes.filter(c => c.gradeLevel === `Form ${form.form}`);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.firstName || !form.lastName || !form.email || !form.password) {
-      setError('First name, last name, email, and password are required.');
+    if (!form.firstName || !form.lastName || !form.email) {
+      setError('First name, last name, and email are required.');
+      return;
+    }
+    if (!isEdit && !form.password) {
+      setError('Password is required for new students.');
       return;
     }
     setSaving(true);
     setError('');
     try {
-      await fetchData('/admin/users', {
-        method: 'POST',
-        body: JSON.stringify({ ...form, role: 'student', form: parseInt(form.form) || 1 }),
-      });
+      const payload: any = { ...form, role: 'student', form: parseInt(form.form) || 1 };
+      if (isEdit && !payload.password) delete payload.password;
+      if (isEdit) {
+        await fetchData(`/admin/users/${editUser!.id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        toast.success('Student updated successfully.');
+      } else {
+        await fetchData('/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+        toast.success('Student created successfully.');
+      }
       onSaved();
       onClose();
     } catch (err: any) {
-      setError(err.message ?? 'Failed to create student');
+      setError(err.message ?? 'Failed to save student');
     } finally {
       setSaving(false);
     }
@@ -89,8 +137,8 @@ function AddStudentDrawer({ open, classes, onClose, onSaved }: { open: boolean; 
       <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 460, zIndex: 50, background: 'var(--paper)', borderLeft: '1px solid var(--rule)', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.08)' }}>
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>Add student</h2>
-            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>Create a single student account</p>
+            <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>{isEdit ? 'Edit student' : 'Add student'}</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>{isEdit ? "Update this student's details" : 'Create a single student account'}</p>
           </div>
           <button onClick={onClose} style={{ padding: 6, background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)', lineHeight: 0 }}>
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
@@ -110,13 +158,15 @@ function AddStudentDrawer({ open, classes, onClose, onSaved }: { open: boolean; 
             <input style={inputStyle} type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="student@school.ac.zw" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Password <span style={{ color: 'var(--terracotta)' }}>*</span></label>
+            <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {isEdit ? 'New password (leave blank to keep)' : 'Password'} {!isEdit && <span style={{ color: 'var(--terracotta)' }}>*</span>}
+            </label>
             <input style={inputStyle} type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="••••••••" autoComplete="new-password" />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Form</label>
-              <select style={inputStyle} value={form.form} onChange={e => set('form', e.target.value)}>
+              <select style={inputStyle} value={form.form} onChange={e => { set('form', e.target.value); set('classGroupId', ''); }}>
                 {[1,2,3,4,5,6].map(f => <option key={f} value={f}>Form {f}</option>)}
               </select>
             </div>
@@ -124,15 +174,19 @@ function AddStudentDrawer({ open, classes, onClose, onSaved }: { open: boolean; 
               <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Class</label>
               <select style={inputStyle} value={form.classGroupId} onChange={e => set('classGroupId', e.target.value)}>
                 <option value="">— select class —</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {matchingClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {matchingClasses.length === 0 && (
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>No Form {form.form} classes yet</span>
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Gender</label>
               <select style={inputStyle} value={form.gender} onChange={e => set('gender', e.target.value)}>
                 <option value="">— select —</option>
-                <option value="M">Male</option>
-                <option value="F">Female</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -147,28 +201,32 @@ function AddStudentDrawer({ open, classes, onClose, onSaved }: { open: boolean; 
           {error && (
             <div style={{ padding: '10px 14px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 5, color: 'var(--terracotta)', fontSize: 12.5 }}>{error}</div>
           )}
+          <div style={{ paddingTop: 8, borderTop: '1px solid var(--rule-soft)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{ padding: '8px 20px', background: saving ? 'var(--forest-soft)' : 'var(--forest)', color: saving ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
+              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create student'}
+            </button>
+          </div>
         </form>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--rule-soft)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
-          <button onClick={handleSubmit as any} disabled={saving} style={{ padding: '8px 20px', background: saving ? 'var(--forest-soft)' : 'var(--forest)', color: saving ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
-            {saving ? 'Creating…' : 'Create student'}
-          </button>
-        </div>
       </div>
     </>
   );
 }
 
 const SchoolStudentsPage: React.FC = () => {
-  const [students, setStudents] = useState<any[]>([]);
+  const [students, setStudents] = useState<StudentUser[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [formFilter, setFormFilter] = useState('all');
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
-  const [addOpen, setAddOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editStudent, setEditStudent] = useState<StudentUser | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -177,14 +235,40 @@ const SchoolStudentsPage: React.FC = () => {
         adminService.getUsers(),
         classService.getClasses(),
       ]);
-      setStudents(allUsers.filter((u: any) => u.roles?.includes('student') || u.role === 'student'));
+      setStudents((allUsers as StudentUser[]).filter(u => u.roles?.includes('student') || u.role === 'student'));
       setClasses(allClasses);
+      setPage(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Remove "${name}" from the system? This cannot be undone.`)) return;
+    setDeletingId(id);
+    setActionError(null);
+    try {
+      await adminService.deleteUser(id);
+      toast.success('Student removed.');
+      await load();
+    } catch (err: any) {
+      setActionError(err.message ?? 'Failed to delete student');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const openEdit = (student: StudentUser) => {
+    setEditStudent(student);
+    setDrawerOpen(true);
+  };
+
+  const openAdd = () => {
+    setEditStudent(null);
+    setDrawerOpen(true);
+  };
 
   const filtered = students.filter(s => {
     const name = `${s.firstName ?? ''} ${s.lastName ?? ''}`.toLowerCase();
@@ -213,13 +297,20 @@ const SchoolStudentsPage: React.FC = () => {
             Bulk import (CSV)
           </button>
           <button
-            onClick={() => setAddOpen(true)}
+            onClick={openAdd}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit' }}>
             <svg width={13} height={13} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3v10M3 8h10" /></svg>
             Add student
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <div style={{ padding: '12px 16px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 7, color: 'var(--terracotta)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--terracotta)', fontSize: 16, padding: '0 4px' }}>×</button>
+        </div>
+      )}
 
       {/* Table card */}
       <div style={{ background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 7, overflow: 'hidden' }}>
@@ -248,16 +339,18 @@ const SchoolStudentsPage: React.FC = () => {
         ) : (
           <>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><Th>Student</Th><Th>Student ID</Th><Th>Form</Th><Th>Class</Th><Th>Status</Th></tr></thead>
+              <thead><tr><Th>Student</Th><Th>Student ID</Th><Th>Form</Th><Th>Class</Th><Th>Status</Th><Th /></tr></thead>
               <tbody>
                 {paginated.map((s, i) => {
                   const name = `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim() || s.email;
-                  const sp = s.studentProfile ?? {};
+                  const sp = s.studentProfile;
                   const active = s.active !== false;
-                  const classGroup = classes.find(c => c.id === sp.classGroup?._id || c.id === sp.classGroup);
+                  const cgId = typeof sp?.classGroup === 'object' ? sp?.classGroup?._id : sp?.classGroup;
+                  const classGroup = classes.find(c => c.id === cgId);
+                  const isDeleting = deletingId === s.id;
                   return (
                     <tr key={s.id || i}
-                      style={{ borderBottom: i < paginated.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}
+                      style={{ borderBottom: i < paginated.length - 1 ? '1px solid var(--rule-soft)' : 'none', opacity: isDeleting ? 0.5 : 1 }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper-shade)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                       <Td>
@@ -269,14 +362,29 @@ const SchoolStudentsPage: React.FC = () => {
                           </div>
                         </div>
                       </Td>
-                      <Td mono dim>{sp.id || '—'}</Td>
-                      <Td dim>{sp.form ? `Form ${sp.form}` : '—'}</Td>
-                      <Td dim>{classGroup?.name ?? sp.classGroup?.name ?? '—'}</Td>
+                      <Td mono dim>{sp?.id || '—'}</Td>
+                      <Td dim>{sp?.form ? `Form ${sp.form}` : '—'}</Td>
+                      <Td dim>{classGroup?.name ?? (typeof sp?.classGroup === 'object' ? sp?.classGroup?.name : undefined) ?? '—'}</Td>
                       <Td>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: active ? 'var(--forest)' : 'var(--terracotta)', fontWeight: 600 }}>
                           <span style={{ width: 6, height: 6, borderRadius: 999, background: 'currentColor', display: 'inline-block' }} />
                           {active ? 'Active' : 'Inactive'}
                         </span>
+                      </Td>
+                      <Td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            onClick={() => openEdit(s)}
+                            style={{ padding: '3px 10px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'inherit', fontWeight: 600 }}>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(s.id, name)}
+                            disabled={isDeleting}
+                            style={{ padding: '3px 10px', background: 'transparent', border: '1px solid color-mix(in srgb, var(--terracotta) 40%, transparent)', borderRadius: 4, cursor: isDeleting ? 'not-allowed' : 'pointer', fontSize: 11.5, color: 'var(--terracotta)', fontFamily: 'inherit', fontWeight: 600 }}>
+                            {isDeleting ? '…' : 'Remove'}
+                          </button>
+                        </div>
                       </Td>
                     </tr>
                   );
@@ -294,7 +402,13 @@ const SchoolStudentsPage: React.FC = () => {
         )}
       </div>
 
-      <AddStudentDrawer open={addOpen} classes={classes} onClose={() => setAddOpen(false)} onSaved={load} />
+      <StudentDrawer
+        open={drawerOpen}
+        classes={classes}
+        editUser={editStudent}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={load}
+      />
 
       {/* Bulk upload modal */}
       {bulkOpen && (

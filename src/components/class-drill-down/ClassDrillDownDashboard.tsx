@@ -112,15 +112,15 @@ function Pill({ tone, sm, children }: { tone: 'risk' | 'success' | 'warn' | 'inf
   );
 }
 
-function Btn({ variant = 'ghost', sm, icon: Icon, onClick, children }: {
+function Btn({ variant = 'ghost', sm, icon: Icon, onClick, disabled, children }: {
   variant?: 'primary' | 'ghost' | 'soft'; sm?: boolean; icon?: React.ElementType;
-  onClick?: () => void; children?: React.ReactNode;
+  onClick?: () => void; disabled?: boolean; children?: React.ReactNode;
 }) {
   const v = variant === 'primary' ? { bg: T.accent, fg: '#fffaf2', border: T.accent }
     : variant === 'soft' ? { bg: 'rgba(176,90,40,.08)', fg: T.accent, border: 'rgba(176,90,40,.18)' }
     : { bg: 'transparent', fg: T.inkMid, border: T.rule };
   return (
-    <button onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: sm ? '5px 10px' : '7px 14px', borderRadius: 6, fontSize: sm ? 11.5 : 12.5, fontWeight: 600, background: v.bg, color: v.fg, border: `1px solid ${v.border}`, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+    <button onClick={onClick} disabled={disabled} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: sm ? '5px 10px' : '7px 14px', borderRadius: 6, fontSize: sm ? 11.5 : 12.5, fontWeight: 600, background: v.bg, color: v.fg, border: `1px solid ${v.border}`, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: disabled ? 0.45 : 1 }}>
       {Icon && <Icon size={sm ? 12 : 14} />}{children}
     </button>
   );
@@ -188,12 +188,13 @@ function MasteryHeatmap({ data, onStudentClick }: { data: HeatmapData; onStudent
 
 // ─── Class overview panel ─────────────────────────────────────────────────────
 function ClassOverviewPanel({
-  overview, heatmap, misconceptions,
+  overview, heatmap, misconceptions, studentCount,
   onGoStudents, onGoStudent,
 }: {
   overview: ClassOverview;
   heatmap: HeatmapData | null;
   misconceptions: Misconception[];
+  studentCount: number;
   onGoStudents: () => void;
   onGoStudent: (id: string) => void;
 }) {
@@ -206,7 +207,7 @@ function ClassOverviewPanel({
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
         <KPICard label="Class mastery" value={pct(kpis.classMastery)} sub={kpis.classMastery >= 0.6 ? 'on track' : 'below target'} accent={T.accent} Icon={Brain} delta={kpis.classMasteryDelta !== 0 ? kpis.classMasteryDelta * 100 : undefined} />
-        <KPICard label="At risk" value={kpis.atRiskCount} sub={`${Math.round(kpis.atRiskCount / Math.max(1, heatmap?.students.length || 1) * 100)}% of class`} accent="#a93333" Icon={AlertTriangle} />
+        <KPICard label="At risk" value={kpis.atRiskCount} sub={`${Math.round(kpis.atRiskCount / Math.max(1, studentCount) * 100)}% of class`} accent="#a93333" Icon={AlertTriangle} />
         <KPICard label="Excelling" value={kpis.excellingCount} sub="Mastery > 80%" accent="#15784f" Icon={Star} />
         <KPICard label="Mastered skills" value={`${kpis.masteredSkillsCount}/${kpis.totalSkills}`} sub=">60% of class above 0.85" accent="#9a6418" Icon={Target} />
       </div>
@@ -329,7 +330,7 @@ function ClassOverviewPanel({
       {/* Misconceptions */}
       {misconceptions.length > 0 && (
         <Card>
-          <SecHead title="Common difficulty areas" sub="Skills where most students answer incorrectly" action={<Btn sm icon={Zap}>Generate remediation pack</Btn>} />
+          <SecHead title="Common difficulty areas" sub="Skills where most students answer incorrectly" action={<Btn sm icon={Zap} disabled>Generate remediation pack</Btn>} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
             {misconceptions.slice(0, 6).map((m, i) => {
               const tone = severityTone(m.severity);
@@ -418,7 +419,7 @@ function StudentsRosterPanel({
           <p style={{ margin: '4px 0 0', fontSize: 13, color: T.inkLo }}>{students.length} students · click any row to drill into individual analytics</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn sm icon={Download}>Export CSV</Btn>
+          <Btn sm icon={Download} disabled>Export CSV</Btn>
         </div>
       </div>
 
@@ -554,9 +555,9 @@ function IndividualStudentPanel({
               <Btn sm icon={ArrowLeft} onClick={() => onGoStudent(prev.studentId)}>Prev</Btn>
               <Btn sm icon={ArrowRight} onClick={() => onGoStudent(next.studentId)}>Next</Btn>
             </div>
-            <Btn sm icon={Flag}>Flag for intervention</Btn>
-            <Btn sm icon={Mail}>Message parent</Btn>
-            <Btn variant="primary" sm icon={Zap}>Assign weak-skill practice</Btn>
+            <Btn sm icon={Flag} disabled>Flag for intervention</Btn>
+            <Btn sm icon={Mail} disabled>Message parent</Btn>
+            <Btn variant="primary" sm icon={Zap} disabled>Assign weak-skill practice</Btn>
           </div>
         </div>
       </Card>
@@ -581,7 +582,7 @@ function IndividualStudentPanel({
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  {i < 3 ? <Btn variant="soft" sm icon={Zap}>Practice</Btn>
+                  {i < 3 ? <Btn variant="soft" sm icon={Zap} disabled>Practice</Btn>
                     : sk.masteryProb >= 0.85 ? <Pill tone="success" sm>Mastered</Pill> : null}
                 </div>
               </div>
@@ -794,6 +795,7 @@ const ClassDrillDownDashboard: React.FC<{ classId: string }> = ({ classId: initi
                 overview={overview}
                 heatmap={heatmap}
                 misconceptions={misconceptions}
+                studentCount={students.length}
                 onGoStudents={() => setDrill('students')}
                 onGoStudent={selectStudent}
               />

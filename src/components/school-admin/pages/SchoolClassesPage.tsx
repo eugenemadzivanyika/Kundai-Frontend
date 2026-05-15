@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { classService, ClassItem } from '../../../services/classService';
 import { adminService } from '../../../services/api';
+import { useToast } from '../../ui/use-toast';
 
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px', background: 'var(--paper-shade)', border: '1px solid var(--rule)',
@@ -20,24 +22,23 @@ function CreateClassModal({ open, teachers, onClose, onCreated }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [form, setForm] = useState<CreateClassForm>({ gradeLevel: 'Form 1', stream: 'A', homeroomTeacherId: '' });
+  const [form, setForm] = useState<CreateClassForm>({ gradeLevel: 'Form 1', stream: '', homeroomTeacherId: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (open) { setForm({ gradeLevel: 'Form 1', stream: 'A', homeroomTeacherId: '' }); setError(''); }
+    if (open) { setForm({ gradeLevel: 'Form 1', stream: '', homeroomTeacherId: '' }); setError(''); }
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.gradeLevel || !form.stream) { setError('Grade level and stream are required.'); return; }
+    const stream = form.stream.trim();
+    if (!form.gradeLevel || !stream) { setError('Grade level and stream are required.'); return; }
     setSaving(true);
     setError('');
     try {
       await classService.createClass({
-        schoolId: '',
-        code: form.stream.toUpperCase(),
-        name: `${form.gradeLevel}${form.stream.toUpperCase()}`,
+        code: stream,
         gradeLevel: form.gradeLevel,
         academicYear: String(new Date().getFullYear()),
         homeroomTeacherId: form.homeroomTeacherId || undefined,
@@ -74,9 +75,12 @@ function CreateClassModal({ open, teachers, onClose, onCreated }: {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stream / Section <span style={{ color: 'var(--terracotta)' }}>*</span></label>
-            <select style={inputStyle} value={form.stream} onChange={e => setForm(f => ({ ...f, stream: e.target.value }))}>
-              {['A','B','C','D','E'].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <input
+              style={inputStyle}
+              placeholder="e.g. A, B, Lions, 1, 2…"
+              value={form.stream}
+              onChange={e => setForm(f => ({ ...f, stream: e.target.value }))}
+            />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Form / Class teacher</label>
@@ -103,11 +107,48 @@ function CreateClassModal({ open, teachers, onClose, onCreated }: {
   );
 }
 
-function ClassCard({ cls, onDelete }: { cls: ClassItem; onDelete: (id: string) => void }) {
-  const formNum = parseInt(cls.gradeLevel?.replace('Form ', '') ?? '0');
-  const level = formNum <= 4 ? 'O-Level' : 'A-Level';
+function ClassCard({
+  cls,
+  teachers,
+  onDelete,
+  onUpdated,
+}: {
+  cls: ClassItem;
+  teachers: any[];
+  onDelete: (id: string) => void;
+  onUpdated: () => void;
+}) {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const formNum = parseInt(cls.gradeLevel?.replace('Form ', '') ?? '');
+  const level = Number.isFinite(formNum) && formNum >= 5 ? 'A-Level' : 'O-Level';
   const levelTone = level === 'O-Level' ? 'forest' : 'plum';
   const teacher = cls.homeroomTeacher ? `${cls.homeroomTeacher.firstName ?? ''} ${cls.homeroomTeacher.lastName ?? ''}`.trim() : null;
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [selectedTeacherId, setSelectedTeacherId] = useState(cls.homeroomTeacher?.id ?? '');
+  const [assigning, setAssigning] = useState(false);
+
+  const handleAssignTeacher = async () => {
+    setAssigning(true);
+    try {
+      await classService.updateClass(cls.id, {
+        homeroomTeacherId: selectedTeacherId || undefined,
+        clearHomeroomTeacher: !selectedTeacherId,
+      });
+      toast.success('Form teacher updated.');
+      setAssignOpen(false);
+      onUpdated();
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to update teacher');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const studentCount = cls.studentCount ?? 0;
+  const subjectCount = cls.courses?.length ?? 0;
+
   return (
     <div style={{ background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 6, padding: 16, position: 'relative', overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -118,31 +159,77 @@ function ClassCard({ cls, onDelete }: { cls: ClassItem; onDelete: (id: string) =
         <span style={{ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: `var(--${levelTone}-soft)`, color: `var(--${levelTone})` }}>{level}</span>
       </div>
 
-      {teacher ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--paper-shade)', borderRadius: 5, marginBottom: 12 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--plum-soft)', color: 'var(--plum)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
-            {teacher.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+      {/* Form teacher row */}
+      {!assignOpen ? (
+        teacher ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--paper-shade)', borderRadius: 5, marginBottom: 12 }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--plum-soft)', color: 'var(--plum)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+              {teacher.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Form teacher</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teacher}</div>
+            </div>
+            <button
+              onClick={() => { setSelectedTeacherId(cls.homeroomTeacher?.id ?? ''); setAssignOpen(true); }}
+              style={{ padding: '2px 7px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 10.5, color: 'var(--ink-3)', fontFamily: 'inherit', flexShrink: 0 }}>
+              Change
+            </button>
           </div>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Form teacher</div>
-            <div style={{ fontSize: 12, color: 'var(--ink-1)', fontWeight: 600 }}>{teacher}</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--gold-soft)', borderRadius: 5, marginBottom: 12 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--gold-deep)', fontWeight: 600, flex: 1 }}>No form teacher assigned</span>
+            <button
+              onClick={() => { setSelectedTeacherId(''); setAssignOpen(true); }}
+              style={{ padding: '2px 7px', background: 'var(--gold-deep)', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 10.5, color: '#fff', fontFamily: 'inherit', fontWeight: 600, flexShrink: 0 }}>
+              Assign
+            </button>
           </div>
-        </div>
+        )
       ) : (
-        <div style={{ padding: '8px 10px', background: 'var(--gold-soft)', borderRadius: 5, marginBottom: 12, fontSize: 11.5, color: 'var(--gold-deep)', fontWeight: 600 }}>
-          No form teacher assigned
+        <div style={{ padding: '8px 10px', background: 'var(--paper-shade)', border: '1px solid var(--rule-soft)', borderRadius: 5, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <select
+            style={{ ...inputStyle, fontSize: 12 }}
+            value={selectedTeacherId}
+            onChange={e => setSelectedTeacherId(e.target.value)}
+          >
+            <option value="">— no teacher —</option>
+            {teachers.map((t: any) => (
+              <option key={t.id} value={t.id}>{`${t.firstName ?? ''} ${t.lastName ?? ''}`.trim()}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={handleAssignTeacher}
+              disabled={assigning}
+              style={{ flex: 1, padding: '5px 0', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 4, cursor: assigning ? 'not-allowed' : 'pointer', fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit' }}>
+              {assigning ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={() => setAssignOpen(false)}
+              style={{ padding: '5px 10px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'inherit' }}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Stats — clickable for drill-down */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, paddingTop: 10, borderTop: '1px solid var(--rule-soft)' }}>
-        <div>
+        <button
+          onClick={() => studentCount > 0 ? navigate(`/admin/students?classId=${cls.id}`) : undefined}
+          title={studentCount === 0 ? 'No students yet' : `View ${studentCount} students`}
+          style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: studentCount > 0 ? 'pointer' : 'default' }}>
           <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Students</div>
-          <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 20, fontWeight: 700, color: 'var(--ink-1)', marginTop: 2, fontFeatureSettings: "'tnum' 1" }}>{cls.studentCount ?? 0}</div>
-        </div>
-        <div>
+          <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 20, fontWeight: 700, color: studentCount > 0 ? 'var(--forest)' : 'var(--ink-1)', marginTop: 2, fontFeatureSettings: "'tnum' 1", textDecoration: studentCount > 0 ? 'underline' : 'none', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}>{studentCount}</div>
+        </button>
+        <button
+          onClick={() => subjectCount > 0 ? navigate(`/admin/subjects?classId=${cls.id}`) : undefined}
+          title={subjectCount === 0 ? 'No subjects yet' : `View ${subjectCount} subjects`}
+          style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: subjectCount > 0 ? 'pointer' : 'default' }}>
           <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subjects</div>
-          <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 20, fontWeight: 700, color: 'var(--ink-1)', marginTop: 2, fontFeatureSettings: "'tnum' 1" }}>{cls.courses?.length ?? 0}</div>
-        </div>
+          <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 20, fontWeight: 700, color: subjectCount > 0 ? 'var(--plum)' : 'var(--ink-1)', marginTop: 2, fontFeatureSettings: "'tnum' 1", textDecoration: subjectCount > 0 ? 'underline' : 'none', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}>{subjectCount}</div>
+        </button>
       </div>
 
       <button
@@ -158,19 +245,24 @@ function ClassCard({ cls, onDelete }: { cls: ClassItem; onDelete: (id: string) =
 
 const SchoolClassesPage: React.FC = () => {
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [cls, users] = await Promise.all([
         classService.getClasses(),
         adminService.getUsers(),
       ]);
       setClasses(cls);
-      setTeachers(users.filter((u: any) => u.roles?.includes('teacher') || u.role === 'teacher'));
+      setTeachers((users as { id: string; firstName: string; lastName: string; roles?: string[]; role?: string }[]).filter(u => u.roles?.includes('teacher') || u.role === 'teacher'));
+    } catch (err: any) {
+      setLoadError(err.message ?? 'Failed to load classes');
     } finally {
       setLoading(false);
     }
@@ -180,22 +272,23 @@ const SchoolClassesPage: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     const cls = classes.find(c => c.id === id);
-    if (!window.confirm(`Delete class "${cls?.name}"? Students will be detached.`)) return;
+    if (!window.confirm(`Delete class "${cls?.name}"? Students will be detached, and any courses linked only to this class will lose their class assignment. This cannot be undone.`)) return;
+    setDeleteError(null);
     try {
       await classService.deleteClass(id);
       await load();
     } catch (err: any) {
-      alert(err.message ?? 'Failed to delete class');
+      setDeleteError(err.message ?? 'Failed to delete class');
     }
   };
 
   const oLevel = classes.filter(c => {
-    const f = parseInt(c.gradeLevel?.replace('Form ', '') ?? '0');
-    return f <= 4;
+    const f = parseInt(c.gradeLevel?.replace('Form ', '') ?? '');
+    return Number.isFinite(f) && f >= 1 && f <= 4;
   });
   const aLevel = classes.filter(c => {
-    const f = parseInt(c.gradeLevel?.replace('Form ', '') ?? '0');
-    return f >= 5;
+    const f = parseInt(c.gradeLevel?.replace('Form ', '') ?? '');
+    return Number.isFinite(f) && f >= 5;
   });
 
   return (
@@ -215,7 +308,19 @@ const SchoolClassesPage: React.FC = () => {
         </button>
       </div>
 
-      {loading ? (
+      {deleteError && (
+        <div style={{ padding: '12px 16px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 7, color: 'var(--terracotta)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span><strong>Error</strong> — {deleteError}</span>
+          <button onClick={() => setDeleteError(null)} style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--terracotta)', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+      )}
+
+      {loadError ? (
+        <div style={{ padding: '20px 24px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 7, color: 'var(--terracotta)', fontSize: 13 }}>
+          <strong>Failed to load</strong> — {loadError}
+          <button onClick={load} style={{ marginLeft: 16, padding: '4px 12px', background: 'var(--terracotta)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>Retry</button>
+        </div>
+      ) : loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>
       ) : classes.length === 0 ? (
         <div style={{ padding: '48px 20px', textAlign: 'center', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 7, color: 'var(--ink-3)', fontSize: 13 }}>
@@ -230,7 +335,7 @@ const SchoolClassesPage: React.FC = () => {
                 <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Form 1–4 · {oLevel.length} class{oLevel.length !== 1 ? 'es' : ''} · {oLevel.reduce((a, c) => a + (c.studentCount ?? 0), 0)} students</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-                {oLevel.map(c => <ClassCard key={c.id} cls={c} onDelete={handleDelete} />)}
+                {oLevel.map(c => <ClassCard key={c.id} cls={c} teachers={teachers} onDelete={handleDelete} onUpdated={load} />)}
               </div>
             </div>
           )}
@@ -241,13 +346,13 @@ const SchoolClassesPage: React.FC = () => {
                 <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>Form 5–6 · {aLevel.length} class{aLevel.length !== 1 ? 'es' : ''} · {aLevel.reduce((a, c) => a + (c.studentCount ?? 0), 0)} students</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-                {aLevel.map(c => <ClassCard key={c.id} cls={c} onDelete={handleDelete} />)}
+                {aLevel.map(c => <ClassCard key={c.id} cls={c} teachers={teachers} onDelete={handleDelete} onUpdated={load} />)}
               </div>
             </div>
           )}
           {oLevel.length === 0 && aLevel.length === 0 && classes.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-              {classes.map(c => <ClassCard key={c.id} cls={c} onDelete={handleDelete} />)}
+              {classes.map(c => <ClassCard key={c.id} cls={c} teachers={teachers} onDelete={handleDelete} onUpdated={load} />)}
             </div>
           )}
         </>

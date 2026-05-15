@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -7,8 +7,11 @@ import {
   CreditCard,
   LogOut,
   ShieldCheck,
+  Bell,
 } from 'lucide-react';
 import { authService } from '../../services/api';
+import { useNotifications } from '../../hooks/useNotifications';
+import NotificationCenter from '../teacher/NotificationCenter';
 
 const NAV_LINKS = [
   { label: 'Dashboard',     path: '/sys-admin',                  icon: LayoutDashboard },
@@ -21,6 +24,9 @@ const SysAdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentUser = authService.getCurrentUser();
+
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadCount } = useNotifications();
 
   const handleLogout = () => {
     authService.logout();
@@ -41,13 +47,27 @@ const SysAdminLayout: React.FC = () => {
                 </span>
               )}
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
-            >
-              <LogOut size={15} />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setNotifOpen(true)}
+                className="relative p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                title="Notifications"
+              >
+                <Bell size={15} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-slate-700 transition-colors"
+              >
+                <LogOut size={15} />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           </div>
 
           <nav className="flex gap-0.5 pb-0 overflow-x-auto">
@@ -78,6 +98,12 @@ const SysAdminLayout: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <Outlet />
       </main>
+
+      <NotificationCenter
+        isOpen={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        onNavigate={(path) => { setNotifOpen(false); navigate(path); }}
+      />
     </div>
   );
 };

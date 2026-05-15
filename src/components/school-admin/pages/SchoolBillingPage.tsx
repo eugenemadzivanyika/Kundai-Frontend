@@ -15,7 +15,7 @@ interface BillingPackage {
 
 interface BillingSubscription {
   _id: string;
-  status: 'trial' | 'active' | 'suspended' | 'expired' | 'cancelled';
+  status: 'trial' | 'active' | 'suspended' | 'expired' | 'cancelled' | 'pending_payment';
   billingCycle: 'monthly' | 'termly' | 'annually';
   studentLimit: number;
   startDate: string;
@@ -49,11 +49,12 @@ function cycleLong(c: string) {
 }
 
 const STATUS_STYLE: Record<string, { color: string; bg: string; label: string }> = {
-  trial:     { color: 'var(--gold-deep)',    bg: 'var(--gold-soft)',       label: 'Free Trial' },
-  active:    { color: 'var(--forest)',        bg: 'var(--forest-soft)',     label: 'Active' },
-  suspended: { color: 'var(--terracotta)',    bg: 'var(--terracotta-soft)', label: 'Suspended' },
-  expired:   { color: 'var(--terracotta)',    bg: 'var(--terracotta-soft)', label: 'Expired' },
-  cancelled: { color: 'var(--ink-3)',         bg: 'var(--paper-shade)',     label: 'Cancelled' },
+  trial:           { color: 'var(--gold-deep)',    bg: 'var(--gold-soft)',       label: 'Free Trial' },
+  active:          { color: 'var(--forest)',        bg: 'var(--forest-soft)',     label: 'Active' },
+  suspended:       { color: 'var(--terracotta)',    bg: 'var(--terracotta-soft)', label: 'Suspended' },
+  expired:         { color: 'var(--terracotta)',    bg: 'var(--terracotta-soft)', label: 'Expired' },
+  cancelled:       { color: 'var(--ink-3)',         bg: 'var(--paper-shade)',     label: 'Cancelled' },
+  pending_payment: { color: 'var(--gold-deep)',     bg: 'var(--gold-soft)',       label: 'Awaiting Payment' },
 };
 
 // ── Seat capacity bar ────────────────────────────────────────────────────────
@@ -73,78 +74,123 @@ function CapacityBar({ used, total }: { used: number; total: number }) {
   );
 }
 
-// ── Upgrade contact modal ────────────────────────────────────────────────────
-function ContactModal({ pkg, onClose }: { pkg: BillingPackage; onClose: () => void }) {
-  const [msg, setMsg] = useState(`I'd like to upgrade to the ${pkg.name} package.`);
-  const [sending, setSending] = useState(false);
-  const [done, setDone] = useState(false);
+// ── Payment modal ─────────────────────────────────────────────────────────────
+function PaymentModal({ pkg, onClose }: { pkg: BillingPackage; onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
-  const send = async () => {
-    setSending(true);
+  const handlePay = async () => {
+    setLoading(true);
     setErr('');
     try {
-      await fetchData('/admin/billing/contact', { method: 'POST', body: JSON.stringify({ message: msg }) });
-      setDone(true);
+      const res: any = await fetchData('/admin/billing/initiate', {
+        method: 'POST',
+        body: JSON.stringify({ packageId: pkg._id }),
+      });
+      // Full-page redirect to Paynow checkout
+      window.location.href = res.redirectUrl;
     } catch (e: any) {
-      setErr(e.message ?? 'Failed to send request');
-    } finally {
-      setSending(false);
+      setErr(e.message ?? 'Failed to initiate payment');
+      setLoading(false);
     }
   };
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 40 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 420, background: 'var(--paper)', borderRadius: 8, border: '1px solid var(--rule)', zIndex: 50, boxShadow: '0 8px 40px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 40 }} />
+      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 440, background: 'var(--paper)', borderRadius: 8, border: '1px solid var(--rule)', zIndex: 50, boxShadow: '0 8px 40px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
+        {/* Header */}
         <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>Upgrade to {pkg.name}</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>We'll contact you to complete the upgrade</p>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>Secure checkout via Paynow Zimbabwe</p>
           </div>
-          <button onClick={onClose} style={{ padding: 6, background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)', lineHeight: 0 }}>
+          <button onClick={onClose} disabled={loading} style={{ padding: 6, background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', color: 'var(--ink-2)', lineHeight: 0 }}>
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
           </button>
         </div>
-        {done ? (
-          <div style={{ padding: '32px 24px', textAlign: 'center' }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--forest-soft)', color: 'var(--forest)', display: 'grid', placeItems: 'center', margin: '0 auto 14px' }}>
-              <svg width={22} height={22} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l4 4 8-8" /></svg>
+
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Package summary */}
+          <div style={{ padding: '14px 16px', background: 'var(--paper-shade)', borderRadius: 6, border: '1px solid var(--rule-soft)' }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 8 }}>Order summary</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 16, fontWeight: 700, color: 'var(--ink-1)' }}>{pkg.name}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, fontWeight: 700, color: 'var(--forest)' }}>${pkg.totalPrice.toFixed(2)}</span>
             </div>
-            <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 17, fontWeight: 700, color: 'var(--ink-1)', marginBottom: 8 }}>Request sent</div>
-            <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--ink-3)', lineHeight: 1.5 }}>The Kundai team will reach out to complete the upgrade.</p>
-            <button onClick={onClose} style={{ padding: '8px 20px', background: 'var(--forest)', color: '#fbf8f1', border: 0, borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>Done</button>
-          </div>
-        ) : (
-          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ padding: '12px 14px', background: 'var(--paper-shade)', borderRadius: 6, border: '1px solid var(--rule-soft)' }}>
-              <div style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 6 }}>Package details</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontFamily: "'Source Serif 4', serif", fontSize: 16, fontWeight: 700, color: 'var(--ink-1)' }}>{pkg.name}</span>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, fontWeight: 700, color: 'var(--forest)' }}>${pkg.pricePerStudent}<span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-3)' }}>/student/{cycleLong(pkg.billingCycle)}</span></span>
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>Up to {pkg.studentLimit.toLocaleString()} students · {pkg.billingCycle} billing</div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ fontSize: 11.5, color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Message</label>
-              <textarea
-                rows={3}
-                value={msg}
-                onChange={e => setMsg(e.target.value)}
-                style={{ padding: '8px 10px', background: 'var(--paper-shade)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: 'inherit', fontSize: 13, outline: 'none', resize: 'vertical' }}
-              />
-            </div>
-            {err && <div style={{ padding: '8px 12px', background: 'var(--terracotta-soft)', borderRadius: 5, color: 'var(--terracotta)', fontSize: 12 }}>{err}</div>}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={onClose} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={send} disabled={sending} style={{ padding: '8px 20px', background: sending ? 'var(--forest-soft)' : 'var(--forest)', color: sending ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: sending ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}>
-                {sending ? 'Sending…' : 'Send request'}
-              </button>
+            <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              {pkg.studentLimit.toLocaleString()} students · ${pkg.pricePerStudent}/student · {cycleLong(pkg.billingCycle)}
             </div>
           </div>
-        )}
+
+          {/* Feature list */}
+          {pkg.features.length > 0 && (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {pkg.features.map((f, i) => (
+                <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--ink-2)' }}>
+                  <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--forest)', marginTop: 2, flexShrink: 0 }}><path d="M2 8l4 4 8-8" /></svg>
+                  {f}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {err && (
+            <div style={{ padding: '8px 12px', background: 'var(--terracotta-soft)', borderRadius: 5, color: 'var(--terracotta)', fontSize: 12 }}>{err}</div>
+          )}
+
+          {/* Paynow notice */}
+          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+            You will be redirected to Paynow to complete payment. Once confirmed, your subscription will be activated automatically.
+          </p>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} disabled={loading} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 5, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={handlePay} disabled={loading} style={{ padding: '8px 22px', background: loading ? 'var(--forest-soft)' : 'var(--forest)', color: loading ? 'var(--forest)' : '#fbf8f1', border: 0, borderRadius: 5, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {loading && (
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+              )}
+              {loading ? 'Redirecting…' : 'Pay with Paynow'}
+            </button>
+          </div>
+        </div>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </>
+  );
+}
+
+// ── Payment result banner ─────────────────────────────────────────────────────
+function PaymentResultBanner({ paid, onDismiss }: { paid: boolean; onDismiss: () => void }) {
+  if (paid) {
+    return (
+      <div style={{ padding: '14px 20px', background: 'var(--forest-soft)', border: '1px solid color-mix(in srgb, var(--forest) 30%, transparent)', borderRadius: 7, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <svg width={18} height={18} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--forest)', flexShrink: 0 }}><path d="M2 8l4 4 8-8" /></svg>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--forest)' }}>Payment successful — subscription activated!</div>
+          <div style={{ fontSize: 12, color: 'var(--forest)', opacity: 0.8, marginTop: 2 }}>Your school now has full access to the new package.</div>
+        </div>
+        <button onClick={onDismiss} style={{ padding: 4, background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--forest)', lineHeight: 0 }}>
+          <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: '14px 20px', background: 'var(--gold-soft)', border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)', borderRadius: 7, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <svg width={18} height={18} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gold-deep)', flexShrink: 0 }}>
+        <circle cx="8" cy="8" r="7" /><path d="M8 5v3M8 11v.5" />
+      </svg>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--gold-deep)' }}>Payment not yet confirmed</div>
+        <div style={{ fontSize: 12, color: 'var(--gold-deep)', opacity: 0.8, marginTop: 2 }}>If you completed payment, please wait a moment and refresh. Contact support if this persists.</div>
+      </div>
+      <button onClick={onDismiss} style={{ padding: 4, background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--gold-deep)', lineHeight: 0 }}>
+        <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 2l12 12M14 2L2 14" /></svg>
+      </button>
+    </div>
   );
 }
 
@@ -197,15 +243,53 @@ const SchoolBillingPage: React.FC = () => {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [contactPkg, setContactPkg] = useState<BillingPackage | null>(null);
+  const [paymentPkg, setPaymentPkg] = useState<BillingPackage | null>(null);
+  const [paymentResult, setPaymentResult] = useState<{ paid: boolean } | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
+  // Load billing data
+  const loadBilling = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const d: any = await fetchData('/admin/billing');
+      setData(d);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load billing info');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // On mount: check if Paynow has redirected back with a payment reference
   useEffect(() => {
-    fetchData('/admin/billing')
-      .then((d: any) => setData(d))
-      .catch((e: any) => setError(e.message ?? 'Failed to load billing info'))
-      .finally(() => setLoading(false));
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    const payment = params.get('payment');
+
+    if (payment === 'complete' && ref) {
+      // Clean up query params immediately
+      window.history.replaceState({}, '', window.location.pathname);
+
+      setVerifying(true);
+      fetchData(`/admin/billing/verify?ref=${encodeURIComponent(ref)}`)
+        .then((res: any) => {
+          setPaymentResult({ paid: res.paid });
+          if (res.billing) setData(res.billing);
+        })
+        .catch(() => setPaymentResult({ paid: false }))
+        .finally(() => setVerifying(false));
+    } else {
+      loadBilling();
+    }
   }, []);
 
+  // If we handled the return but haven't loaded billing yet, load it
+  useEffect(() => {
+    if (paymentResult && !data) loadBilling();
+  }, [paymentResult]);
+
+  if (verifying) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Verifying payment…</div>;
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--terracotta)', fontSize: 13 }}>{error}</div>;
   if (!data) return null;
@@ -231,16 +315,18 @@ const SchoolBillingPage: React.FC = () => {
         </p>
       </div>
 
+      {/* Payment result banner */}
+      {paymentResult && (
+        <PaymentResultBanner paid={paymentResult.paid} onDismiss={() => setPaymentResult(null)} />
+      )}
+
       {/* No subscription */}
       {!sub && (
         <div style={{ padding: '32px 28px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 7, textAlign: 'center' }}>
           <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)', marginBottom: 8 }}>No active subscription</div>
           <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--ink-3)' }}>
-            Your school hasn't been assigned a subscription yet. Contact the Kundai team or your system administrator to get started.
+            Choose a package below to get started.
           </p>
-          {packages.length > 0 && (
-            <p style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Choose a package below to request activation.</p>
-          )}
         </div>
       )}
 
@@ -265,6 +351,14 @@ const SchoolBillingPage: React.FC = () => {
                 <path d="M8 1L1 14h14L8 1zM8 6v4M8 12v.5" />
               </svg>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--terracotta)' }}>Subscription suspended — contact Kundai support to reactivate</span>
+            </div>
+          )}
+          {sub.status === 'pending_payment' && (
+            <div style={{ padding: '12px 22px', background: 'var(--gold-soft)', borderBottom: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gold-deep)', flexShrink: 0 }}>
+                <circle cx="8" cy="8" r="7" /><path d="M8 5v3M8 11v.5" />
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-deep)' }}>Payment pending — complete payment below to activate your subscription</span>
             </div>
           )}
 
@@ -343,7 +437,7 @@ const SchoolBillingPage: React.FC = () => {
           <div style={{ marginBottom: 16 }}>
             <h2 style={{ margin: 0, fontFamily: "'Source Serif 4', serif", fontSize: 18, fontWeight: 700, color: 'var(--ink-1)' }}>Available packages</h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--ink-3)' }}>
-              Contact the Kundai team to switch or upgrade your plan
+              Select a package and pay securely via Paynow to activate immediately
             </p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
@@ -351,8 +445,8 @@ const SchoolBillingPage: React.FC = () => {
               <PackageCard
                 key={p._id}
                 pkg={p}
-                isCurrent={p._id === currentPkgId}
-                onSelect={() => setContactPkg(p)}
+                isCurrent={p._id === currentPkgId && sub?.status === 'active'}
+                onSelect={() => setPaymentPkg(p)}
               />
             ))}
           </div>
@@ -366,8 +460,8 @@ const SchoolBillingPage: React.FC = () => {
         </div>
       )}
 
-      {/* Contact modal */}
-      {contactPkg && <ContactModal pkg={contactPkg} onClose={() => setContactPkg(null)} />}
+      {/* Payment modal */}
+      {paymentPkg && <PaymentModal pkg={paymentPkg} onClose={() => setPaymentPkg(null)} />}
     </div>
   );
 };

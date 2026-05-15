@@ -25,6 +25,8 @@ const CourseSelector: React.FC<CourseSelectorProps> = ({ userName, courses, sele
   const navigate = useNavigate();
   const currentUser = authService.getCurrentUser() as any;
   const teacherInitials = `${currentUser?.firstName?.[0] ?? ''}${currentUser?.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+  const gender = (currentUser?.gender || '').toLowerCase();
+  const title = gender === 'female' ? 'Mrs.' : gender === 'male' ? 'Mr.' : '';
   const [isOpen, setIsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingCourse, setPendingCourse] = useState<any | null>(null);
@@ -95,7 +97,7 @@ const CourseSelector: React.FC<CourseSelectorProps> = ({ userName, courses, sele
             : teacherInitials}
         </button>
         <div className="ml-3 min-w-[140px]">
-          <h2 className="text-sm font-black truncate uppercase tracking-tight">Mr. {userName}</h2>
+          <h2 className="text-sm font-black truncate uppercase tracking-tight">{title ? `${title} ` : ''}{userName}</h2>
           <button
             onClick={openModal}
             className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline max-w-[200px]"

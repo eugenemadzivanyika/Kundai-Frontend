@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Reports & Dashboard — Backend Contract</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+  .serif { font-family: 'Source Serif 4', Georgia, serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  pre { font-family: 'JetBrains Mono', monospace; }
+  pre .k { color: #b45309; }
+  pre .s { color: #15784f; }
+  pre .n { color: #2d5d8c; }
+  pre .c { color: #94a3b8; font-style: italic; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-700">
+<div class="max-w-4xl mx-auto px-8 py-12">
+
+<h1 class="serif text-4xl font-bold text-slate-900 mb-2">Reports &amp; Dashboard — Backend Contract</h1>
+<p class="text-base text-slate-600 mb-10">API endpoints the new Reports page and dashboard performance chart depend on. All routes are authenticated as a school admin and scoped to that admin's school.</p>
+
+<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-10 text-sm text-slate-700">
+  <strong class="text-blue-900">Conventions:</strong> All <code class="mono bg-white px-1.5 py-0.5 rounded text-xs border border-slate-200">GET</code> responses are JSON. School ID is inferred from the auth token (<code class="mono bg-white px-1.5 py-0.5 rounded text-xs border border-slate-200">req.user.schoolId</code>). All dates are ISO-8601. All percentages are decimals 0–1 unless noted. All IDs are server-issued strings.
+</div>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">1. Dashboard performance chart</h2>
+<p class="mb-4">Addresses <strong>MISS-2</strong>. The current <code class="mono bg-slate-100 px-1.5 py-0.5 rounded text-xs">getSummary()</code> returns <code class="mono bg-slate-100 px-1.5 py-0.5 rounded text-xs">avgClassMastery: 0</code> hardcoded — replace with a real BKT aggregation.</p>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/dashboard/performance</code>
+</div>
+<p class="text-sm text-slate-600 mb-2">Weekly avg BKT mastery for the current term, school-wide and broken down by form.</p>
+<p class="text-xs text-slate-500 mb-3">Query: <code class="mono bg-slate-100 px-1 rounded">?termId=t3-2026&amp;period=term</code> · <code class="mono bg-slate-100 px-1 rounded">period</code> ∈ <code class="mono bg-slate-100 px-1 rounded">4w | term | year</code></p>
+
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-6"><span class="c">// Response 200</span>
+{
+  <span class="k">"currentMastery"</span>: <span class="n">0.62</span>,           <span class="c">// average of latest mastery snapshot</span>
+  <span class="k">"previousTermMastery"</span>: <span class="n">0.54</span>,      <span class="c">// for delta display</span>
+  <span class="k">"target"</span>: <span class="n">0.70</span>,                   <span class="c">// from school settings (configurable)</span>
+  <span class="k">"weekly"</span>: [
+    {
+      <span class="k">"week"</span>: <span class="s">"W1"</span>,
+      <span class="k">"date"</span>: <span class="s">"2026-04-13"</span>,
+      <span class="k">"schoolAvg"</span>: <span class="n">0.51</span>,
+      <span class="k">"byForm"</span>: { <span class="k">"F1"</span>: <span class="n">0.48</span>, <span class="k">"F2"</span>: <span class="n">0.50</span>, <span class="k">"F3"</span>: <span class="n">0.55</span>, <span class="k">"F4"</span>: <span class="n">0.52</span>, <span class="k">"F5"</span>: <span class="n">0.49</span>, <span class="k">"F6"</span>: <span class="n">0.54</span> }
+    }
+    <span class="c">// ... one entry per week of the requested period</span>
+  ]
+}</pre>
+
+<p class="text-sm text-slate-600 mb-2"><strong>SQL aggregation:</strong></p>
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-8">SELECT
+  DATE_TRUNC(<span class="s">'week'</span>, sa.updated_at) AS week,
+  sa.form_level AS form,
+  AVG(sa.mastery_score) AS avg_mastery
+FROM student_attributes sa
+JOIN users u ON u.id = sa.student_id
+WHERE u.school_id = $1
+  AND sa.updated_at BETWEEN $2 AND $3
+GROUP BY week, form
+ORDER BY week ASC;</pre>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">2. Report types catalog</h2>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/reports/types</code>
+</div>
+<p class="text-sm text-slate-600 mb-3">Static-ish catalog of report templates the school admin can generate. Driven by JSON config on the server — adding a new report type means adding a config entry + a renderer.</p>
+
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-8">[
+  {
+    <span class="k">"id"</span>: <span class="s">"term-report"</span>,
+    <span class="k">"name"</span>: <span class="s">"Term Report"</span>,
+    <span class="k">"tagline"</span>: <span class="s">"ZIMSEC-aligned report cards for every student in a class"</span>,
+    <span class="k">"icon"</span>: <span class="s">"FileText"</span>,
+    <span class="k">"avgGenerationTimeSec"</span>: <span class="n">180</span>,
+    <span class="k">"params"</span>: [
+      { <span class="k">"id"</span>: <span class="s">"term"</span>,    <span class="k">"label"</span>: <span class="s">"Term"</span>,    <span class="k">"kind"</span>: <span class="s">"select"</span>, <span class="k">"required"</span>: <span class="n">true</span>,
+        <span class="k">"optionsEndpoint"</span>: <span class="s">"/api/admin/reports/options/terms"</span> },
+      { <span class="k">"id"</span>: <span class="s">"classes"</span>, <span class="k">"label"</span>: <span class="s">"Classes"</span>, <span class="k">"kind"</span>: <span class="s">"multi-class"</span>, <span class="k">"required"</span>: <span class="n">true</span> },
+      { <span class="k">"id"</span>: <span class="s">"comments"</span>, <span class="k">"label"</span>: <span class="s">"Include teacher comments"</span>, <span class="k">"kind"</span>: <span class="s">"toggle"</span>, <span class="k">"default"</span>: <span class="n">true</span> },
+      { <span class="k">"id"</span>: <span class="s">"mastery"</span>, <span class="k">"label"</span>: <span class="s">"Include BKT mastery breakdown"</span>, <span class="k">"kind"</span>: <span class="s">"toggle"</span>, <span class="k">"default"</span>: <span class="n">false</span> }
+    ]
+  }
+  <span class="c">// + class-performance, school-summary, subject-performance, teacher-activity</span>
+]</pre>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">3. Report parameter option endpoints</h2>
+<p class="mb-3 text-sm text-slate-600">These power the dropdowns in step 2 of the wizard. Each is a thin shim over existing data.</p>
+
+<div class="space-y-3 mb-8">
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+      <code class="mono font-semibold text-slate-900">/api/admin/reports/options/terms</code>
+    </div>
+    <p class="text-xs text-slate-500">Returns: <code class="mono bg-slate-100 px-1 rounded">[{"id":"t1-2026","label":"Term 1 2026","current":false}, …]</code></p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+      <code class="mono font-semibold text-slate-900">/api/admin/reports/options/classes</code>
+    </div>
+    <p class="text-xs text-slate-500">Returns: <code class="mono bg-slate-100 px-1 rounded">[{"id":"4A","form":"Form 4","stream":"A","students":32}, …]</code></p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+      <code class="mono font-semibold text-slate-900">/api/admin/reports/options/subjects</code>
+    </div>
+    <p class="text-xs text-slate-500">Returns: <code class="mono bg-slate-100 px-1 rounded">[{"id":"math","name":"Mathematics"}, …]</code></p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+      <code class="mono font-semibold text-slate-900">/api/admin/reports/options/teachers</code>
+    </div>
+    <p class="text-xs text-slate-500">Returns: <code class="mono bg-slate-100 px-1 rounded">[{"id":"t01","name":"Mr. T. Mukamuri","dept":"Mathematics","avatar":"TM"}, …]</code></p>
+  </div>
+</div>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">4. Generate a report (async job)</h2>
+<p class="text-sm text-slate-600 mb-3">Reports can take seconds (school summary) to minutes (term reports for 100+ students). Generate via an async job queue and poll for status.</p>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-amber-600 px-2 py-1 rounded">POST</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/reports/generate</code>
+</div>
+
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-3"><span class="c">// Request</span>
+{
+  <span class="k">"reportTypeId"</span>: <span class="s">"term-report"</span>,
+  <span class="k">"params"</span>: {
+    <span class="k">"term"</span>: <span class="s">"Term 1 2026"</span>,
+    <span class="k">"classes"</span>: [<span class="s">"4A"</span>, <span class="s">"4B"</span>],
+    <span class="k">"comments"</span>: <span class="n">true</span>,
+    <span class="k">"mastery"</span>: <span class="n">false</span>
+  },
+  <span class="k">"format"</span>: <span class="s">"pdf"</span>,           <span class="c">// "pdf" | "excel" | "print"</span>
+  <span class="k">"delivery"</span>: {
+    <span class="k">"mode"</span>: <span class="s">"email"</span>,        <span class="c">// "download" | "email" | "link"</span>
+    <span class="k">"recipients"</span>: [<span class="s">"head@…"</span>, <span class="s">"parent-form-4a@…"</span>],
+    <span class="k">"linkExpiresIn"</span>: <span class="s">"7d"</span>    <span class="c">// for mode: "link"</span>
+  }
+}
+
+<span class="c">// Response 202 Accepted</span>
+{
+  <span class="k">"jobId"</span>: <span class="s">"job-2026-0089"</span>,
+  <span class="k">"reportId"</span>: <span class="s">"r-2026-0089"</span>,       <span class="c">// reserved now, accessible once complete</span>
+  <span class="k">"status"</span>: <span class="s">"queued"</span>,
+  <span class="k">"estimatedCompleteAt"</span>: <span class="s">"2026-05-14T08:48:00Z"</span>
+}</pre>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/reports/jobs/:jobId</code>
+</div>
+
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-8">{
+  <span class="k">"jobId"</span>: <span class="s">"job-2026-0089"</span>,
+  <span class="k">"status"</span>: <span class="s">"generating"</span>,        <span class="c">// "queued" | "generating" | "ready" | "failed"</span>
+  <span class="k">"progress"</span>: <span class="n">0.42</span>,
+  <span class="k">"currentStep"</span>: <span class="s">"Rendering page 14 of 32"</span>,
+  <span class="k">"reportId"</span>: <span class="s">"r-2026-0089"</span>,
+  <span class="k">"error"</span>: <span class="n">null</span>
+}</pre>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">5. Report history</h2>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/reports</code>
+</div>
+<p class="text-xs text-slate-500 mb-3">Query: <code class="mono bg-slate-100 px-1 rounded">?status=ready&amp;type=term-report&amp;limit=50&amp;before=2026-05-14</code></p>
+
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-3">[
+  {
+    <span class="k">"id"</span>: <span class="s">"r-2026-0089"</span>,
+    <span class="k">"type"</span>: <span class="s">"term-report"</span>,
+    <span class="k">"name"</span>: <span class="s">"Term Report — Form 4A"</span>,        <span class="c">// auto-generated from params</span>
+    <span class="k">"generatedAt"</span>: <span class="s">"2026-05-13T08:42:00Z"</span>,
+    <span class="k">"generatedBy"</span>: { <span class="k">"id"</span>: <span class="s">"u-001"</span>, <span class="k">"name"</span>: <span class="s">"Mrs. R. Chigumba"</span> },
+    <span class="k">"pages"</span>: <span class="n">32</span>,
+    <span class="k">"sizeBytes"</span>: <span class="n">2516582</span>,
+    <span class="k">"format"</span>: <span class="s">"pdf"</span>,
+    <span class="k">"status"</span>: <span class="s">"ready"</span>,
+    <span class="k">"downloadUrl"</span>: <span class="s">"/api/admin/reports/r-2026-0089/download"</span>,
+    <span class="k">"shareLink"</span>: <span class="n">null</span>,                        <span class="c">// or { url, expiresAt } if generated</span>
+    <span class="k">"params"</span>: { <span class="c">/* original params for "regenerate with same settings" */</span> }
+  }
+]</pre>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/:id/download</code>
+    </div>
+    <p class="text-xs text-slate-500">Streams the file with proper <code class="mono bg-slate-100 px-1 rounded">Content-Disposition</code>.</p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-amber-600 px-2 py-1 rounded">POST</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/:id/share-link</code>
+    </div>
+    <p class="text-xs text-slate-500">Body: <code class="mono bg-slate-100 px-1 rounded">{"expiresIn":"7d","requireAuth":true}</code></p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-amber-600 px-2 py-1 rounded">POST</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/:id/email</code>
+    </div>
+    <p class="text-xs text-slate-500">Body: <code class="mono bg-slate-100 px-1 rounded">{"recipients":["…"],"message":"…"}</code></p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-rose-600 px-2 py-1 rounded">DELETE</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/:id</code>
+    </div>
+    <p class="text-xs text-slate-500">Soft-deletes from history. File retained 90 days then purged.</p>
+  </div>
+</div>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">6. Scheduled reports</h2>
+
+<div class="flex items-center gap-2 bg-white border border-slate-200 rounded p-3 my-3">
+  <span class="mono text-xs font-bold tracking-wider text-white bg-emerald-700 px-2 py-1 rounded">GET</span>
+  <code class="mono font-semibold text-slate-900">/api/admin/reports/schedules</code>
+</div>
+<pre class="bg-white border border-slate-200 rounded p-4 text-xs overflow-x-auto mb-3">[
+  {
+    <span class="k">"id"</span>: <span class="s">"sch-001"</span>,
+    <span class="k">"name"</span>: <span class="s">"End-of-term reports (all classes)"</span>,
+    <span class="k">"reportTypeId"</span>: <span class="s">"term-report"</span>,
+    <span class="k">"params"</span>: { <span class="c">/* same as ad-hoc generate */</span> },
+    <span class="k">"cadence"</span>: {
+      <span class="k">"kind"</span>: <span class="s">"termly"</span>,           <span class="c">// "daily" | "weekly" | "biweekly" | "monthly" | "termly"</span>
+      <span class="k">"dayOfWeek"</span>: <span class="s">"friday"</span>,      <span class="c">// for weekly/biweekly</span>
+      <span class="k">"timeOfDay"</span>: <span class="s">"17:00"</span>,
+      <span class="k">"timezone"</span>: <span class="s">"Africa/Harare"</span>
+    },
+    <span class="k">"delivery"</span>: { <span class="k">"mode"</span>: <span class="s">"email"</span>, <span class="k">"recipients"</span>: [<span class="s">"…"</span>] },
+    <span class="k">"enabled"</span>: <span class="n">true</span>,
+    <span class="k">"nextRunAt"</span>: <span class="s">"2026-06-12T15:00:00Z"</span>,
+    <span class="k">"lastRunAt"</span>: <span class="s">"2026-04-08T15:00:00Z"</span>,
+    <span class="k">"lastRunReportId"</span>: <span class="s">"r-2026-0042"</span>
+  }
+]</pre>
+
+<div class="grid grid-cols-2 gap-3 mb-8">
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-amber-600 px-2 py-1 rounded">POST</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/schedules</code>
+    </div>
+    <p class="text-xs text-slate-500">Body shape mirrors GET. Server validates cadence + recipients.</p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-blue-600 px-2 py-1 rounded">PATCH</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/schedules/:id</code>
+    </div>
+    <p class="text-xs text-slate-500">Common patch: <code class="mono bg-slate-100 px-1 rounded">{"enabled":false}</code> to pause.</p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-amber-600 px-2 py-1 rounded">POST</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/schedules/:id/run-now</code>
+    </div>
+    <p class="text-xs text-slate-500">Triggers immediately, queues a job, returns <code class="mono bg-slate-100 px-1 rounded">jobId</code>.</p>
+  </div>
+  <div class="bg-white border border-slate-200 rounded p-3">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="mono text-xs font-bold tracking-wider text-white bg-rose-600 px-2 py-1 rounded">DELETE</span>
+      <code class="mono text-sm font-semibold text-slate-900">/api/admin/reports/schedules/:id</code>
+    </div>
+    <p class="text-xs text-slate-500">Removes schedule. Already-generated reports remain in history.</p>
+  </div>
+</div>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">7. New tables / collections</h2>
+
+<table class="w-full text-sm mb-6">
+  <thead><tr class="border-b-2 border-slate-300 bg-slate-100">
+    <th class="text-left p-2 font-semibold">Table / collection</th>
+    <th class="text-left p-2 font-semibold">Shape</th>
+  </tr></thead>
+  <tbody>
+    <tr class="border-b border-slate-200">
+      <td class="p-2 mono text-xs align-top">reports</td>
+      <td class="p-2 text-xs"><code class="bg-slate-100 px-1 rounded">id, school_id, type_id, name, params (json), format, status, file_path, size_bytes, pages, generated_by, generated_at, deleted_at</code></td>
+    </tr>
+    <tr class="border-b border-slate-200">
+      <td class="p-2 mono text-xs align-top">report_jobs</td>
+      <td class="p-2 text-xs"><code class="bg-slate-100 px-1 rounded">id, report_id, status, progress, current_step, error, started_at, completed_at</code></td>
+    </tr>
+    <tr class="border-b border-slate-200">
+      <td class="p-2 mono text-xs align-top">report_schedules</td>
+      <td class="p-2 text-xs"><code class="bg-slate-100 px-1 rounded">id, school_id, type_id, name, params (json), cadence (json), delivery (json), enabled, next_run_at, last_run_at, last_run_report_id, created_by</code></td>
+    </tr>
+    <tr class="border-b border-slate-200">
+      <td class="p-2 mono text-xs align-top">report_share_links</td>
+      <td class="p-2 text-xs"><code class="bg-slate-100 px-1 rounded">id, report_id, token, expires_at, require_auth, accessed_count, created_by</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 class="serif text-2xl font-bold text-slate-900 mt-12 mb-4 pb-2 border-b border-slate-200">8. Implementation notes</h2>
+<ul class="text-sm text-slate-600 space-y-2 list-disc pl-5 mb-8">
+  <li><strong>PDF rendering:</strong> Use the same Puppeteer / headless Chromium service you'll need for term reports. Each report type ships with a server-side React component that renders to HTML, then to PDF. The preview the user sees in step 3 of the wizard renders the same component client-side with sample data.</li>
+  <li><strong>Concurrency:</strong> Cap concurrent generation jobs per school at 3 to prevent one school's term-end batch from blocking another's dashboard refresh.</li>
+  <li><strong>Email delivery:</strong> Use the existing announcements/messaging infrastructure. For parent recipients, pull guardian contacts from <code class="mono bg-slate-100 px-1 rounded">StudentProfile.guardianEmail</code>. Confirm parent consent flag is set before sending.</li>
+  <li><strong>Share links:</strong> Use signed URLs with short token; if <code class="mono bg-slate-100 px-1 rounded">requireAuth</code> is true, gate behind the auth middleware and only allow users in the same school.</li>
+  <li><strong>Scheduling:</strong> Use a cron-like job runner (Bull, Agenda, or a native interval) that wakes hourly, queries <code class="mono bg-slate-100 px-1 rounded">report_schedules WHERE enabled AND next_run_at &lt;= NOW()</code>, generates each, then advances <code class="mono bg-slate-100 px-1 rounded">next_run_at</code> per cadence.</li>
+  <li><strong>Caching:</strong> The <code class="mono bg-slate-100 px-1 rounded">/dashboard/performance</code> endpoint should cache for 15 min keyed by <code class="mono bg-slate-100 px-1 rounded">{school_id, period}</code>. Bust on BKT update events.</li>
+</ul>
+
+<div class="mt-12 pt-6 border-t border-slate-200 text-xs text-slate-500">
+  This contract covers the Reports page (MISS-1) and dashboard performance chart (MISS-2) from the school-admin code review. The other findings (TYPE-*, UX-*, BUG-*) are pure code fixes; see the review document for details.
+</div>
+
+</div>
+</body>
+</html>

@@ -1,6 +1,8 @@
-import React, { CSSProperties } from 'react';
+import React, { CSSProperties, useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '../../services/api';
+import { authService, adminService } from '../../services/api';
+import { useNotifications } from '../../hooks/useNotifications';
+import NotificationCenter from '../teacher/NotificationCenter';
 
 // ── Design tokens (warm paper palette) ──────────────────────────────────────
 const CSS_VARS: CSSProperties = {
@@ -34,6 +36,7 @@ const NAV = [
   { key: 'students',  label: 'Students',   path: '/admin/students',     icon: StudentsIcon },
   { key: 'classes',   label: 'Classes',    path: '/admin/classes',      icon: ClassesIcon },
   { key: 'subjects',  label: 'Subjects',   path: '/admin/subjects',     icon: SubjectsIcon },
+  { key: 'reports',   label: 'Reports',    path: '/admin/reports',      icon: ReportsIcon },
   { key: 'billing',   label: 'Billing',    path: '/admin/billing',      icon: BillingIcon },
   { key: 'settings',  label: 'Settings',   path: '/admin/settings',     icon: SettingsIcon },
 ];
@@ -81,6 +84,14 @@ function SubjectsIcon({ size = 15, style }: { size?: number; style?: CSSProperti
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
       <path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" />
       <path d="M6 5h4M6 8h4M6 11h2" />
+    </svg>
+  );
+}
+function ReportsIcon({ size = 15, style }: { size?: number; style?: CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d="M4 1h8a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" />
+      <path d="M6 5h4M6 8h3M6 11h1M10 8l2-2 2 2" />
     </svg>
   );
 }
@@ -150,8 +161,16 @@ const SchoolAdminLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentUser = authService.getCurrentUser();
-  const schoolName = (currentUser as any)?.schoolName || 'School Portal';
   const userName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Admin';
+  const [schoolName, setSchoolName] = useState('School Portal');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadCount } = useNotifications();
+
+  useEffect(() => {
+    adminService.getSchoolSettings?.()
+      .then((d: any) => { if (d?.school?.name) setSchoolName(d.school.name); })
+      .catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     authService.logout();
@@ -242,14 +261,24 @@ const SchoolAdminLayout: React.FC = () => {
               <SearchIcon size={13} />
             </span>
             <input
-              placeholder="Search students, teachers, classes…"
-              style={{ width: '100%', padding: '7px 10px 7px 32px', background: 'var(--paper-shade)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: 'inherit', fontSize: 12.5, outline: 'none' }}
+              disabled
+              placeholder="Use the search on each page"
+              title="Use the search on each page"
+              style={{ width: '100%', padding: '7px 10px 7px 32px', background: 'var(--paper-shade)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-3)', fontFamily: 'inherit', fontSize: 12.5, outline: 'none', cursor: 'not-allowed' }}
             />
           </div>
           <div style={{ flex: 1 }} />
-          <button style={{ padding: 7, borderRadius: 5, background: 'var(--paper-shade)', border: '1px solid var(--rule)', cursor: 'pointer', position: 'relative', color: 'var(--ink-2)', lineHeight: 0 }}>
+          <button
+            onClick={() => setNotifOpen(true)}
+            title="Notifications"
+            style={{ padding: 7, borderRadius: 5, background: 'var(--paper-shade)', border: '1px solid var(--rule)', cursor: 'pointer', position: 'relative', color: 'var(--ink-2)', lineHeight: 0 }}
+          >
             <BellIcon size={14} />
-            <span style={{ position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: 999, background: 'var(--terracotta)' }} />
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 16, height: 16, background: 'var(--terracotta)', color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
         </header>
 
@@ -260,6 +289,12 @@ const SchoolAdminLayout: React.FC = () => {
           </div>
         </main>
       </div>
+
+      <NotificationCenter
+        isOpen={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        onNavigate={(path) => { setNotifOpen(false); navigate(path); }}
+      />
     </div>
   );
 };

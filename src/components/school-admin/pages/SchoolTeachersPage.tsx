@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { adminService } from '../../../services/api';
 import TeacherFormDrawer from './TeacherFormDrawer';
+import TeacherDetailView from './TeacherDetailView';
 import { fetchData } from '../../../services/apiClient';
+import { TeacherUser } from '../types/schoolAdmin';
 
 function Avatar({ name, size = 32 }: { name: string; size?: number }) {
   const TONES = ['forest', 'plum', 'sky', 'gold', 'terracotta'];
@@ -38,18 +40,21 @@ const Td: React.FC<{ children?: React.ReactNode; mono?: boolean; dim?: boolean }
 );
 
 const SchoolTeachersPage: React.FC = () => {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<TeacherUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editUser, setEditUser] = useState<any>(null);
+  const [editUser, setEditUser] = useState<TeacherUser | null>(null);
+  const [viewUser, setViewUser] = useState<TeacherUser | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deactivating, setDeactivating] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadTeachers = useCallback(async () => {
     setLoading(true);
     try {
       const all = await adminService.getUsers();
-      setUsers(all.filter((u: any) => u.roles?.includes('teacher') || u.role === 'teacher'));
+      setUsers((all as TeacherUser[]).filter(u => u.roles?.includes('teacher') || u.role === 'teacher'));
     } finally {
       setLoading(false);
     }
@@ -66,22 +71,27 @@ const SchoolTeachersPage: React.FC = () => {
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`Remove ${name} from the system? This cannot be undone.`)) return;
     setDeleting(id);
+    setActionError(null);
     try {
       await adminService.deleteUser(id);
       await loadTeachers();
     } catch (err: any) {
-      alert(err.message ?? 'Failed to delete user');
+      setActionError(err.message ?? 'Failed to delete user');
     } finally {
       setDeleting(null);
     }
   };
 
   const handleDeactivate = async (id: string, active: boolean) => {
+    setDeactivating(id);
+    setActionError(null);
     try {
       await fetchData(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify({ active: !active }) });
       await loadTeachers();
     } catch (err: any) {
-      alert(err.message ?? 'Failed to update user');
+      setActionError(err.message ?? 'Failed to update user');
+    } finally {
+      setDeactivating(null);
     }
   };
 
@@ -104,6 +114,13 @@ const SchoolTeachersPage: React.FC = () => {
           Add teacher
         </button>
       </div>
+
+      {actionError && (
+        <div style={{ padding: '12px 16px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 7, color: 'var(--terracotta)', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span><strong>Error</strong> — {actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--terracotta)', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+      )}
 
       {/* KPI row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
@@ -147,13 +164,18 @@ const SchoolTeachersPage: React.FC = () => {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr><Th>Teacher</Th><Th>Staff No.</Th><Th>Department</Th><Th>Subjects</Th><Th>Status</Th><Th></Th></tr>
+              <tr><Th>Teacher</Th><Th>Staff No.</Th><Th>Department</Th><Th>Subjects</Th><Th>Classes</Th><Th>Status</Th><Th></Th></tr>
             </thead>
             <tbody>
               {filtered.map((u, i) => {
                 const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.email;
-                const tp = u.teacherProfile ?? {};
-                const subjects = tp.subjectAssignments?.map((sa: any) => sa.subject?.name ?? sa.subject ?? '').filter(Boolean) ?? [];
+                const tp = u.teacherProfile ?? {} as TeacherUser['teacherProfile'];
+                const subjects = tp?.subjectAssignments?.map(sa =>
+                  typeof sa.subject === 'object' ? (sa.subject?.name ?? '') : ''
+                ).filter(Boolean) ?? [];
+                const classes = tp?.subjectAssignments?.flatMap(sa =>
+                  sa.classes.map(c => typeof c === 'object' ? (c.name ?? '') : '')
+                ).filter((v, i, a) => v && a.indexOf(v) === i) ?? [];
                 const active = u.active !== false;
                 return (
                   <tr key={u.id || i}
@@ -169,13 +191,20 @@ const SchoolTeachersPage: React.FC = () => {
                         </div>
                       </div>
                     </Td>
-                    <Td mono dim>{tp.staffNumber || '—'}</Td>
-                    <Td dim>{tp.department || '—'}</Td>
+                    <Td mono dim>{tp?.staffNumber || '—'}</Td>
+                    <Td dim>{tp?.department || '—'}</Td>
                     <Td>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {subjects.slice(0, 3).map((s: string) => <Pill key={s} tone="neutral">{s}</Pill>)}
                         {subjects.length > 3 && <Pill tone="neutral">+{subjects.length - 3}</Pill>}
                         {subjects.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>—</span>}
+                      </div>
+                    </Td>
+                    <Td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {classes.slice(0, 3).map((c: string) => <Pill key={c} tone="sky">{c}</Pill>)}
+                        {classes.length > 3 && <Pill tone="sky">+{classes.length - 3}</Pill>}
+                        {classes.length === 0 && <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>—</span>}
                       </div>
                     </Td>
                     <Td>
@@ -187,14 +216,20 @@ const SchoolTeachersPage: React.FC = () => {
                     <Td>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button
+                          onClick={() => setViewUser(u)}
+                          style={{ padding: '4px 10px', background: 'var(--forest-soft)', border: '1px solid color-mix(in srgb, var(--forest) 25%, transparent)', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: 'var(--forest)', fontFamily: 'inherit', fontWeight: 600 }}>
+                          View
+                        </button>
+                        <button
                           onClick={() => { setEditUser(u); setDrawerOpen(true); }}
                           style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: 'var(--ink-2)', fontFamily: 'inherit' }}>
                           Edit
                         </button>
                         <button
                           onClick={() => handleDeactivate(u.id, active)}
-                          style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: 'pointer', fontSize: 11.5, color: active ? 'var(--gold-deep)' : 'var(--forest)', fontFamily: 'inherit' }}>
-                          {active ? 'Deactivate' : 'Activate'}
+                          disabled={deactivating === u.id}
+                          style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, cursor: deactivating === u.id ? 'not-allowed' : 'pointer', fontSize: 11.5, color: active ? 'var(--gold-deep)' : 'var(--forest)', fontFamily: 'inherit', opacity: deactivating === u.id ? 0.5 : 1 }}>
+                          {deactivating === u.id ? '…' : active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
                           onClick={() => handleDelete(u.id, name)}
@@ -217,6 +252,13 @@ const SchoolTeachersPage: React.FC = () => {
         editUser={editUser}
         onClose={() => setDrawerOpen(false)}
         onSaved={loadTeachers}
+      />
+
+      <TeacherDetailView
+        open={!!viewUser}
+        teacher={viewUser}
+        onClose={() => setViewUser(null)}
+        onEdit={t => { setViewUser(null); setEditUser(t); setDrawerOpen(true); }}
       />
     </div>
   );

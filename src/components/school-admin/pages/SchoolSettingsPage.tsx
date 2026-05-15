@@ -2,6 +2,12 @@ import React, { useEffect, useState, CSSProperties } from 'react';
 import { adminService } from '../../../services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+interface StudentIdConfig {
+  prefix: string;
+  numberLength: number;
+  startLetter: string;
+}
+
 interface SchoolData {
   _id: string;
   name: string;
@@ -14,6 +20,7 @@ interface SchoolData {
   motto: string;
   primaryContact: { name: string; email: string; phone: string };
   termSettings: { currentTerm: string; termWeek: number; termTotalWeeks: number };
+  studentIdConfig?: StudentIdConfig;
 }
 
 // ── Tiny icon helper ──────────────────────────────────────────────────────────
@@ -96,6 +103,41 @@ function IntegrationRow({ name, sub, status }: { name: string; sub: string; stat
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function deriveDefaultPrefix(schoolName: string): string {
+  const words = (schoolName || '').trim().split(/\s+/).filter(w => /[A-Za-z]/.test(w));
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  if (words.length === 1) return words[0].replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || 'K';
+  return 'K';
+}
+
+// ── Student ID preview ────────────────────────────────────────────────────────
+function StudentIdPreview({ prefix, numberLength, startLetter }: { prefix: string; numberLength: number; startLetter: string }) {
+  const p = (prefix || 'K').toUpperCase().slice(0, 2);
+  const n = Math.max(1, Math.min(8, numberLength || 4));
+  const sl = (startLetter || 'A').toUpperCase().charAt(0);
+  const maxNum = Math.pow(10, n) - 1;
+  const nextLetter = String.fromCharCode(sl.charCodeAt(0) + 1);
+  const first = `${p}${'0'.repeat(n - 1)}1${sl}`;
+  const rollover = `${p}${String(maxNum).padStart(n, '9')}${sl} → ${p}${'0'.repeat(n - 1)}1${nextLetter}`;
+  return (
+    <div style={{ background: 'var(--paper-shade)', border: '1px solid var(--rule-soft)', borderRadius: 6, padding: '12px 16px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>First student</div>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, fontWeight: 700, color: 'var(--forest)', letterSpacing: '.04em' }}>{first}</span>
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>Letter rollover</div>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--ink-2)', letterSpacing: '.03em' }}>{rollover}</span>
+      </div>
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>Capacity per letter</div>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: 'var(--ink-2)' }}>{maxNum.toLocaleString()} students</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 const SchoolSettingsPage: React.FC = () => {
   const [school, setSchool] = useState<SchoolData | null>(null);
@@ -108,11 +150,13 @@ const SchoolSettingsPage: React.FC = () => {
   const [editProfile, setEditProfile] = useState(false);
   const [editContact, setEditContact] = useState(false);
   const [editTerm, setEditTerm] = useState(false);
+  const [editStudentId, setEditStudentId] = useState(false);
 
   // draft buffers
   const [profileDraft, setProfileDraft] = useState<Partial<SchoolData>>({});
   const [contactDraft, setContactDraft] = useState<SchoolData['primaryContact']>({ name: '', email: '', phone: '' });
   const [termDraft, setTermDraft] = useState<SchoolData['termSettings']>({ currentTerm: '', termWeek: 1, termTotalWeeks: 13 });
+  const [studentIdDraft, setStudentIdDraft] = useState<StudentIdConfig>({ prefix: 'K', numberLength: 4, startLetter: 'A' });
 
   useEffect(() => {
     adminService.getSchoolSettings().then((d: any) => {
@@ -130,6 +174,12 @@ const SchoolSettingsPage: React.FC = () => {
         });
         setContactDraft(d.school.primaryContact || { name: '', email: '', phone: '' });
         setTermDraft(d.school.termSettings || { currentTerm: '', termWeek: 1, termTotalWeeks: 13 });
+        const sid = d.school.studentIdConfig || {};
+        setStudentIdDraft({
+          prefix: sid.prefix || deriveDefaultPrefix(d.school.name),
+          numberLength: sid.numberLength ?? 4,
+          startLetter: sid.startLetter || 'A',
+        });
       }
     }).finally(() => setLoading(false));
   }, []);
@@ -145,6 +195,15 @@ const SchoolSettingsPage: React.FC = () => {
       if (section === 'profile') setEditProfile(false);
       if (section === 'contact') setEditContact(false);
       if (section === 'term') setEditTerm(false);
+      if (section === 'studentId') {
+        setEditStudentId(false);
+        const sid = updated.school?.studentIdConfig || {};
+        setStudentIdDraft({
+          prefix: sid.prefix || deriveDefaultPrefix(updated.school?.name || ''),
+          numberLength: sid.numberLength ?? 4,
+          startLetter: sid.startLetter || 'A',
+        });
+      }
     } catch {
       setSaveError('Could not save changes. Please try again.');
     } finally {
@@ -341,6 +400,76 @@ const SchoolSettingsPage: React.FC = () => {
             <div style={{ height: 6, background: 'var(--paper-shade)', border: '1px solid var(--rule-soft)', borderRadius: 999, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(100, school.termSettings.termWeek / school.termSettings.termTotalWeeks * 100)}%`, background: 'var(--forest)', borderRadius: 999, transition: 'width 0.4s' }} />
             </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── Student ID Format ───────────────────────────────────────────────── */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 }}>Student ID format</div>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>
+              Auto-generated IDs assigned to new students. Changing the prefix starts a fresh sequence; existing IDs are not affected.
+            </p>
+          </div>
+          <EditBar
+            section="studentId"
+            isEditing={editStudentId}
+            onEdit={() => setEditStudentId(true)}
+            onSave={() => save('studentId', { studentIdConfig: studentIdDraft })}
+            onCancel={() => { setEditStudentId(false); setStudentIdDraft({ prefix: school.studentIdConfig?.prefix || deriveDefaultPrefix(school.name), numberLength: school.studentIdConfig?.numberLength ?? 4, startLetter: school.studentIdConfig?.startLetter || 'A' }); }}
+          />
+        </div>
+
+        {editStudentId ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>Prefix (1–2 letters)</label>
+                <input
+                  value={studentIdDraft.prefix}
+                  maxLength={2}
+                  onChange={e => setStudentIdDraft(p => ({ ...p, prefix: e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase() }))}
+                  style={{ width: '100%', padding: '7px 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>Number of digits (1–8)</label>
+                <input
+                  type="number" min={1} max={8}
+                  value={studentIdDraft.numberLength}
+                  onChange={e => setStudentIdDraft(p => ({ ...p, numberLength: Math.max(1, Math.min(8, Number(e.target.value) || 1)) }))}
+                  style={{ width: '100%', padding: '7px 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: 'inherit', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700, marginBottom: 4 }}>Starting letter</label>
+                <select
+                  value={studentIdDraft.startLetter}
+                  onChange={e => setStudentIdDraft(p => ({ ...p, startLetter: e.target.value }))}
+                  style={{ width: '100%', padding: '7px 10px', background: 'var(--paper)', border: '1px solid var(--rule)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                >
+                  {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <StudentIdPreview prefix={studentIdDraft.prefix} numberLength={studentIdDraft.numberLength} startLetter={studentIdDraft.startLetter} />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              <FieldView label="Prefix"          value={school.studentIdConfig?.prefix || deriveDefaultPrefix(school.name)} />
+              <FieldView label="Digit count"     value={String(school.studentIdConfig?.numberLength ?? 4)} />
+              <FieldView label="Starting letter" value={school.studentIdConfig?.startLetter || 'A'} />
+            </div>
+            <StudentIdPreview
+              prefix={school.studentIdConfig?.prefix || deriveDefaultPrefix(school.name)}
+              numberLength={school.studentIdConfig?.numberLength ?? 4}
+              startLetter={school.studentIdConfig?.startLetter || 'A'}
+            />
           </div>
         )}
       </Card>

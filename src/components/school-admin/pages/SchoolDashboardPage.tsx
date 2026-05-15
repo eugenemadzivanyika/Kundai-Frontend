@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminService, AdminSummary } from '../../../services/api';
+import { PerformanceOverviewChart, ChartLoadingState, ChartEmptyState, ChartErrorState, PerformanceData } from '../PerformanceChart';
 
 // ── Shared mini-components ────────────────────────────────────────────────────
 
@@ -90,17 +91,47 @@ const SchoolDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [perfData, setPerfData] = useState<PerformanceData | null>(null);
+  const [perfLoading, setPerfLoading] = useState(true);
+  const [perfError, setPerfError] = useState<string | null>(null);
+  const [perfPeriod, setPerfPeriod] = useState<'4w' | 'term' | 'year'>('term');
 
   useEffect(() => {
     adminService.getSummary()
       .then(setSummary)
+      .catch((err: Error) => setError(err.message ?? 'Failed to load dashboard'))
       .finally(() => setLoading(false));
   }, []);
+
+  const fetchPerfData = (period: '4w' | 'term' | 'year') => {
+    setPerfLoading(true);
+    setPerfError(null);
+    (adminService as any).getPerformanceData(period)
+      .then(setPerfData)
+      .catch((err: Error) => setPerfError(err.message ?? 'Failed to load chart'))
+      .finally(() => setPerfLoading(false));
+  };
+
+  useEffect(() => { fetchPerfData(perfPeriod); }, [perfPeriod]);
 
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: 'var(--ink-3)', fontSize: 13 }}>
         Loading…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '20px 24px', background: 'var(--terracotta-soft)', border: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', borderRadius: 7, color: 'var(--terracotta)', fontSize: 13 }}>
+        <strong>Failed to load dashboard</strong> — {error}
+        <button onClick={() => { setError(null); setLoading(true); adminService.getSummary().then(setSummary).catch((e: Error) => setError(e.message)).finally(() => setLoading(false)); }}
+          style={{ marginLeft: 16, padding: '4px 12px', background: 'var(--terracotta)', color: '#fff', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
+          Retry
+        </button>
       </div>
     );
   }
@@ -148,6 +179,14 @@ const SchoolDashboardPage: React.FC = () => {
         <KPICard label="Classes"   value={classCount}   sub="class groups"        accent="forest"    icon={<Icon d={ICONS.classes}  size={14} />} />
         <KPICard label="Subjects"  value={subjectCount} sub="active subjects"     accent="gold"      icon={<Icon d={ICONS.subjects} size={14} />} />
       </div>
+
+      {/* Performance chart */}
+      {perfLoading && <ChartLoadingState />}
+      {perfError && <ChartErrorState onRetry={() => fetchPerfData(perfPeriod)} />}
+      {!perfLoading && !perfError && perfData && perfData.weekly.length === 0 && <ChartEmptyState />}
+      {!perfLoading && !perfError && perfData && perfData.weekly.length > 0 && (
+        <PerformanceOverviewChart data={perfData} onPeriodChange={setPerfPeriod} />
+      )}
 
       {/* Main grid: activity + attention */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>

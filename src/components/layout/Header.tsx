@@ -14,34 +14,35 @@ const Header: React.FC = () => {
   const { selectedCourse, setSelectedCourse } = useAuth();
   const currentUser = authService.getCurrentUser();
 
-  const [courses, setCourses] = useState([]);
+  const [courses, setCourses] = useState<{ id: string; _id: string; code: string; name: string; classGroups?: unknown[] }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
 useEffect(() => {
   const loadData = async () => {
+    const user = authService.getCurrentUser();
     try {
       const [teachingCourses, count] = await Promise.all([
-        courseService.getTeachingCourses(),
+        user?.role === 'teacher' ? courseService.getTeachingCourses() : Promise.resolve([]),
         notificationService.getUnreadCount()
       ]);
-      const sanitizedCourses = teachingCourses.map((c: any) => ({
+      const sanitizedCourses = teachingCourses.map(c => ({
         ...c,
-        id: c.code || c._id, // If code exists (MATH-ZIM-B), use it as the primary ID
+        id: c.code || c._id,
       }));
 
       setCourses(sanitizedCourses);
       setUnreadCount(count);
 
-      // Only auto-select if nothing is selected yet
       if (sanitizedCourses.length > 0 && !selectedCourse) {
-        setSelectedCourse(sanitizedCourses[0]);
+        setSelectedCourse(sanitizedCourses[0] as Parameters<typeof setSelectedCourse>[0]);
       }
-    } catch (err) { 
-      console.error("Header Data Load Error:", err); 
+    } catch (err) {
+      console.error("Header Data Load Error:", err);
     }
   };
   loadData();
+// eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
   const activeTab = location.pathname.split('/')[1] || 'dashboard';

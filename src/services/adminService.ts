@@ -45,6 +45,8 @@ export interface BulkUploadResult {
 export const adminService = {
   // Dashboard
   getSummary: (): Promise<AdminSummary> => fetchData('/admin/summary'),
+  getPerformanceData: (period: '4w' | 'term' | 'year' = 'term'): Promise<import('../components/school-admin/PerformanceChart').PerformanceData> =>
+    fetchData(`/admin/dashboard/performance?period=${period}`),
 
   // User Management
   getUsers: (): Promise<any[]> => fetchData('/admin/users'),

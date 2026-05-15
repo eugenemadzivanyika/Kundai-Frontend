@@ -23,6 +23,12 @@ export const parseErrorMessage = (error: any): string => {
     }
     return error.message || 'Server connection failed';
   }
+  // Handle the plain-object shape thrown by fetchData: { response: { data: {...} }, message: '...' }
+  if (error && typeof error === 'object' && error.response?.data) {
+    const data = error.response.data;
+    if (typeof data.message === 'string') return data.message;
+    if (typeof data.error === 'string') return data.error;
+  }
   return error instanceof Error ? error.message : 'An unexpected error occurred';
 };
 

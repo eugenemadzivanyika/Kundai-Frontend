@@ -31,12 +31,11 @@ export const classService = {
   getClasses: (): Promise<ClassItem[]> => fetchData('/admin/classes'),
 
   createClass: (data: {
-    schoolId: string;
     code: string;
-    name: string;
     gradeLevel?: string;
     academicYear?: string;
     homeroomTeacherId?: string;
+    name?: string;
   }): Promise<ClassItem> => fetchData('/admin/classes', { method: 'POST', body: JSON.stringify(data) }),
 
   updateClass: (id: string, data: {

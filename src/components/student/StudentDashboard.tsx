@@ -15,7 +15,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   GraduationCap,
-  Flame,
+
   Settings,
   Menu,
   X,
@@ -66,7 +66,7 @@ import HomeTeachersPanel from './dashboard/HomeTeachersPanel';
 import { reportService, StudentReportCardResponse } from '../../services/reportService';
 import { NotificationItem } from '../../services/notificationService';
 import { CalendarEvent } from '../../types/calendar';
-import { MasterySignalsSummary, StudentStreakSummary } from '../../services/developmentService';
+import { MasterySignalsSummary } from '../../services/developmentService';
 import { getActiveAuthToken } from '../../services/authSession';
 import { resolveAssetUrl } from '../../services/apiClient';
 
@@ -211,7 +211,7 @@ const StudentDashboard: React.FC = () => {
   const [homeMasterySignals, setHomeMasterySignals] = useState<MasterySignalsSummary | null>(null);
   const [homeLiveLoading, setHomeLiveLoading] = useState(false);
   const [homeLiveError, setHomeLiveError] = useState<string | null>(null);
-  const [homeStreakSummary, setHomeStreakSummary] = useState<StudentStreakSummary | null>(null);
+
   const [homeMasterySubjectIndex, setHomeMasterySubjectIndex] = useState(0);
 
   // UI
@@ -379,10 +379,6 @@ const realPlanBySubjectId = useMemo(() => {
 
   const homeProgressRows = useMemo<HomeProgressRow[]>(() => buildHomeProgressRows(overviewSubjects), [overviewSubjects]);
 
-  const streakWeeks = homeStreakSummary?.streakWeeks ?? 0;
-  const streakLevel = homeStreakSummary?.level ?? 1;
-  const streakProgressPercent = homeStreakSummary?.progressToNextWeek ?? 0;
-
   const filteredHomeProgressRows = useMemo(
     () => filterHomeProgressRows(homeProgressRows, progressWindow, progressContentFilter, progressActivityFilter),
     [homeProgressRows, progressWindow, progressContentFilter, progressActivityFilter]
@@ -503,14 +499,6 @@ const realPlanBySubjectId = useMemo(() => {
   }, [student?.id]);
 
   useEffect(() => {
-    if (!student?.id) { setHomeStreakSummary(null); return; }
-    let cancelled = false;
-    void developmentService.touchStudentStreak(student.id).catch(() => null)
-      .then((streak) => { if (!cancelled && streak) setHomeStreakSummary(streak); });
-    return () => { cancelled = true; };
-  }, [student?.id]);
-
-  useEffect(() => {
     if (homeMasteryBySubject.length === 0) { setHomeMasterySubjectIndex(0); return; }
     setHomeMasterySubjectIndex((prev) => Math.min(prev, homeMasteryBySubject.length - 1));
   }, [homeMasteryBySubject.length]);
@@ -525,7 +513,7 @@ const realPlanBySubjectId = useMemo(() => {
     if (!student?.id) {
       setHomeNotifications([]); setHomeUnreadNotificationCount(0);
       setHomeUpcomingEvents([]); setHomeSubjectEvents([]);
-      setHomeMasterySignals(null); setHomeStreakSummary(null);
+      setHomeMasterySignals(null);
       return;
     }
     let cancelled = false;
@@ -535,14 +523,13 @@ const realPlanBySubjectId = useMemo(() => {
         const now = new Date();
         const thirtyDaysAhead = new Date();
         thirtyDaysAhead.setDate(now.getDate() + 30);
-        const [notifications, unreadCount, upcomingEvents, allCalendarEvents, subjectEvents, masterySignals, streakSummary] = await Promise.all([
+        const [notifications, unreadCount, upcomingEvents, allCalendarEvents, subjectEvents, masterySignals] = await Promise.all([
           notificationService.getNotifications(1, 20, false, notificationRecipientId).catch(() => []),
           notificationService.getUnreadCount(notificationRecipientId).catch(() => 0),
           calendarService.getUpcomingEvents(6, student.id).catch(() => []),
           calendarService.getEvents(now, thirtyDaysAhead, student.id).catch(() => []),
           selectedSubjectId !== 'all' ? calendarService.getSubjectEvents(selectedSubjectId, student.id).catch(() => []) : Promise.resolve([]),
           developmentService.getStudentMasterySignalsSummary(student.id, selectedSubjectId !== 'all' ? selectedSubjectId : undefined).catch(() => null),
-          developmentService.getStudentStreak(student.id).catch(() => null),
         ]);
         if (cancelled) return;
         const notifArray = Array.isArray(notifications) ? notifications : (notifications?.notifications || []);
@@ -552,7 +539,6 @@ const realPlanBySubjectId = useMemo(() => {
         setHomeUpcomingEvents((upcomingEvents || []).slice(0, 6));
         setHomeSubjectEvents((subjectEvents || []).slice(0, 6));
         setHomeMasterySignals(masterySignals);
-        setHomeStreakSummary(streakSummary);
         void allCalendarEvents;
       } catch (liveError: any) {
         if (!cancelled) setHomeLiveError(liveError?.message || 'Failed to load live updates.');
@@ -778,33 +764,6 @@ const realPlanBySubjectId = useMemo(() => {
           </div>
         </div>
       ))}
-
-      {/* Streak banner */}
-      <section className="relative left-1/2 right-1/2 w-screen -translate-x-1/2 border-y border-orange-100 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <p className="text-lg sm:text-xl font-semibold text-slate-900">
-              {streakWeeks > 0 ? `You are on a ${streakWeeks}-week streak. Keep going.` : 'Start your learning streak today.'}
-            </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="inline-flex items-center gap-2 text-slate-700">
-                <Flame className="w-5 h-5 text-orange-500" />
-                <span className="text-sm font-semibold">{streakWeeks > 0 ? `${streakWeeks} week streak` : 'No active streak'}</span>
-              </div>
-              <div className="h-8 w-px bg-orange-200" />
-              <div className="w-full sm:w-auto sm:min-w-[220px]">
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                  <span className="font-semibold text-slate-700">Level {streakLevel}</span>
-                  <span>{streakProgressPercent}% to next week</span>
-                </div>
-                <div className="h-2 rounded-full bg-orange-100 overflow-hidden">
-                  <div className="h-2 rounded-full bg-violet-500" style={{ width: `${Math.max(0, Math.min(100, streakProgressPercent))}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Quick stats (subjects panel only) */}
       {homePanel === 'subjects' && (

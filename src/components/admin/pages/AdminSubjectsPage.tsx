@@ -333,6 +333,7 @@ const AdminSubjectsPage: React.FC = () => {
             teachers: fresh.teachers || [],
             syllabusFile: fresh.syllabusFile || null,
             subjectResources: fresh.subjectResources || [],
+            topicCount: fresh.topicCount ?? 0,
           });
           setModalTab('syllabus');
           toast.error('Syllabus not yet uploaded — please add it on the Syllabus tab.');

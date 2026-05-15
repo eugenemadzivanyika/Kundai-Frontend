@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Download, ChevronRight,
-  CheckCircle, XCircle, Edit2, Trash2, X,
+  CheckCircle, XCircle, Edit2, Trash2, X, KeyRound,
 } from 'lucide-react';
-import { sysAdminService, School } from '../../../services/sysAdminService';
+import { sysAdminService, School, SubscriptionPackage } from '../../../services/sysAdminService';
 import { useToast } from '../../ui/use-toast';
 
 const SUB_STATUS: Record<string, string> = {
@@ -15,16 +15,23 @@ const SUB_STATUS: Record<string, string> = {
   cancelled: 'bg-slate-600/40 text-slate-400',
 };
 
+const DEFAULT_PASSWORD = 'Kundai@2026';
+
 type StatusFilter = 'all' | 'active' | 'trial' | 'suspended';
 
 const EMPTY_FORM = {
   name: '', email: '', phone: '', address: '', registrationNumber: '',
   primaryContact: { name: '', email: '', phone: '' },
   notes: '',
+  // admin account (create mode only)
+  adminFirstName: '', adminLastName: '', adminEmail: '',
+  // trial subscription (create mode only)
+  planId: '',
 };
 
 const SchoolsListPage: React.FC = () => {
   const [schools, setSchools] = useState<School[]>([]);
+  const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -37,9 +44,12 @@ const SchoolsListPage: React.FC = () => {
 
   const load = () => {
     setLoading(true);
-    sysAdminService.getSchools()
-      .then(setSchools)
-      .catch(() => toast.error('Failed to load schools'))
+    Promise.all([
+      sysAdminService.getSchools(),
+      sysAdminService.getPackages(),
+    ])
+      .then(([s, p]) => { setSchools(s); setPackages(p); })
+      .catch(() => toast.error('Failed to load data'))
       .finally(() => setLoading(false));
   };
 
@@ -54,6 +64,7 @@ const SchoolsListPage: React.FC = () => {
       registrationNumber: s.registrationNumber || '',
       primaryContact: { name: s.primaryContact?.name || '', email: s.primaryContact?.email || '', phone: s.primaryContact?.phone || '' },
       notes: s.notes || '',
+      adminFirstName: '', adminLastName: '', adminEmail: '', planId: '',
     });
     setShowModal(true);
   };
@@ -63,11 +74,21 @@ const SchoolsListPage: React.FC = () => {
     setSaving(true);
     try {
       if (editing) {
-        await sysAdminService.updateSchool(editing._id, form);
+        // Edit mode: only update school fields, not the admin account
+        const { adminFirstName, adminLastName, adminEmail, planId, ...schoolFields } = form;
+        await sysAdminService.updateSchool(editing._id, schoolFields);
         toast.success('School updated');
       } else {
-        await sysAdminService.createSchool(form);
-        toast.success('School onboarded');
+        const adminEmail = form.adminEmail.trim() || form.primaryContact.email.trim();
+        if (!adminEmail) { toast.error('An admin login email is required'); setSaving(false); return; }
+        await sysAdminService.createSchool({
+          ...form,
+          adminFirstName: form.adminFirstName.trim() || form.primaryContact.name.split(' ')[0],
+          adminLastName: form.adminLastName.trim() || form.primaryContact.name.split(' ').slice(1).join(' '),
+          adminEmail,
+          planId: form.planId || undefined,
+        } as any);
+        toast.success(`School onboarded · admin login: ${adminEmail} / ${DEFAULT_PASSWORD}`);
       }
       setShowModal(false);
       load();
@@ -278,7 +299,10 @@ const SchoolsListPage: React.FC = () => {
               <h2 className="text-white font-semibold">{editing ? 'Edit School' : 'Onboard School'}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors"><X size={18} /></button>
             </div>
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+            <div className="p-5 space-y-3 max-h-[75vh] overflow-y-auto">
+
+              {/* ── School details ── */}
+              <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">School details</p>
               {([
                 { label: 'School Name *', key: 'name', type: 'text' },
                 { label: 'School Email *', key: 'email', type: 'email' },
@@ -288,33 +312,92 @@ const SchoolsListPage: React.FC = () => {
               ] as const).map(({ label, key, type }) => (
                 <div key={key}>
                   <label className="block text-slate-400 text-xs font-medium mb-1">{label}</label>
-                  <input
-                    type={type}
-                    value={(form as any)[key]}
+                  <input type={type} value={(form as any)[key]}
                     onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
-                  />
+                    className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
                 </div>
               ))}
-              <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide pt-2">Primary Contact</p>
+
+              {/* ── Primary contact ── */}
+              <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide pt-2">Primary contact</p>
               {(['name', 'email', 'phone'] as const).map((key) => (
                 <div key={key}>
                   <label className="block text-slate-400 text-xs font-medium mb-1 capitalize">Contact {key}</label>
-                  <input
-                    value={form.primaryContact[key]}
+                  <input value={form.primaryContact[key]}
                     onChange={(e) => setForm((f) => ({ ...f, primaryContact: { ...f.primaryContact, [key]: e.target.value } }))}
-                    className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
-                  />
+                    className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
                 </div>
               ))}
+
+              {/* ── Admin account (create only) ── */}
+              {!editing && (
+                <>
+                  <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide pt-2">Admin login account</p>
+                  <p className="text-slate-500 text-xs">
+                    Leave blank to use the contact email above. The account will be created with the default password shown below.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 text-xs font-medium mb-1">First name</label>
+                      <input value={form.adminFirstName}
+                        onChange={(e) => setForm((f) => ({ ...f, adminFirstName: e.target.value }))}
+                        placeholder="From contact name if blank"
+                        className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 text-xs font-medium mb-1">Last name</label>
+                      <input value={form.adminLastName}
+                        onChange={(e) => setForm((f) => ({ ...f, adminLastName: e.target.value }))}
+                        placeholder="From contact name if blank"
+                        className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-1">Login email</label>
+                    <input type="email" value={form.adminEmail}
+                      onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
+                      placeholder="Leave blank to use contact email"
+                      className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5">
+                    <KeyRound size={13} className="text-amber-400 shrink-0" />
+                    <div className="flex-1 text-xs text-slate-400">
+                      Default password: <span className="text-white font-mono font-semibold">{DEFAULT_PASSWORD}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">Share with admin</span>
+                  </div>
+                </>
+              )}
+
+              {/* ── Free trial package (create only) ── */}
+              {!editing && (
+                <>
+                  <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide pt-2">Free trial package</p>
+                  <div>
+                    <label className="block text-slate-400 text-xs font-medium mb-1">Start on package (optional)</label>
+                    <select value={form.planId}
+                      onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))}
+                      className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500">
+                      <option value="">— No trial package —</option>
+                      {packages.filter(p => p.isActive).map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} · {p.studentLimit.toLocaleString()} students · ${p.pricePerStudent}/student
+                        </option>
+                      ))}
+                    </select>
+                    {form.planId && (
+                      <p className="text-sky-400 text-xs mt-1.5">30-day free trial will be created automatically.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-slate-400 text-xs font-medium mb-1">Notes</label>
-                <textarea
-                  value={form.notes}
+                <textarea value={form.notes}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                   rows={2}
-                  className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500 resize-none"
-                />
+                  className="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500 resize-none" />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-700">
