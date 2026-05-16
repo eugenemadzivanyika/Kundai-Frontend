@@ -23,6 +23,7 @@ interface BillingSubscription {
   amountDue: number;
   amountPaid: number;
   paymentRef?: string;
+  lastPaynowStatus?: string;
   notes?: string;
   package: BillingPackage | null;
 }
@@ -128,6 +129,10 @@ function PaymentModal({ pkg, onClose, onPaid }: { pkg: BillingPackage; onClose: 
         if (r.paid) {
           stopPolling();
           setStep('done');
+        } else if (r.status === 'cancelled' || r.status === 'failed') {
+          stopPolling();
+          setErr('Payment was cancelled. You can try again with a different method or number.');
+          setStep('phone');
         }
       } catch {
         // silently retry
@@ -644,6 +649,27 @@ const SchoolBillingPage: React.FC = () => {
     if (paymentResult && !data) loadBilling();
   }, [paymentResult]);
 
+  // Background poll: while subscription is pending_payment and no modal is open,
+  // keep checking so "Close and check later" still auto-updates the page.
+  useEffect(() => {
+    const sub = data?.subscription;
+    const ref = sub?.paymentRef;
+    // Only poll when genuinely waiting for Paynow (no lastPaynowStatus means unresolved)
+    if (!ref || sub?.status !== 'pending_payment' || sub?.lastPaynowStatus || paymentPkg) return;
+
+    const id = setInterval(async () => {
+      try {
+        const r: any = await fetchData(`/paynow/status?ref=${encodeURIComponent(ref)}`);
+        if (r.paid || r.status === 'cancelled' || r.status === 'failed') {
+          clearInterval(id);
+          loadBilling();
+        }
+      } catch { /* ignore transient errors */ }
+    }, 5000);
+
+    return () => clearInterval(id);
+  }, [data, paymentPkg]);
+
   if (verifying) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Verifying payment…</div>;
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Loading…</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--terracotta)', fontSize: 13 }}>{error}</div>;
@@ -708,12 +734,22 @@ const SchoolBillingPage: React.FC = () => {
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--terracotta)' }}>Subscription suspended — contact Kundai support to reactivate</span>
             </div>
           )}
-          {sub.status === 'pending_payment' && (
+          {sub.status === 'pending_payment' && !sub.lastPaynowStatus && (
             <div style={{ padding: '12px 22px', background: 'var(--gold-soft)', borderBottom: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--gold-deep)', flexShrink: 0 }}>
                 <circle cx="8" cy="8" r="7" /><path d="M8 5v3M8 11v.5" />
               </svg>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-deep)' }}>Payment pending — complete payment below to activate your subscription</span>
+            </div>
+          )}
+          {sub.status === 'pending_payment' && (sub.lastPaynowStatus === 'cancelled' || sub.lastPaynowStatus === 'failed') && (
+            <div style={{ padding: '12px 22px', background: 'var(--terracotta-soft)', borderBottom: '1px solid color-mix(in srgb, var(--terracotta) 25%, transparent)', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--terracotta)', flexShrink: 0 }}>
+                <path d="M8 1L1 14h14L8 1zM8 6v4M8 12v.5" />
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--terracotta)' }}>
+                Last payment {sub.lastPaynowStatus} — select a package below to try again
+              </span>
             </div>
           )}
 
