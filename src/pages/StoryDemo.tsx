@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { CheckCircle, ChevronRight, Zap, ArrowRight, TrendingUp, AlertTriangle } from 'lucide-react';
+import { CheckCircle, ChevronRight, TrendingUp, AlertTriangle } from 'lucide-react';
 
 /* ─────────────────────────────────────────────────────────────
    GLOBAL CSS
@@ -296,8 +296,8 @@ const STORY_CSS = `
   @keyframes sd-modal-lift-perf {
     from {
       opacity: 0;
-      transform: translate(25%, 15%) scale(0.35);
-      filter: blur(2px);
+      transform: translate(-57px, 63px) scale(0.38);
+      filter: blur(1px);
     }
     60% {
       opacity: 1;
@@ -312,8 +312,8 @@ const STORY_CSS = `
   @keyframes sd-modal-lift-twin {
     from {
       opacity: 0;
-      transform: translate(-25%, -10%) scale(0.4);
-      filter: blur(2px);
+      transform: translate(115px, -22px) scale(0.38);
+      filter: blur(1px);
     }
     60% {
       opacity: 1;
@@ -330,17 +330,146 @@ const STORY_CSS = `
     from { backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); background: rgba(15,23,42,0); }
     to   { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); background: rgba(15,23,42,0.35); }
   }
-  .sd-modal-lift-perf { animation: sd-modal-lift-perf 0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: top right; }
-  .sd-modal-lift-twin { animation: sd-modal-lift-twin 0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: top left; }
-  .sd-backdrop-blur   { animation: sd-backdrop-blur-in 0.45s ease both; }
+  @keyframes sd-modal-lift-notif {
+    from {
+      opacity: 0;
+      transform: translate(191px, -102px) scale(0.28);
+      filter: blur(1px);
+    }
+    60% {
+      opacity: 1;
+      filter: blur(0);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+      filter: blur(0);
+    }
+  }
+  @keyframes sd-modal-lift-confirm {
+    from {
+      opacity: 0;
+      transform: translate(-30%, 20%) scale(0.4);
+      filter: blur(2px);
+    }
+    60% {
+      opacity: 1;
+      filter: blur(0);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+      filter: blur(0);
+    }
+  }
+  .sd-modal-lift-perf    { animation: sd-modal-lift-perf    0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: center; }
+  .sd-modal-lift-twin    { animation: sd-modal-lift-twin    0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: center; }
+  .sd-modal-lift-notif   { animation: sd-modal-lift-notif   0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: center; }
+  .sd-modal-lift-confirm { animation: sd-modal-lift-confirm 0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: bottom left; }
+  .sd-backdrop-blur      { animation: sd-backdrop-blur-in 0.45s ease both; }
+
+  /* Bell badge pop-in */
+  @keyframes sd-bell-badge-pop {
+    0%   { transform: scale(0); opacity: 0; }
+    65%  { transform: scale(1.5); opacity: 1; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+  .sd-bell-badge-pop { animation: sd-bell-badge-pop 0.35s cubic-bezier(.34,1.56,.64,1) both; transform-origin: center; }
+
+  /* Cursor move to bell → click → fade  (1.3s total)
+     Cursor starts at absolute (180, 140), bell is at approx (424, 16).
+     Delta: translate(244px, -124px). */
+  @keyframes sd-cursor-sequence {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    6%   { transform: translate(0, 0); opacity: 1; }
+    62%  { transform: translate(244px, -124px); opacity: 1; }
+    72%  { transform: translate(244px, -124px) scale(0.78); opacity: 1; }
+    82%  { transform: translate(244px, -124px) scale(1.08); opacity: 1; }
+    90%  { transform: translate(244px, -124px) scale(1);    opacity: 1; }
+    100% { transform: translate(244px, -124px) scale(1);    opacity: 0; }
+  }
+  .sd-cursor-sequence { animation: sd-cursor-sequence 1.3s ease-in-out both; }
+
+  /* Cursor moves from bell (424,16) to View button (299,180) → click → fade.
+     Starts at absolute (424,16), delta: translate(-125px, 164px).
+     Delayed 700ms to let the notification modal settle first. */
+  @keyframes sd-cursor-view-click {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    6%   { opacity: 1; }
+    62%  { transform: translate(-125px, 164px); opacity: 1; }
+    72%  { transform: translate(-125px, 164px) scale(0.78); opacity: 1; }
+    82%  { transform: translate(-125px, 164px) scale(1.08); opacity: 1; }
+    90%  { transform: translate(-125px, 164px) scale(1);    opacity: 1; }
+    100% { transform: translate(-125px, 164px) scale(1);    opacity: 0; }
+  }
+  .sd-cursor-view-click { animation: sd-cursor-view-click 1.3s ease-in-out both; animation-delay: 700ms; }
+
+  /* View button press — fires when the cursor clicks it */
+  @keyframes sd-btn-press {
+    0%   { transform: scale(1);    filter: brightness(1); }
+    30%  { transform: scale(0.91); filter: brightness(0.8); }
+    65%  { transform: scale(1.03); filter: brightness(1.08); }
+    100% { transform: scale(1);    filter: brightness(1); }
+  }
+  .sd-btn-view-press { animation: sd-btn-press 0.35s cubic-bezier(.34,1.4,.64,1) both; animation-delay: 1506ms; }
+
+  /* Cursor moves from (360,120) toward Tapiwa's row at top (delta: -127px, -43px). 700ms settle delay. */
+  @keyframes sd-cursor-perf-row {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    6%   { opacity: 1; }
+    62%  { transform: translate(-127px, -43px); opacity: 1; }
+    72%  { transform: translate(-127px, -43px) scale(0.78); opacity: 1; }
+    82%  { transform: translate(-127px, -43px) scale(1.08); opacity: 1; }
+    90%  { transform: translate(-127px, -43px) scale(1);    opacity: 1; }
+    100% { transform: translate(-127px, -43px) scale(1);    opacity: 0; }
+  }
+  .sd-cursor-perf-row { animation: sd-cursor-perf-row 1.3s ease-in-out both; animation-delay: 700ms; }
+
+  /* Row background flash when cursor clicks Tapiwa's row */
+  @keyframes sd-row-click-flash {
+    0%   { background: transparent; }
+    25%  { background: rgba(239, 68, 68, 0.14); }
+    65%  { background: rgba(239, 68, 68, 0.06); }
+    100% { background: transparent; }
+  }
+
+  /* Plan toast slides down from above into top-right corner. Delay 1200ms from twin-panel mount. */
+  @keyframes sd-plan-toast-slide {
+    from { opacity: 0; transform: translateY(-32px); }
+    60%  { opacity: 1; }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .sd-plan-toast-slide { animation: sd-plan-toast-slide 0.45s cubic-bezier(.34,1.35,.56,1) both; animation-delay: 1200ms; }
+
+  /* Toast snaps in when plan is activated */
+  @keyframes sd-toast-activated-kf {
+    from { opacity: 0.7; transform: scale(0.95); }
+    to   { opacity: 1;   transform: scale(1); }
+  }
+  .sd-toast-activated { animation: sd-toast-activated-kf 0.3s cubic-bezier(.34,1.4,.64,1) both; }
+
+  /* Cursor slides from left (60,140) to Activate button — delta +296px, -72px. 2600ms delay. */
+  @keyframes sd-cursor-activate {
+    0%   { transform: translate(0, 0); opacity: 0; }
+    6%   { opacity: 1; }
+    62%  { transform: translate(296px, -72px); opacity: 1; }
+    72%  { transform: translate(296px, -72px) scale(0.78); opacity: 1; }
+    82%  { transform: translate(296px, -72px) scale(1.08); opacity: 1; }
+    90%  { transform: translate(296px, -72px) scale(1);    opacity: 1; }
+    100% { transform: translate(296px, -72px) scale(1);    opacity: 0; }
+  }
+  .sd-cursor-activate { animation: sd-cursor-activate 1.3s ease-in-out both; animation-delay: 2600ms; }
+
+  /* Activate button press — fires at cursor click moment: 2600ms + 62%×1300ms = 3406ms */
+  .sd-btn-activate-press { animation: sd-btn-press 0.35s cubic-bezier(.34,1.4,.64,1) both; animation-delay: 3406ms; }
 `;
 
 /* ─────────────────────────────────────────────────────────────
    TYPES
 ───────────────────────────────────────────────────────────────*/
 type Scene =
-  | 'idle' | 'dashboard' | 'notification' | 'perf-glow'
-  | 'perf-panel' | 'twin-panel' | 'confirmed' | 'phone'
+  | 'idle' | 'dashboard' | 'bell-ping' | 'cursor-to-bell' | 'notification' | 'perf-glow'
+  | 'perf-panel' | 'twin-panel' | 'phone'
   | 'outcome' | 'fading';
 
 /* ─────────────────────────────────────────────────────────────
@@ -657,13 +786,13 @@ const CAL_DAYS = [
   { d: 'Wed', n: '20' }, { d: 'Thu', n: '21' }, { d: 'Fri', n: '22' },
 ];
 
-interface DashboardProps { perfGlowing?: boolean; twinGlowing?: boolean }
+interface DashboardProps { perfGlowing?: boolean; twinGlowing?: boolean; twinCardHidden?: boolean; perfCardHidden?: boolean; bellActive?: boolean; bellHiddenInHeader?: boolean }
 
-const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing }) => (
+const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing, twinCardHidden, perfCardHidden, bellActive, bellHiddenInHeader }) => (
   <div style={{ width: '100%', height: '100%', background: '#1976d2', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
     <div style={{ flexShrink: 0, padding: '6px 8px 4px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
             <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#111', display: 'grid', placeItems: 'center', color: 'white', fontSize: 7, fontWeight: 900, flexShrink: 0, position: 'relative', zIndex: 2, marginRight: -18 }}>PM</div>
             <div style={{ background: 'white', padding: '0px 22px 3px 25px', clipPath: 'polygon(0 0,100% 0,90% 100%,0 100%)', width: 90, position: 'relative', zIndex: 1 }}>
@@ -671,20 +800,11 @@ const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing }) => (
               <p style={{ fontSize: 6.5, color: '#2563eb', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>Mathematics ▾</p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <div style={{ position: 'relative', background: '#e5e7eb', borderRadius: 5, width: 20, height: 20, display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-              <svg width="10" height="10" fill="none" stroke="#374151" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              <div style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'grid', placeItems: 'center', color: 'white', fontSize: 4, fontWeight: 900 }}>1</div>
-            </div>
-            <div style={{ background: '#e5e7eb', borderRadius: 5, width: 20, height: 20, display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-              <svg width="10" height="10" fill="none" stroke="#374151" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-            </div>
-          </div>
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <div style={{ position: 'relative', background: '#e5e7eb', borderRadius: 5, width: 20, height: 20, display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+          <div style={{ position: 'relative', background: '#e5e7eb', borderRadius: 5, width: 20, height: 20, display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)', visibility: bellHiddenInHeader ? 'hidden' : undefined }}>
             <svg width="10" height="10" fill="none" stroke="#374151" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            <div style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'grid', placeItems: 'center', color: 'white', fontSize: 4, fontWeight: 900 }}>1</div>
+            {bellActive && <div className="sd-bell-badge-pop" style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: '50%', background: '#ef4444', display: 'grid', placeItems: 'center', color: 'white', fontSize: 4, fontWeight: 900 }}>1</div>}
           </div>
           <div style={{ background: '#e5e7eb', borderRadius: 5, width: 20, height: 20, display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
             <svg width="10" height="10" fill="none" stroke="#374151" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
@@ -735,7 +855,7 @@ const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing }) => (
               ))}
             </div>
           </div>
-          <div className={perfGlowing ? 'sd-ring-pulse' : undefined} style={{ flex: 1, background: '#f0f4f8', borderRadius: 8, padding: '8px 10px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className={perfGlowing ? 'sd-ring-pulse' : undefined} style={{ flex: 1, background: '#f0f4f8', borderRadius: 8, padding: '8px 10px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden', display: 'flex', flexDirection: 'column', visibility: perfCardHidden ? 'hidden' : undefined }}>
             <p style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#111', marginBottom: 6 }}>Performance</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden', flex: 1 }}>
               {PERF_STUDENTS.map(st => (
@@ -750,7 +870,7 @@ const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing }) => (
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-        <div className={twinGlowing ? 'sd-ring-pulse' : undefined} style={{ background: '#f0f4f8', borderRadius: 8, padding: '6px 8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div className={twinGlowing ? 'sd-ring-pulse' : undefined} style={{ background: '#f0f4f8', borderRadius: 8, padding: '6px 8px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', flex: '1 1 0', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', visibility: twinCardHidden ? 'hidden' : undefined }}>
           <p style={{ fontSize: 8, fontWeight: 900, textTransform: 'uppercase', color: '#111', textAlign: 'center', marginBottom: 4, flexShrink: 0 }}>Student Development</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexShrink: 0 }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#111', display: 'grid', placeItems: 'center', color: 'white', fontSize: 8, fontWeight: 900, flexShrink: 0 }}>LM</div>
@@ -816,35 +936,38 @@ const Backdrop: React.FC = () => (
 const SceneNotification: React.FC = () => (
   <>
     <Backdrop />
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', justifyContent: 'flex-end', padding: '10px 12px 0 0' }}>
-      <div className="sd-slide-down" style={{ background: 'white', borderRadius: 10, overflow: 'hidden', width: 210, boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
-        <div style={{ background: '#059669', padding: '10px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 7, background: 'rgba(255,255,255,.2)', display: 'grid', placeItems: 'center' }}>
-              <CheckCircle size={13} color="white" />
-            </div>
-            <div>
-              <p style={{ color: 'white', fontWeight: 900, fontSize: 10 }}>Algebra Test Auto-Graded</p>
-              <p style={{ color: 'rgba(255,255,255,.75)', fontSize: 8, fontWeight: 600 }}>38 submissions · 4 seconds</p>
-            </div>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+      <div className="sd-modal-lift-notif" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '58%' }}>
+
+        {/* Bell grown from header */}
+        <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 9, background: '#e5e7eb', display: 'grid', placeItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+          <svg width="18" height="18" fill="none" stroke="#374151" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <div style={{ position: 'absolute', top: -4, right: -4, width: 13, height: 13, borderRadius: '50%', background: '#ef4444', border: '2px solid white', display: 'grid', placeItems: 'center', color: 'white', fontSize: 7, fontWeight: 900 }}>1</div>
+        </div>
+
+        {/* Notification card */}
+        <div style={{ background: '#f0f4f8', borderRadius: 10, overflow: 'hidden', width: '100%', boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.4)' }}>
+          <div style={{ padding: '9px 14px', borderBottom: '1px solid #e3e8ee' }}>
+            <p style={{ fontWeight: 900, fontSize: 12, color: '#111' }}>Algebra Test Auto-Graded</p>
+            <p style={{ fontSize: 9, color: '#6b7280', marginTop: 1 }}>38 submissions · 4 seconds</p>
+          </div>
+          <div className="sd-fade-up" style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px' }}>
+            <AlertTriangle size={11} color="#d97706" />
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>4 students flagged</p>
           </div>
         </div>
-        <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <div className="sd-fade-up" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', borderRadius: 5, padding: '5px 7px' }}>
-            <Zap size={10} color="#2563eb" />
-            <p style={{ fontSize: 9, fontWeight: 600, color: '#374151' }}>Marked in <strong>4 seconds</strong></p>
-          </div>
-          <div className="sd-fade-up" style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fffbeb', borderRadius: 5, padding: '5px 7px', animationDelay: '120ms' }}>
-            <AlertTriangle size={10} color="#d97706" />
-            <p style={{ fontSize: 9, fontWeight: 600, color: '#92400e' }}><strong>4 students flagged</strong></p>
-          </div>
-        </div>
-        <div style={{ padding: '0 12px 10px', display: 'flex', gap: 6 }}>
-          <button style={{ flex: 1, fontSize: 9, fontWeight: 700, padding: '6px 0', borderRadius: 6, background: '#f3f4f6', color: '#6b7280', border: 'none' }}>Close</button>
-          <button style={{ flex: 1, fontSize: 9, fontWeight: 700, padding: '6px 0', borderRadius: 6, background: '#2563eb', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+
+        {/* Buttons below the card */}
+        <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+          <button style={{ flex: 1, fontSize: 9, fontWeight: 700, padding: '5px 0', borderRadius: 6, background: '#e5e7eb', color: '#6b7280', border: 'none' }}>Close</button>
+          <button className="sd-btn-view-press" style={{ flex: 1, fontSize: 9, fontWeight: 700, padding: '5px 0', borderRadius: 6, background: '#2563eb', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
             View <ChevronRight size={9} />
           </button>
         </div>
+
       </div>
     </div>
   </>
@@ -854,91 +977,79 @@ const SceneNotification: React.FC = () => (
    SCENE: Performance panel
 ───────────────────────────────────────────────────────────────*/
 const PERF_ROWS = [
-  { name: 'Chipo Ndlovu',  score: 92, w: '92%', c: '#22c55e', f: false },
-  { name: 'Farai Sibanda', score: 81, w: '81%', c: '#22c55e', f: false },
-  { name: 'Tatenda Banda', score: 64, w: '64%', c: '#3b82f6', f: false },
-  { name: 'Tapiwa Moyo',   score: 38, w: '38%', c: '#ef4444', f: true  },
+  // worst first — Tapiwa is immediately visible at the top
+  { name: 'Tapiwa Moyo',    score: 38, f: true  },
+  { name: 'Rudo Chikwanda', score: 44, f: false },
+  { name: 'Prosper Ncube',  score: 51, f: false },
+  { name: 'Blessing Dube',  score: 58, f: false },
+  { name: 'Tatenda Banda',  score: 62, f: false },
+  { name: 'Nyasha Mutasa',  score: 67, f: false },
+  // 7th row peeks — scroll hint
+  { name: 'Farai Sibanda',  score: 76, f: false },
+  { name: 'Tafadzwa Nkosi', score: 83, f: false },
+  { name: 'Chipo Ndlovu',   score: 92, f: false },
 ];
 
 const ScenePerfPanel: React.FC = () => (
   <>
     <Backdrop />
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 20,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 12,
-      }}
-    >
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div
         className="sd-modal-lift-perf"
         style={{
           background: '#f0f4f8',
           borderRadius: 12,
-          padding: '14px 18px',
+          padding: '12px 16px',
           boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.4)',
           display: 'flex',
           flexDirection: 'column',
           width: '62%',
-          maxHeight: '78%',
+          maxHeight: '82%',
           overflow: 'hidden',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <p style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', color: '#111', letterSpacing: '0.02em' }}>
-            Performance
-          </p>
-          <span style={{ fontSize: 8, fontWeight: 900, color: '#1d4ed8', background: '#dbeafe', padding: '3px 7px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Quadratics Test
-          </span>
+        <div style={{ marginBottom: 8, flexShrink: 0 }}>
+          <p style={{ fontSize: 12, fontWeight: 900, textTransform: 'uppercase', color: '#111', letterSpacing: '0.02em', textAlign: 'center' }}>Performance</p>
+          <p style={{ fontSize: 8, fontWeight: 600, color: '#6b7280', marginTop: 2, textAlign: 'left' }}>Latest Assessment: Algebra Test</p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden', flex: 1 }}>
-          {PERF_ROWS.map((st, idx) => (
-            <div
-              key={st.name}
-              className="sd-fade-up"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                paddingBottom: 7,
-                borderBottom: '1px solid #e3e8ee',
-                animationDelay: `${idx * 80}ms`,
-              }}
-            >
-              <p style={{
-                fontSize: 12,
-                fontWeight: st.f ? 900 : 500,
-                color: st.f ? '#dc2626' : '#374151',
-                flexShrink: 0,
-                minWidth: 0,
-                flex: '0 1 auto',
-              }}>
-                {st.name}
-              </p>
-              <div style={{ flex: 1, background: '#e5e7eb', borderRadius: 99, height: 5, overflow: 'hidden', maxWidth: 180 }}>
-                <div className="sd-grow-bar" style={{ width: st.w, background: st.c, height: 5, borderRadius: 99, animationDelay: `${idx * 80 + 100}ms` }} />
+        {/* Scrollable list — ~4 full rows + 5th peeking */}
+        <div style={{ position: 'relative', minHeight: 0 }}>
+          <div className="custom-scrollbar" style={{ overflowY: 'auto', maxHeight: 132, paddingRight: 2 }}>
+            {PERF_ROWS.map((st, idx) => (
+              <div
+                key={st.name}
+                className={idx === 0 ? undefined : 'sd-fade-up'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  borderBottom: '1px solid #e3e8ee',
+                  animationDelay: idx === 0 ? undefined : `${idx * 60}ms`,
+                  animation: idx === 0
+                    ? `sd-fadeUp .3s 0ms ease both, sd-row-click-flash 0.4s 1506ms ease both`
+                    : undefined,
+                }}
+              >
+                <p style={{ fontSize: 10, fontWeight: st.f ? 900 : 500, color: st.f ? '#dc2626' : '#374151' }}>
+                  {st.name}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {st.f && <AlertTriangle size={9} color="#f97316" />}
+                  <span style={{ fontSize: 10, fontWeight: 700, color: st.f ? '#dc2626' : '#374151' }}>
+                    {st.score}%
+                  </span>
+                </div>
               </div>
-              <span style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: st.f ? '#dc2626' : '#374151',
-                minWidth: 36,
-                textAlign: 'right',
-              }}>
-                {st.score}%
-              </span>
-            </div>
-          ))}
-          <p className="sd-fade-up" style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', marginTop: 4, animationDelay: '450ms' }}>
-            Class avg <strong style={{ color: '#374151' }}>71%</strong> · Tapiwa <strong style={{ color: '#dc2626' }}>33pts below</strong>
-          </p>
+            ))}
+            <p className="sd-fade-up" style={{ fontSize: 9, color: '#9ca3af', fontStyle: 'italic', marginTop: 5, paddingBottom: 4, animationDelay: '600ms' }}>
+              Class avg <strong style={{ color: '#374151' }}>63%</strong> · Tapiwa 25pts below
+            </p>
+          </div>
+          {/* Fade hint — 5th row peeks through */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 22, background: 'linear-gradient(to bottom, transparent, #f0f4f8)', pointerEvents: 'none' }} />
         </div>
       </div>
     </div>
@@ -949,85 +1060,62 @@ const ScenePerfPanel: React.FC = () => (
    SCENE: Digital twin panel
 ───────────────────────────────────────────────────────────────*/
 const TAPIWA_ATTRS = [
-  { l: 'Real Numbers',   v: 78 },
-  { l: 'Sets',           v: 72 },
-  { l: 'Financial Mat.', v: 65 },
-  { l: 'Graphs',         v: 70 },
-  { l: 'Algebra',        v: 82 },
-  { l: 'Geometry',       v: 64 },
-  { l: 'Statistics',     v: 38 },
+  { l: 'Subst.',     v: 56 },
+  { l: 'Factors',    v: 42 },
+  { l: 'Quadratics', v: 32 },
+  { l: 'Ineqs.',     v: 39 },
+  { l: 'Linear Eqs', v: 48 },
+  { l: 'Exprs.',     v: 44 },
+  { l: 'Word Prbs',  v: 38 },
 ];
 
 const SceneTwinPanel: React.FC<{ approved?: boolean }> = ({ approved }) => (
   <>
     <Backdrop />
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 20,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 12,
-      }}
-    >
+
+    {/* Centered twin modal */}
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div
         className="sd-modal-lift-twin"
         style={{
           background: '#f0f4f8',
           borderRadius: 12,
-          padding: '14px 18px',
+          padding: '12px 16px',
           boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.4)',
           display: 'flex',
           flexDirection: 'column',
-          width: '64%',
+          width: '62%',
           maxHeight: '88%',
           overflow: 'hidden',
         }}
       >
-        <p style={{
-          fontSize: 11,
-          fontWeight: 900,
-          textTransform: 'uppercase',
-          color: '#111',
-          textAlign: 'center',
-          marginBottom: 10,
-          letterSpacing: '0.04em',
-        }}>
+        <p style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', color: '#111', textAlign: 'center', marginBottom: 8, letterSpacing: '0.04em' }}>
           Student Development
         </p>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: '#111', display: 'grid', placeItems: 'center',
-            color: 'white', fontSize: 11, fontWeight: 900, flexShrink: 0,
-          }}>
-            TM
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#111', display: 'grid', placeItems: 'center', color: 'white', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>TM</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#111', lineHeight: 1.1 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#111', lineHeight: 1.1 }}>
               Moyo <span style={{ fontWeight: 400, color: '#6b7280' }}>Tapiwa</span>
             </p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
-              <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1, color: '#111' }}>78</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af' }}>OVR</span>
+              <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1, color: '#dc2626' }}>43</span>
+              <span style={{ fontSize: 8, fontWeight: 700, color: '#9ca3af' }}>OVR</span>
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <p style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Form 3</p>
-            <p style={{ fontSize: 9, color: '#3b82f6', fontWeight: 900, textTransform: 'uppercase', marginTop: 2 }}>3 Plans</p>
-            <p style={{ fontSize: 9, color: '#10b981', fontWeight: 900, textTransform: 'uppercase' }}>Active · Algebra</p>
+            <p style={{ fontSize: 8, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Form 3</p>
+            <p style={{ fontSize: 8, color: '#ef4444', fontWeight: 900, textTransform: 'uppercase', marginTop: 2 }}>Below threshold</p>
           </div>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontWeight: 700, color: '#9ca3af', marginBottom: 3 }}>
-            <span>Current: 67%</span><span>Potential: 92%</span>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8, fontWeight: 700, color: '#9ca3af', marginBottom: 3 }}>
+            <span>Algebra: 38%</span><span>Target: 71%</span>
           </div>
-          <div style={{ background: '#e5e7eb', borderRadius: 99, height: 6, overflow: 'hidden' }}>
-            <div className="sd-grow-bar" style={{ width: '67%', background: '#22c55e', height: 6, borderRadius: 99 }} />
+          <div style={{ background: '#e5e7eb', borderRadius: 99, height: 5, overflow: 'hidden' }}>
+            <div className="sd-grow-bar" style={{ width: '38%', background: '#ef4444', height: 5, borderRadius: 99 }} />
           </div>
         </div>
 
@@ -1037,139 +1125,75 @@ const SceneTwinPanel: React.FC<{ approved?: boolean }> = ({ approved }) => (
           gridTemplateRows: 'auto auto',
           alignContent: 'center',
           gap: '3px 0',
-          marginBottom: 12,
-          padding: '8px 0',
+          padding: '7px 0',
           borderTop: '1px solid #e3e8ee',
           borderBottom: '1px solid #e3e8ee',
         }}>
           {TAPIWA_ATTRS.map((a, i) => (
-            <p
-              key={`n-${a.l}`}
-              className="sd-fade-up"
-              style={{
-                fontSize: 7,
-                color: '#9ca3af',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                textAlign: 'center',
-                lineHeight: 1.2,
-                wordBreak: 'break-word',
-                margin: 0,
-                animationDelay: `${i * 60}ms`,
-              }}
-            >
-              {a.l}
-            </p>
+            <p key={`n-${a.l}`} className="sd-fade-up" style={{
+              fontSize: 6, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase',
+              textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-word', margin: 0,
+              animationDelay: `${i * 60}ms`,
+            }}>{a.l}</p>
           ))}
-          {TAPIWA_ATTRS.map((a, i) => {
-            const color = a.v < 50 ? '#ef4444' : a.v < 70 ? '#3b82f6' : '#22c55e';
-            const isWeak = a.v < 50;
-            return (
-              <p
-                key={`v-${a.l}`}
-                className="sd-fade-up"
-                style={{
-                  fontSize: 11,
-                  fontWeight: 900,
-                  color,
-                  textAlign: 'center',
-                  margin: 0,
-                  animationDelay: `${i * 60 + 80}ms`,
-                  textShadow: isWeak ? '0 0 12px rgba(239,68,68,0.4)' : 'none',
-                }}
-              >
-                {a.v}%
-              </p>
-            );
-          })}
-        </div>
-
-        <div
-          className="sd-fade-up"
-          style={{
-            background: '#fffbeb',
-            border: '1px solid #fde68a',
-            borderRadius: 8,
-            padding: '8px 10px',
-            marginBottom: 8,
-            animationDelay: '620ms',
-          }}
-        >
-          <p style={{ fontSize: 9, fontWeight: 900, color: '#92400e', textTransform: 'uppercase', marginBottom: 2, letterSpacing: '0.04em' }}>
-            KundAI detected a gap
-          </p>
-          <p style={{ fontSize: 10, color: '#b45309' }}>
-            Stats 38% — 33pts below class avg. Weak on probability trees.
-          </p>
-        </div>
-
-        <div
-          className="sd-fade-up"
-          style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            borderRadius: 8,
-            padding: '8px 10px',
-            marginBottom: 10,
-            animationDelay: '780ms',
-          }}
-        >
-          <p style={{ fontSize: 10, fontWeight: 900, color: '#14532d', marginBottom: 5 }}>
-            Plan generated — 14 steps · Statistics focus
-          </p>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {['Probability trees', 'Data interpretation', 'Past papers'].map(t => (
-              <span key={t} style={{ fontSize: 8, fontWeight: 700, background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: 99 }}>
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{
-            flex: 1, fontSize: 11, fontWeight: 700, padding: '8px 0',
-            borderRadius: 7, background: '#e5e7eb', color: '#6b7280', border: 'none',
-          }}>
-            Review Plan
-          </button>
-          <button style={{
-            flex: 1, fontSize: 11, fontWeight: 700, padding: '8px 0',
-            borderRadius: 7,
-            background: approved ? '#059669' : '#2563eb',
-            color: 'white', border: 'none',
-            transition: 'background .3s',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-          }}>
-            {approved ? '✓ Approved' : <><span>Approve Plan</span><ArrowRight size={12} /></>}
-          </button>
+          {TAPIWA_ATTRS.map((a, i) => (
+            <p key={`v-${a.l}`} className="sd-fade-up" style={{
+              fontSize: 10, fontWeight: 900, color: '#ef4444',
+              textAlign: 'center', margin: 0,
+              opacity: a.l === 'Quadratics' ? 0.65 : 1,
+              animationDelay: `${i * 60 + 80}ms`,
+              textShadow: '0 0 10px rgba(239,68,68,0.35)',
+            }}>{a.v}%</p>
+          ))}
         </div>
       </div>
     </div>
+
+    {/* Plan toast — top-right, slides in 1200ms after twin-panel mounts */}
+    {!approved ? (
+      <div
+        className="sd-plan-toast-slide"
+        style={{
+          position: 'absolute', top: 10, right: 10, width: 200, zIndex: 22,
+          borderRadius: 10, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.3)',
+        }}
+      >
+        <div style={{ background: '#2563eb', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <AlertTriangle size={10} color="rgba(255,255,255,0.85)" />
+          <p style={{ color: 'white', fontWeight: 900, fontSize: 10 }}>KundAI Plan Ready</p>
+        </div>
+        <div style={{ background: '#f0f4f8', padding: '7px 12px' }}>
+          <p style={{ fontSize: 9, color: '#374151', marginBottom: 5 }}>14 steps · Algebra focus · Quadratics 32%</p>
+          <button
+            className="sd-btn-activate-press"
+            style={{ width: '100%', fontSize: 9, fontWeight: 700, padding: '5px 0', borderRadius: 5, background: '#2563eb', color: 'white', border: 'none', cursor: 'default' }}
+          >
+            Activate Plan
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div
+        className="sd-toast-activated"
+        style={{
+          position: 'absolute', top: 10, right: 10, width: 200, zIndex: 22,
+          borderRadius: 10, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.3)',
+        }}
+      >
+        <div style={{ background: '#059669', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <CheckCircle size={10} color="white" />
+          <p style={{ color: 'white', fontWeight: 900, fontSize: 10 }}>Plan Activated</p>
+        </div>
+        <div style={{ background: '#f0fdf4', padding: '7px 12px' }}>
+          <p style={{ fontSize: 9, color: '#059669', fontWeight: 700 }}>14-step Algebra plan · first checkpoint in 3 days</p>
+        </div>
+      </div>
+    )}
   </>
 );
 
-/* ─────────────────────────────────────────────────────────────
-   SCENE: Confirmed
-───────────────────────────────────────────────────────────────*/
-const SceneConfirmed: React.FC = () => (
-  <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'flex-end', padding: '0 0 10px 10px' }}>
-    <div className="sd-slide-up" style={{ background: 'white', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, maxWidth: 230, border: '1px solid #bbf7d0', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
-      <div style={{ width: 28, height: 28, borderRadius: 7, background: '#dcfce7', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-        <CheckCircle size={13} color="#16a34a" />
-      </div>
-      <div style={{ flex: 1 }}>
-        <p style={{ fontSize: 10, fontWeight: 900, color: '#111' }}>Tapiwa's Plan Activated</p>
-        <p style={{ fontSize: 9, color: '#6b7280', marginTop: 2 }}>ETA: 3 days to first checkpoint</p>
-        <div style={{ display: 'flex', gap: 3, marginTop: 6, flexWrap: 'wrap' }}>
-          {[['14 steps', '#dcfce7', '#166534'], ['Stats focus', '#dbeafe', '#1e40af'], ['WhatsApp active', '#ede9fe', '#5b21b6']].map(([label, bg, color]) => (
-            <span key={label} style={{ fontSize: 7, fontWeight: 900, background: bg, color, padding: '2px 5px', borderRadius: 99, textTransform: 'uppercase' }}>{label}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
-);
 
 /* ─────────────────────────────────────────────────────────────
    SCENE: Outcome
@@ -1224,15 +1248,17 @@ interface WaMessage {
   id: number; from: 'kundai' | 'tapiwa';
   text: string; time: string;
   typed: string; done: boolean;
+  partial?: boolean;
 }
 
 const WA_MESSAGES: Omit<WaMessage, 'typed' | 'done'>[] = [
-  { id: 1, from: 'kundai',  text: 'Hie Tapiwa! 👋', time: '10:42 AM' },
-  { id: 2, from: 'kundai',  text: 'Your KundAI has flagged something important regarding your Statistics performance. 📊', time: '10:42 AM' },
-  { id: 3, from: 'kundai',  text: 'MISSION BRIEFING\n\nAgent Tapiwa, your Statistics score has dropped to 38%. We have assembled a 14-step plan specifically for you.', time: '10:42 AM' },
-  { id: 4, from: 'kundai',  text: 'Your mission:\n\n✅ Probability trees — 5 sessions\n✅ Data interpretation — 4 sessions\n✅ Past paper drills — 5 sessions', time: '10:43 AM' },
-  { id: 5, from: 'tapiwa',  text: "Mission accepted. Let's go! 🔥", time: '10:43 AM' },
-  { id: 6, from: 'kundai',  text: 'Outstanding. Session 1: Probability Trees.\n\nP(Heads) = ½ · P(Tails) = ½\n\nIf P(rain) = 0.4, what is P(no rain)? Reply with your answer. 🎯', time: '10:44 AM' },
+  { id: 1, from: 'kundai',  text: 'Hie Tapiwa! 👋', time: '16:42 AM' },
+  { id: 2, from: 'kundai',  text: "Your teacher flagged your Algebra score — 38% on the test. I've been through your paper and I can see exactly where things broke down. 📊", time: '16:42 AM' },
+  { id: 3, from: 'kundai',  text: "MISSION BRIEFING\n\nAgent Tapiwa, I've built you a 14-step Algebra plan. We're starting with Quadratics — you scored 32% there and it's your biggest gap right now.", time: '16:42 AM' },
+  { id: 4, from: 'kundai',  text: 'Your mission should you choose to accept it:\n\n✅ Quadratics — 5 sessions\n✅ Factorisation — 4 sessions\n✅ Linear equations — 5 sessions\n\nThis message will self destruct in 5..4..3.. just kidding😄', time: '16:43 AM' },
+  { id: 5, from: 'tapiwa',  text: "Mission accepted. Let's go! 🔥", time: '16:43 AM' },
+  { id: 6, from: 'kundai', text: "Let's go back to Question 4. You had to factorise x² + 5x + 6.\n\nYou wrote (x+2)(x+4) — right shape, close thinking. But let's check it:\n\n(x+2)(x+4) = x² + 4x + 2x + 8 = x² + 6x + 8\n\nSee it? You got +8 instead of +6. The numbers 2 and 4 multiply to 8, not 6.\n\nHere's the rule: to factorise x² + bx + c, you need two numbers that do both jobs:\n\n✅ multiply to c (the last number)\n✅ add to b (the middle number)\n\nFor x² + 5x + 6 — try 1 and 6: 1×6 = 6 ✓ but 1+6 = 7 ✗\n\nNow you try. What pair works? 🎯", time: '16:44 AM' },
+  { id: 7, from: 'tapiwa', text: 'WAIT i picked the wrong pair 😭 its 2 and 3 innit', time: '16:44 AM', partial: true },
 ];
 
 /* ── iOS Keyboard layout ──
@@ -1429,12 +1455,34 @@ const PhoneMockup: React.FC<{ started: boolean; onComplete?: () => void }> = ({ 
       const cfg = WA_MESSAGES[cursor++];
 
       if (cfg.from === 'tapiwa') {
-        // Tapiwa types on the keyboard with live 3D tilt
         setStatus('online');
         setShowTyping(false);
+
+        if (cfg.partial) {
+          // Tapiwa starts typing but never sends — story ends here with keyboard open
+          setKbActive(true);
+          setKbMode('abc');
+          setKbDraft('');
+          await sleep(480);
+          for (const ch of Array.from(cfg.text)) {
+            if (cancelled) return;
+            const kp = findKeyCoords(ch);
+            const tiltTarget = tiltFor(kp);
+            setTilt(tiltTarget);
+            if (kp) setPressedKey({ ...kp, ts: Date.now() });
+            setKbDraft(prev => prev + ch);
+            await sleep(155 + Math.random() * 85);
+            setTilt({ rx: tiltTarget.rx * 0.32, ry: tiltTarget.ry * 0.32 });
+            await sleep(80);
+          }
+          // Keyboard and draft stay visible — call onComplete to trigger the restart chain
+          onComplete?.();
+          return;
+        }
+
+        // Normal Tapiwa message — full type-and-send
         await typeTapiwaOnKeyboard(cfg.text);
         if (cancelled) return;
-        // After "sending", the bubble appears in the chat fully formed
         setMessages(prev => [...prev, { ...cfg, typed: cfg.text, done: true }]);
         await sleep(500);
       } else {
@@ -1988,14 +2036,14 @@ function useSequencer(visible: boolean) {
     setTwinApproved(false);
     setSwapPhase('none');
     setScene('dashboard');
-    after(1800,  () => setScene('notification'));
-    after(5000,  () => setScene('perf-glow'));
-    after(6400,  () => setScene('perf-panel'));
-    after(10200, () => setScene('twin-panel'));
-    after(11500, () => setTwinApproved(true));
-    after(14200, () => setScene('confirmed'));
-    // Cinematic swap begins here instead of directly going to 'phone'
-    after(16800, triggerSwap);
+    after(3000,  () => setScene('bell-ping'));        // badge pops onto bell
+    after(4200,  () => setScene('cursor-to-bell'));   // cursor moves to bell & clicks
+    after(5500,  () => setScene('notification'));     // notification modal opens
+    after(8700,  () => setScene('perf-glow'));
+    after(10100, () => setScene('perf-panel'));       // perf modal: cursor clicks Tapiwa at ~1506ms
+    after(12300, () => setScene('twin-panel'));       // twin lifts; toast slides in at +1200ms
+    after(16300, () => setTwinApproved(true));        // cursor clicks Activate at +3406ms; approve at +4000ms
+    after(18300, triggerSwap);
   }, [clearAll, after, triggerSwap]);
 
   const hasStarted = useRef(false);
@@ -2027,15 +2075,66 @@ function useSequencer(visible: boolean) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   CURSOR OVERLAY
+───────────────────────────────────────────────────────────────*/
+const CursorSVG = () => (
+  <svg width="13" height="16" viewBox="0 0 13 16" fill="none">
+    <path d="M1 1L1 14L4.5 10.5L7 15.5L9 14.5L6.5 9.5L11 9.5L1 1Z" fill="#111827" stroke="white" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" />
+  </svg>
+);
+
+const CursorOverlay: React.FC = () => (
+  <div style={{ position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div className="sd-cursor-sequence" style={{ position: 'absolute', left: 180, top: 140 }}>
+      <CursorSVG />
+    </div>
+  </div>
+);
+
+const CursorViewOverlay: React.FC = () => (
+  <div style={{ position: 'absolute', inset: 0, zIndex: 25, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div className="sd-cursor-view-click" style={{ position: 'absolute', left: 424, top: 16 }}>
+      <CursorSVG />
+    </div>
+  </div>
+);
+
+const CursorPerfRowOverlay: React.FC = () => (
+  <div style={{ position: 'absolute', inset: 0, zIndex: 25, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div className="sd-cursor-perf-row" style={{ position: 'absolute', left: 360, top: 120 }}>
+      <CursorSVG />
+    </div>
+  </div>
+);
+
+const CursorActivateOverlay: React.FC = () => (
+  <div style={{ position: 'absolute', inset: 0, zIndex: 25, pointerEvents: 'none', overflow: 'hidden' }}>
+    <div className="sd-cursor-activate" style={{ position: 'absolute', left: 60, top: 140 }}>
+      <CursorSVG />
+    </div>
+  </div>
+);
+
+/* ─────────────────────────────────────────────────────────────
    SCREEN CONTENT
 ───────────────────────────────────────────────────────────────*/
 const ScreenContent: React.FC<{ scene: Scene; twinApproved: boolean }> = ({ scene, twinApproved }) => (
   <>
-    <Dashboard perfGlowing={scene === 'perf-glow'} twinGlowing={scene === 'twin-panel'} />
-    {scene === 'notification' && <SceneNotification />}
-    {scene === 'perf-panel'   && <ScenePerfPanel />}
-    {scene === 'twin-panel'   && <SceneTwinPanel approved={twinApproved} />}
-    {scene === 'confirmed'    && <SceneConfirmed />}
+    <Dashboard
+      perfGlowing={scene === 'perf-glow'}
+      twinGlowing={scene === 'twin-panel'}
+      twinCardHidden={scene === 'twin-panel'}
+      perfCardHidden={scene === 'perf-panel'}
+      bellActive={scene === 'bell-ping' || scene === 'cursor-to-bell'}
+      bellHiddenInHeader={scene === 'notification'}
+    />
+    {scene === 'cursor-to-bell'              && <CursorOverlay />}
+    {scene === 'notification'                && <SceneNotification />}
+    {scene === 'notification'                && <CursorViewOverlay />}
+    {scene === 'perf-panel'                  && <ScenePerfPanel />}
+    {scene === 'perf-panel'                  && <CursorPerfRowOverlay />}
+    {scene === 'twin-panel'                  && <SceneTwinPanel approved={twinApproved} />}
+    {scene === 'twin-panel' && !twinApproved && <CursorActivateOverlay />}
     {(scene === 'outcome' || scene === 'fading') && <SceneOutcome />}
   </>
 );
@@ -2043,28 +2142,24 @@ const ScreenContent: React.FC<{ scene: Scene; twinApproved: boolean }> = ({ scen
 /* ─────────────────────────────────────────────────────────────
    STEP STRIP
 ───────────────────────────────────────────────────────────────*/
-const STEPS: { id: Scene; label: string }[] = [
-  { id: 'dashboard',    label: 'Dashboard'   },
-  { id: 'notification', label: 'Auto-graded' },
-  { id: 'perf-glow',   label: 'Flagged'      },
-  { id: 'perf-panel',  label: 'Performance'  },
-  { id: 'twin-panel',  label: 'Twin'         },
-  { id: 'confirmed',   label: 'Approved'     },
-  { id: 'phone',       label: 'Notified'     },
-  { id: 'outcome',     label: 'Outcome'      },
+const NARRATION_STEPS: { text: string; scenes: Set<Scene> }[] = [
+  {
+    text: 'Assessment submissions that go through KundAI are automatically graded',
+    scenes: new Set<Scene>(['dashboard', 'bell-ping', 'cursor-to-bell', 'notification']),
+  },
+  {
+    text: "KundAI detects the knowledge gaps from the student's answers",
+    scenes: new Set<Scene>(['perf-glow', 'perf-panel']),
+  },
+  {
+    text: 'KundAI prepares a student development plan to tackle the gaps',
+    scenes: new Set<Scene>(['twin-panel']),
+  },
+  {
+    text: 'KundAI teaches the student on WhatsApp addressing all gaps detected',
+    scenes: new Set<Scene>(['phone', 'outcome', 'fading']),
+  },
 ];
-
-const LABELS: Partial<Record<Scene, string>> = {
-  dashboard:    'Teacher opens the dashboard',
-  notification: 'Auto-grade complete — 38 submissions in 4 seconds',
-  'perf-glow':  'Performance panel flagging Tapiwa',
-  'perf-panel': 'Tapiwa flagged — 33pts below class average',
-  'twin-panel': 'Digital twin — plan approved',
-  confirmed:    'Plan activated — WhatsApp incoming',
-  phone:        'Teaching Tapiwa live on WhatsApp',
-  outcome:      'Tapiwa: 38% → 61% in 3 days',
-  fading:       'Tapiwa: 38% → 61% in 3 days',
-};
 
 /* ─────────────────────────────────────────────────────────────
    MAIN EXPORT
@@ -2090,7 +2185,7 @@ export const StoryDemo: React.FC = () => {
   // Phone is visible once swap starts or scene is phone/outcome
   const showPhone = swapPhase === 'phone-in' || swapPhase === 'flash' || scene === 'phone' || scene === 'outcome' || scene === 'fading';
 
-  const activeIdx = STEPS.findIndex(s => s.id === scene || (scene === 'fading' && s.id === 'outcome'));
+  const activeNarrationIdx = NARRATION_STEPS.findIndex(s => s.scenes.has(scene));
 
   return (
     <section
@@ -2119,37 +2214,40 @@ export const StoryDemo: React.FC = () => {
           {/* Narration slot (vertically centered in remaining space) */}
           <div className="flex-1 flex flex-col justify-center mt-8">
             {scene !== 'idle' && (
-              <div className="space-y-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Now showing</p>
-                <p key={scene} className="sd-fade-up text-xl font-bold text-gray-900 tracking-tight leading-snug">
-                  {LABELS[scene]}
-                </p>
-
-                <div className="pt-4 space-y-1.5" aria-hidden>
-                  {STEPS.map((step, idx) => {
-                    const isPast   = activeIdx > idx;
-                    const isActive = activeIdx === idx;
-                    return (
-                      <div key={step.id} className="flex items-center gap-3">
+              <div>
+                {NARRATION_STEPS.map((step, idx) => {
+                  const isPast   = activeNarrationIdx > idx;
+                  const isActive = activeNarrationIdx === idx;
+                  return (
+                    <div key={idx} className="flex gap-4 pb-7 last:pb-0">
+                      <div className="flex flex-col items-center flex-shrink-0">
                         <div
-                          className="rounded-full transition-all"
+                          className="rounded-full transition-all duration-300"
                           style={{
-                            width: isActive ? 8 : 6,
-                            height: isActive ? 8 : 6,
+                            width: isActive ? 10 : 7,
+                            height: isActive ? 10 : 7,
+                            marginTop: 3,
+                            flexShrink: 0,
                             background: isActive ? '#2563eb' : isPast ? '#93c5fd' : '#d1d5db',
                             boxShadow: isActive ? '0 0 0 4px rgba(37,99,235,0.15)' : 'none',
                           }}
                         />
-                        <p
-                          className="text-[11px] font-bold uppercase tracking-widest transition-colors"
-                          style={{ color: isActive ? '#111827' : isPast ? '#6b7280' : '#cbd5e1' }}
-                        >
-                          {step.label}
-                        </p>
+                        {idx < NARRATION_STEPS.length - 1 && (
+                          <div style={{ width: 1.5, flex: 1, minHeight: 20, marginTop: 4, background: isPast ? '#93c5fd' : '#e5e7eb', transition: 'background 0.3s' }} />
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                      <p
+                        className="text-sm leading-snug transition-all duration-300"
+                        style={{
+                          color: isActive ? '#111827' : isPast ? '#9ca3af' : '#d1d5db',
+                          fontWeight: isActive ? 700 : isPast ? 500 : 400,
+                        }}
+                      >
+                        {step.text}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
