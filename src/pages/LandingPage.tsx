@@ -246,7 +246,7 @@ const LandingPage: React.FC = () => {
       </nav>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden min-h-[calc(100vh-3.5rem)] flex flex-col justify-center">
         <div className="absolute inset-0 -z-10 pointer-events-none">
           <div className="absolute -top-32 -right-32 w-[520px] h-[520px] rounded-full bg-blue-200/40 blur-3xl" />
           <div className="absolute -bottom-40 -left-20 w-[420px] h-[420px] rounded-full bg-emerald-200/40 blur-3xl" />
@@ -308,7 +308,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* Features */}
-      <section id="features" className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70">
+      <section id="features" className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70 min-h-[calc(100vh-3.5rem)] flex flex-col justify-center scroll-mt-14">
         <div className="max-w-6xl mx-auto px-6 py-20">
           <div className="max-w-2xl mb-12">
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">What's inside</p>
@@ -336,11 +336,11 @@ const LandingPage: React.FC = () => {
       <StoryDemo />
 
       {/* Pricing */}
-      <section id="pricing" className="relative max-w-6xl mx-auto px-6 py-20">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">Pricing</p>
-          <h2 className="text-4xl font-black tracking-tighter text-gray-900">Pay per student. No surprises.</h2>
-          <p className="mt-3 text-gray-600">One transparent termly fee. Start free for 30 days — no card required.</p>
+      <section id="pricing" className="relative max-w-6xl mx-auto px-6 py-20 min-h-[calc(100vh-3.5rem)] flex flex-col justify-center">
+        <div className="text-center max-w-2xl mx-auto mb-8">
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1.5">Pricing</p>
+          <h2 className="text-3xl font-black tracking-tighter text-gray-900">Pay per student. No surprises.</h2>
+          <p className="mt-2 text-gray-600 text-sm">One transparent termly fee. Start free for 30 days — no card required.</p>
         </div>
 
         {pkgLoading ? (
@@ -363,7 +363,7 @@ const LandingPage: React.FC = () => {
               return (
                 <div
                   key={pkg._id}
-                  className={`relative rounded-xl p-6 flex flex-col transition-all bg-white ${
+                  className={`relative rounded-xl p-5 flex flex-col transition-all bg-white ${
                     featured
                       ? `shadow-xl shadow-blue-600/15 ring-2 ${t.ring}`
                       : `shadow-sm ring-1 ring-gray-100 ${t.hoverRing} hover:shadow-md`
@@ -375,29 +375,29 @@ const LandingPage: React.FC = () => {
                     </span>
                   )}
                   <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${t.eyebrow}`}>{pkg.type}</p>
-                  <p className="text-gray-900 text-xl font-bold tracking-tight">{pkg.name}</p>
-                  <div className="flex items-baseline gap-1.5 mt-4">
-                    <span className={`text-5xl font-black tracking-tighter ${t.price}`}>${pkg.pricePerStudent.toFixed(2)}</span>
-                    <span className="text-gray-500 text-sm">/ student / term</span>
+                  <p className="text-gray-900 text-lg font-bold tracking-tight">{pkg.name}</p>
+                  <div className="flex items-baseline gap-1.5 mt-3">
+                    <span className={`text-4xl font-black tracking-tighter ${t.price}`}>${pkg.pricePerStudent.toFixed(2)}</span>
+                    <span className="text-gray-500 text-xs">/ student / term</span>
                   </div>
                   <p className="text-[10px] font-black uppercase tracking-tight text-gray-500 mt-1">
                     Up to {pkg.studentLimit.toLocaleString()} students · ${termlyMax.toLocaleString()} max/term
                   </p>
-                  <div className="my-5 border-t border-gray-100" />
-                  <ul className="space-y-2.5 flex-1 mb-6">
+                  <div className="my-4 border-t border-gray-100" />
+                  <ul className="space-y-2 flex-1 mb-4">
                     {pkg.features.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        <CheckCircle size={14} className={`mt-0.5 shrink-0 ${t.check}`} />
+                      <li key={i} className="flex items-start gap-2 text-[13px] text-gray-700">
+                        <CheckCircle size={13} className={`mt-0.5 shrink-0 ${t.check}`} />
                         <span>{f}</span>
                       </li>
                     ))}
                     {pkg.features.length === 0 && (
-                      <li className="text-gray-400 text-sm italic">Feature details coming soon.</li>
+                      <li className="text-gray-400 text-[13px] italic">Feature details coming soon.</li>
                     )}
                   </ul>
                   <button
                     onClick={() => navigate(`/register?plan=${pkg._id}`)}
-                    className={`w-full text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 ${t.btn} shadow-sm`}
+                    className={`w-full text-sm font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${t.btn} shadow-sm`}
                   >
                     Start free trial <ArrowRight size={14} />
                   </button>
@@ -407,19 +407,19 @@ const LandingPage: React.FC = () => {
           </div>
         )}
 
-        <div className="mt-10 bg-white/70 backdrop-blur-sm rounded-xl ring-1 ring-gray-200/70 p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-6 bg-white/70 backdrop-blur-sm rounded-xl ring-1 ring-gray-200/70 p-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-gray-900 font-bold tracking-tight">Need a custom plan?</h3>
-            <p className="text-gray-600 text-sm mt-1">District pricing from $0.45/student for multi-school groups and large institutions.</p>
+            <h3 className="text-gray-900 font-bold tracking-tight text-sm">Need a custom plan?</h3>
+            <p className="text-gray-600 text-xs mt-0.5">District pricing from $0.45/student for multi-school groups and large institutions.</p>
           </div>
-          <a href="mailto:hello@kundai.ac.zw" className="inline-flex items-center gap-2 bg-white ring-1 ring-gray-200 hover:ring-blue-300 text-blue-700 hover:text-blue-800 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors">
+          <a href="mailto:hello@kundai.ac.zw" className="inline-flex items-center gap-2 bg-white ring-1 ring-gray-200 hover:ring-blue-300 text-blue-700 hover:text-blue-800 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
             <Mail size={14} /> hello@kundai.ac.zw
           </a>
         </div>
       </section>
 
       {/* Trust strip */}
-      <section className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70">
+      <section className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70 min-h-[calc(100vh-3.5rem)] flex flex-col justify-center">
         <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-2 md:grid-cols-4 gap-6">
           {[
             { Icon: ShieldCheck, t: 'POPIA-aligned',     s: 'Data stays in-country',     c: 'text-blue-600',    bg: 'bg-blue-50' },
@@ -441,7 +441,7 @@ const LandingPage: React.FC = () => {
       </section>
 
       {/* CTA */}
-      <section className="relative max-w-6xl mx-auto px-6 py-20">
+      <section className="relative max-w-6xl mx-auto px-6 py-20 min-h-[calc(100vh-3.5rem)] flex flex-col justify-center">
         <div
           className="relative overflow-hidden rounded-2xl bg-blue-600 px-10 py-14 text-center"
           style={{

@@ -17,38 +17,60 @@ const STORY_CSS = `
 
   /*
    * ═══════════════════════════════════════════════════
-   *  REAL 3D LAPTOP FOLD
-   *  The parent wrapper gets perspective(1400px) so the
-   *  rotateX happens in actual 3D space, not flat 2D.
-   *  transform-origin sits at the hinge (bottom edge).
+   *  REAL 3D LAPTOP FOLD — 1.9s, 5-phase physics
+   *  Phase A (0-18%):  hands finding grip — tiny jostle
+   *  Phase B (18-45%): deliberate slow close
+   *  Phase C (45-78%): gravity takes over (quartic accel)
+   *  Phase D (78-92%): near-close + micro-bounce on seal
+   *  Phase E (92-100%): spring settle into final angle
    * ═══════════════════════════════════════════════════
    */
 
-  /* Whole laptop body tilts slightly toward viewer first (natural open → close arc) */
+  /* Body sits on the desk: a small jostle at grip, near-static through the close,
+   * then a real chassis recoil when the lid slams shut (Newton's third law).
+   * End state matches sd-laptop-fadeout's 0% so the exit phase blends seamlessly. */
   @keyframes sd-laptop-body {
-    0%   { transform: rotateX(-4deg) translateY(0px);   }
-    15%  { transform: rotateX(-8deg) translateY(-6px);  }
-    80%  { transform: rotateX(-4deg) translateY(4px);   }
-    100% { transform: rotateX(0deg)  translateY(10px);  opacity:0; }
+    /* A: grip jostle (0-15%) */
+    0%   { transform: rotateX(-12deg)   translateY(0px); }
+    5%   { transform: rotateX(-12.6deg) translateY(-1.5px); animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    10%  { transform: rotateX(-11.6deg) translateY(0.4px);  animation-timing-function: cubic-bezier(.4,0,.6,.7); }
+    15%  { transform: rotateX(-12deg)   translateY(-0.4px); }
+    /* B+C: virtually stationary on the desk while the lid closes (15-78%) */
+    60%  { transform: rotateX(-11.7deg) translateY(0.3px); animation-timing-function: cubic-bezier(.4,0,.6,1); }
+    78%  { transform: rotateX(-11.6deg) translateY(0.5px); animation-timing-function: cubic-bezier(.3,0,.4,1); }
+    /* D: lid impact — chassis recoils (kick back, hop up) */
+    83%  { transform: rotateX(-12.9deg) translateY(-1.2px); animation-timing-function: cubic-bezier(.35,0,.5,1); }
+    88%  { transform: rotateX(-11.5deg) translateY(1.4px);  animation-timing-function: cubic-bezier(.5,0,.5,1); }
+    /* E: settle (88-100%) */
+    93%  { transform: rotateX(-12deg)   translateY(0.6px); animation-timing-function: cubic-bezier(.5,0,.5,1); }
+    100% { transform: rotateX(-12deg)   translateY(1px); }
   }
 
-  /* The lid itself pivots on the hinge — slow ease in, then gravity-accelerated close */
+  /* The lid pivots on the hinge. The 15-78% span is ONE cubic-bezier so the
+   * acceleration is monotonic — that's what (1 - cos θ) torque buildup actually
+   * looks like. One pronounced magnetic rebound, then settle. */
   @keyframes sd-lid-fold {
-    0%   { transform: rotateX(0deg);    }
-    12%  { transform: rotateX(-6deg);   }   /* brief pause — fingers finding grip */
-    30%  { transform: rotateX(-22deg);  }   /* slow opening movement */
-    55%  { transform: rotateX(-58deg);  }   /* mid-arc, gravity takes over */
-    75%  { transform: rotateX(-83deg);  }   /* approaching closed */
-    88%  { transform: rotateX(-88.5deg);}   /* near-close with tiny bounce */
-    94%  { transform: rotateX(-87deg);  }   /* bounce back slightly */
-    100% { transform: rotateX(-88.8deg);}   /* fully shut */
+    /* A: hands find grip — tiny jostle (0-15%) */
+    0%   { transform: rotateX(0deg);     animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    5%   { transform: rotateX(-1.4deg);  animation-timing-function: cubic-bezier(.4,0,.6,.7); }
+    10%  { transform: rotateX(-0.5deg);  animation-timing-function: cubic-bezier(.5,0,.7,.4); }
+    15%  { transform: rotateX(-3deg);    animation-timing-function: cubic-bezier(.55,0,.78,.12); /* strong ease-in — gravity buildup */ }
+    /* B+C: single long arc, 3° → 86° over 63% of timeline */
+    78%  { transform: rotateX(-86deg);   animation-timing-function: cubic-bezier(.3,0,.35,1); /* brakes engaging */ }
+    /* D: magnetic snap + single elastic rebound (78-91%) */
+    83%  { transform: rotateX(-89.8deg); animation-timing-function: cubic-bezier(.4,0,.2,1); /* peak compression */ }
+    88%  { transform: rotateX(-87.4deg); animation-timing-function: cubic-bezier(.35,0,.5,1); /* rebound peak */ }
+    91%  { transform: rotateX(-89.3deg); animation-timing-function: cubic-bezier(.5,0,.5,1); /* re-grab */ }
+    /* E: spring settle (91-100%) */
+    96%  { transform: rotateX(-88.5deg); animation-timing-function: cubic-bezier(.5,0,.5,1); }
+    100% { transform: rotateX(-88.8deg); }
   }
 
   /* Screen glare sweeps across as lid falls — a bright diagonal band */
   @keyframes sd-glare-sweep {
     0%   { opacity:0;   transform: translateX(-100%) skewX(-15deg); }
-    15%  { opacity:0;   transform: translateX(-100%) skewX(-15deg); }
-    40%  { opacity:0.55;transform: translateX(0%)    skewX(-15deg); }
+    18%  { opacity:0;   transform: translateX(-100%) skewX(-15deg); }
+    42%  { opacity:0.55;transform: translateX(0%)    skewX(-15deg); }
     65%  { opacity:0.3; transform: translateX(60%)   skewX(-15deg); }
     80%  { opacity:0;   transform: translateX(120%)  skewX(-15deg); }
     100% { opacity:0;   transform: translateX(120%)  skewX(-15deg); }
@@ -57,22 +79,52 @@ const STORY_CSS = `
   /* Screen darkens as lid closes (ambient light cut-off) */
   @keyframes sd-screen-dim {
     0%   { background: rgba(0,0,0,0);    }
-    20%  { background: rgba(0,0,0,0);    }
-    70%  { background: rgba(0,0,0,0.45); }
-    100% { background: rgba(0,0,0,0.85); }
+    18%  { background: rgba(0,0,0,0);    }
+    45%  { background: rgba(0,0,0,0.18); }
+    72%  { background: rgba(0,0,0,0.55); }
+    100% { background: rgba(0,0,0,0.92); }
+  }
+
+  /* Base ambient-occlusion shadow — grows under lid as it descends */
+  @keyframes sd-base-ao {
+    0%   { opacity:0;    filter: blur(8px); }
+    18%  { opacity:0.04; filter: blur(7px); }
+    45%  { opacity:0.18; filter: blur(6px); }
+    72%  { opacity:0.55; filter: blur(4px); }
+    92%  { opacity:0.78; filter: blur(2.5px); }
+    100% { opacity:0.82; filter: blur(2px); }
+  }
+
+  /* Hinge crease deepens as lid closes — micro-detail for depth */
+  @keyframes sd-hinge-shade {
+    0%   { opacity:0.2; }
+    45%  { opacity:0.35; }
+    100% { opacity:0.75; }
+  }
+
+  /* Lid "wings" — extension panels on each side of the lid that fade in late
+   * in the close so the folded silhouette matches the base width.
+   * Hidden during the open phase (would look like extra screen-side panels). */
+  @keyframes sd-lid-wing-reveal {
+    0%, 68% { opacity: 0; }
+    82%     { opacity: 0.6; }
+    100%    { opacity: 1; }
   }
 
   /* Ground shadow shrinks + sharpens as laptop lowers */
   @keyframes sd-ground-shadow {
-    0%   { box-shadow: 0 24px 48px -8px rgba(0,0,0,0.38), 0 8px 16px -4px rgba(0,0,0,0.22); transform:scaleX(1);   }
-    50%  { box-shadow: 0 12px 24px -4px rgba(0,0,0,0.28), 0 4px  8px -2px rgba(0,0,0,0.16); transform:scaleX(0.92);}
-    100% { box-shadow: 0  4px  8px -2px rgba(0,0,0,0.12), 0 1px  3px  0px rgba(0,0,0,0.08); transform:scaleX(0.82);}
+    0%   { box-shadow: 0 32px 60px -8px rgba(0,0,0,0.42), 0 12px 22px -4px rgba(0,0,0,0.26); transform:scaleX(1);    opacity:1; }
+    45%  { box-shadow: 0 22px 38px -6px rgba(0,0,0,0.34), 0 8px  14px -3px rgba(0,0,0,0.20); transform:scaleX(0.94); }
+    78%  { box-shadow: 0 10px 20px -3px rgba(0,0,0,0.22), 0 4px   8px -2px rgba(0,0,0,0.14); transform:scaleX(0.86); }
+    100% { box-shadow: 0  4px  9px -2px rgba(0,0,0,0.14), 0 1px   3px  0px rgba(0,0,0,0.10); transform:scaleX(0.80); opacity:0.85; }
   }
 
-  /* Whole assembly fades after close */
+  /* Continues from sd-laptop-body's end-state (rotateX -12deg, translateY 1px)
+   * so the chassis doesn't snap back when we swap class names. */
   @keyframes sd-laptop-fadeout {
-    0%   { opacity:1; transform: translateY(0) scale(1);    }
-    100% { opacity:0; transform: translateY(18px) scale(0.96); }
+    0%   { opacity:1;   transform: rotateX(-12deg) translateY(1px)  scale(1);    filter: blur(0); }
+    55%  { opacity:0.45;transform: rotateX(-12deg) translateY(13px) scale(0.97); filter: blur(1.5px); }
+    100% { opacity:0;   transform: rotateX(-12deg) translateY(26px) scale(0.94); filter: blur(3px); }
   }
 
   /*
@@ -100,36 +152,68 @@ const STORY_CSS = `
 
   /*
    * ═══════════════════════════════════════════════════
-   *  PHONE ARRIVAL — genuine physical weight
-   *  Starts high, accelerates (gravity), then compresses
-   *  on landing like a rubber object hitting a surface.
+   *  PHONE ARRIVAL — quartic gravity, mass on landing
+   *  Acceleration with easeInQuart, compress 1.03→0.985
+   *  on impact, two diminishing bounces, then settle.
    * ═══════════════════════════════════════════════════
    */
   @keyframes sd-phone-fall {
-    0%   { opacity:0; transform: translateY(-140px) scale(0.82) rotateX(12deg); filter:blur(8px);  }
-    18%  { opacity:1; filter:blur(3px); }
-    52%  { opacity:1; transform: translateY(14px)   scale(1.02) rotateX(-3deg); filter:blur(0px); }
-    66%  { transform: translateY(-7px)  scale(0.99) rotateX(1.5deg); }
-    78%  { transform: translateY(4px)   scale(1.005) rotateX(-0.5deg); }
-    88%  { transform: translateY(-2px)  scale(1)    rotateX(0.2deg); }
-    95%  { transform: translateY(1px)   scale(1)    rotateX(0deg); }
-    100% { transform: translateY(0)     scale(1)    rotateX(0deg); opacity:1; filter:blur(0); }
+    0%   { opacity:0; transform: translateY(-160px) scale(0.80) rotateX(14deg); filter:blur(10px); animation-timing-function: cubic-bezier(.86,0,.96,.2); /* easeInQuart */ }
+    18%  { opacity:0.85; filter:blur(6px); }
+    36%  { opacity:1;    filter:blur(2px); }
+    /* impact */
+    50%  { transform: translateY(18px) scale(1.03) rotateX(-4deg) scaleY(0.97); filter:blur(0); animation-timing-function: cubic-bezier(.4,1.6,.5,1); }
+    /* first bounce */
+    62%  { transform: translateY(-12px) scale(0.985) rotateX(2.5deg) scaleY(1.012); animation-timing-function: cubic-bezier(.4,0,.6,1); }
+    72%  { transform: translateY(6px)   scale(1.008) rotateX(-1.2deg) scaleY(0.994); animation-timing-function: cubic-bezier(.3,1.4,.5,1); }
+    /* second bounce */
+    82%  { transform: translateY(-3px)  scale(0.997) rotateX(0.6deg) scaleY(1.003); }
+    90%  { transform: translateY(1.2px) scale(1.001) rotateX(-0.2deg); }
+    96%  { transform: translateY(-0.4px) scale(1); }
+    100% { transform: translateY(0)     scale(1) rotateX(0deg) scaleY(1); opacity:1; filter:blur(0); }
   }
 
-  /* The phone's own cast shadow — appears on landing */
+  /* The phone's own cast shadow — blooms exactly at landing */
   @keyframes sd-phone-shadow {
-    0%,45% { opacity:0;   transform:scaleX(0.5) scaleY(0.3) translateY(20px); }
-    65%    { opacity:0.5; transform:scaleX(1.05) scaleY(1.1) translateY(0px);  }
-    80%    { opacity:0.35;transform:scaleX(0.95) scaleY(0.9) translateY(2px); }
-    100%   { opacity:0.28;transform:scaleX(1)    scaleY(1)   translateY(0);   }
+    0%,36% { opacity:0;    transform: scaleX(0.4) scaleY(0.25) translateY(22px); filter: blur(14px); }
+    50%    { opacity:0.55; transform: scaleX(1.10) scaleY(1.15) translateY(0px); filter: blur(7px); }
+    62%    { opacity:0.32; transform: scaleX(0.93) scaleY(0.88) translateY(3px); filter: blur(9px); }
+    72%    { opacity:0.40; transform: scaleX(1.02) scaleY(1.02) translateY(0px); filter: blur(7px); }
+    100%   { opacity:0.32; transform: scaleX(1)    scaleY(1)   translateY(0);   filter: blur(8px); }
   }
 
-  /* Motion-blur ghost — a faint copy trailing above the phone */
+  /* Motion-blur ghost — faint copy trailing above the phone */
   @keyframes sd-phone-blur-ghost {
-    0%   { opacity:0.4; transform:translateY(-28px) scaleX(0.94); filter:blur(5px); }
-    40%  { opacity:0.2; transform:translateY(-10px) scaleX(0.97); filter:blur(3px); }
-    70%  { opacity:0.05;transform:translateY(-3px)  scaleX(1);    filter:blur(1px); }
-    100% { opacity:0;   transform:translateY(0);    filter:blur(0); }
+    0%   { opacity:0.55; transform:translateY(-44px) scaleX(0.92) scaleY(1.05); filter:blur(7px); }
+    30%  { opacity:0.30; transform:translateY(-22px) scaleX(0.95) scaleY(1.02); filter:blur(5px); }
+    55%  { opacity:0.12; transform:translateY(-8px)  scaleX(0.98); filter:blur(3px); }
+    80%  { opacity:0.03; transform:translateY(-2px)  scaleX(1);    filter:blur(1px); }
+    100% { opacity:0;    transform:translateY(0);    filter:blur(0); }
+  }
+
+  /* iOS keyboard rise / fall */
+  @keyframes sd-kb-rise {
+    0%   { opacity:0; transform: translateY(110%); }
+    55%  { opacity:1; transform: translateY(-2%);  }
+    78%  { transform: translateY(1%); }
+    100% { opacity:1; transform: translateY(0);   }
+  }
+  @keyframes sd-kb-fall {
+    0%   { opacity:1; transform: translateY(0); }
+    100% { opacity:0; transform: translateY(110%); }
+  }
+
+  /* Key press flash — bright fill that fades */
+  @keyframes sd-key-press {
+    0%   { background:#e7e8ec; transform: translateY(1px) scale(0.94); box-shadow: 0 0 0 rgba(0,0,0,0); }
+    40%  { background:#9aa1ad; transform: translateY(1.5px) scale(0.92); }
+    100% { background:#ffffff; transform: translateY(0) scale(1); box-shadow: 0 1px 0 rgba(0,0,0,0.28); }
+  }
+
+  /* iPhone frame highlight — a soft moving sheen along the titanium rail */
+  @keyframes sd-titanium-sheen {
+    0%,100% { background-position: 0% 50%; }
+    50%     { background-position: 100% 50%; }
   }
 
   /* ── Utility classes ── */
@@ -149,45 +233,106 @@ const STORY_CSS = `
 
   /* 3D laptop wrapper — perspective lives HERE so children rotate in real 3D */
   .sd-laptop-3d-stage {
-    perspective: 1400px;
-    perspective-origin: 50% 30%;
+    perspective: 1600px;
+    perspective-origin: 50% 28%;
   }
-  /* The entire laptop body (lid + base together) for the body tilt */
+  /* The entire laptop body (lid + base together) */
   .sd-laptop-body-anim {
     transform-style: preserve-3d;
-    animation: sd-laptop-body 1.55s cubic-bezier(.42,0,.58,1) forwards;
+    animation: sd-laptop-body 1.9s linear forwards;
   }
   /* The lid — rotates on the hinge (bottom-center origin) */
   .sd-lid-anim {
     transform-origin: center bottom;
     transform-style: preserve-3d;
-    animation: sd-lid-fold 1.55s cubic-bezier(.55,.06,.68,.19) forwards;
-    backface-visibility: hidden;
+    animation: sd-lid-fold 1.9s linear forwards;
+  }
+  /* Base receives ambient-occlusion as lid descends */
+  .sd-base-ao {
+    animation: sd-base-ao 1.9s linear forwards;
+  }
+  .sd-hinge-shade {
+    animation: sd-hinge-shade 1.9s linear forwards;
   }
   /* Ground shadow under whole assembly */
   .sd-shadow-anim {
-    animation: sd-ground-shadow 1.55s cubic-bezier(.42,0,.58,1) forwards;
+    animation: sd-ground-shadow 1.9s linear forwards;
   }
   /* Laptop fadeout after lid shuts */
   .sd-laptop-exit {
-    animation: sd-laptop-fadeout 0.45s ease-in forwards;
+    animation: sd-laptop-fadeout 0.5s cubic-bezier(.55,.06,.68,.19) forwards;
   }
 
-  /* Phone container */
+  /* Phone container — perspective for 3D body rotation */
   .sd-phone-stage {
-    perspective: 900px;
-    perspective-origin: 50% 60%;
+    perspective: 1100px;
+    perspective-origin: 50% 55%;
   }
   .sd-phone-fall-anim {
-    animation: sd-phone-fall 1.1s cubic-bezier(.23,1,.32,1) both;
+    animation: sd-phone-fall 1.25s cubic-bezier(.86,0,.96,.2) both;
     transform-style: preserve-3d;
+    will-change: transform;
   }
   .sd-phone-ghost {
-    animation: sd-phone-blur-ghost 0.9s ease-out both;
+    animation: sd-phone-blur-ghost 1.0s ease-out both;
     pointer-events: none;
     position: absolute;
     top: 0; left: 0; right: 0;
   }
+  /* iPhone titanium frame sheen */
+  .sd-titanium {
+    background: linear-gradient(135deg, #4a4d54 0%, #8e9098 22%, #c8cad0 38%, #6a6d76 55%, #9c9fa8 72%, #5a5d65 100%);
+    background-size: 200% 200%;
+    animation: sd-titanium-sheen 6s ease-in-out infinite;
+  }
+  /* Phone frame wrapper — used to apply live tilt transform */
+  .sd-phone-frame {
+    transition: transform 110ms cubic-bezier(.34,1.4,.64,1);
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+
+  /* Modal "lift-out" — card grows from its dashboard slot to center stage. */
+  @keyframes sd-modal-lift-perf {
+    from {
+      opacity: 0;
+      transform: translate(25%, 15%) scale(0.35);
+      filter: blur(2px);
+    }
+    60% {
+      opacity: 1;
+      filter: blur(0);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+      filter: blur(0);
+    }
+  }
+  @keyframes sd-modal-lift-twin {
+    from {
+      opacity: 0;
+      transform: translate(-25%, -10%) scale(0.4);
+      filter: blur(2px);
+    }
+    60% {
+      opacity: 1;
+      filter: blur(0);
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+      filter: blur(0);
+    }
+  }
+  /* Backdrop blur fade-in */
+  @keyframes sd-backdrop-blur-in {
+    from { backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); background: rgba(15,23,42,0); }
+    to   { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); background: rgba(15,23,42,0.35); }
+  }
+  .sd-modal-lift-perf { animation: sd-modal-lift-perf 0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: top right; }
+  .sd-modal-lift-twin { animation: sd-modal-lift-twin 0.55s cubic-bezier(.34,1.35,.56,1) both; transform-origin: top left; }
+  .sd-backdrop-blur   { animation: sd-backdrop-blur-in 0.45s ease both; }
 `;
 
 /* ─────────────────────────────────────────────────────────────
@@ -211,47 +356,262 @@ interface LaptopShellProps {
 const LaptopShell: React.FC<LaptopShellProps> = ({ children, foldPhase = 'idle' }) => {
   const folding = foldPhase === 'folding';
   const exiting = foldPhase === 'exit';
+
+  // True 3D box dimensions for both base and lid.
+const W       = 496; 
+const BASE_D  = 256;
+const BASE_H  = 14;
+const LID_H   = 272;
+const LID_D   = 8;
+const STAGE_W = W + 80;
+const STAGE_H = 432;
+
+  // Shared face primitives — every face is a flat W×H plane positioned in 3D.
+  const FACE_BASE: React.CSSProperties = { position: 'absolute', backfaceVisibility: 'hidden', boxSizing: 'border-box' };
+
   return (
     <div
       className="sd-laptop-3d-stage"
-      style={{ position: 'relative', width: 700, margin: '0 auto', userSelect: 'none', fontFamily: 'system-ui, sans-serif' }}
+      style={{
+        position: 'relative',
+        width: STAGE_W, height: STAGE_H,
+        margin: '0 auto',
+        userSelect: 'none',
+        fontFamily: 'system-ui, sans-serif',
+      }}
     >
       <div
         className={folding ? 'sd-laptop-body-anim' : exiting ? 'sd-laptop-exit' : undefined}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transformStyle: 'preserve-3d' }}
+        style={{
+          position: 'absolute', inset: 0,
+          transformStyle: 'preserve-3d',
+          transform: folding || exiting ? undefined : 'rotateX(-12deg)',
+        }}
       >
-        {/* Ground shadow */}
+        {/* Ground shadow — under the chassis on the desk */}
         <div
           className={folding ? 'sd-shadow-anim' : undefined}
-          style={{ position: 'absolute', bottom: -8, left: '10%', width: '80%', height: 20, borderRadius: '50%', background: 'transparent', boxShadow: '0 24px 48px -8px rgba(0,0,0,0.38), 0 8px 16px -4px rgba(0,0,0,0.22)', zIndex: -1 }}
+          style={{
+            position: 'absolute', bottom: 30, left: '8%', width: '84%', height: 22,
+            borderRadius: '50%', background: 'transparent',
+            boxShadow: '0 32px 60px -8px rgba(0,0,0,0.42), 0 12px 22px -4px rgba(0,0,0,0.26)',
+            zIndex: -1,
+          }}
         />
-        {/* Camera */}
-        <div style={{ position: 'absolute', top: 7, left: '50%', transform: 'translateX(-50%)', width: 5, height: 5, borderRadius: '50%', background: '#bcbdc1', zIndex: 10 }} />
-        {/* LID — rotates on hinge */}
-        <div
-          className={folding ? 'sd-lid-anim' : undefined}
-          style={{ position: 'relative', width: 550, transformStyle: 'preserve-3d', transformOrigin: 'center bottom' }}
-        >
-          {/* Front face: screen */}
-          <div style={{ width: 550, height: 340, background: '#89c9e5', border: '15px solid #3f3f41', borderTop: '20px solid #3f3f41', borderRadius: '14px 14px 0 0', boxShadow: '0 0 0 1px #bcbdc1, inset 0 0 0 1px rgba(255,255,255,0.06)', overflow: 'hidden', boxSizing: 'border-box', position: 'relative' }}>
-            {children}
-            {folding && (
-              <div style={{ position: 'absolute', inset: 0, zIndex: 30, animation: 'sd-screen-dim 1.55s cubic-bezier(.42,0,.58,1) forwards', pointerEvents: 'none' }} />
-            )}
-            {folding && (
-              <div style={{ position: 'absolute', inset: 0, zIndex: 31, overflow: 'hidden', pointerEvents: 'none' }}>
-                <div style={{ position: 'absolute', top: 0, bottom: 0, left: '-60%', width: '55%', background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 45%, rgba(255,255,255,0.45) 55%, transparent 100%)', animation: 'sd-glare-sweep 1.55s cubic-bezier(.42,0,.58,1) forwards' }} />
+
+        {/* HINGE ANCHOR — 0-size origin point at the back-top edge of the base
+            (which is also the bottom-back edge of the lid). All geometry is
+            positioned in 3D relative to this point. */}
+        <div style={{
+          position: 'absolute',
+          left: '50%', top: '50%',
+          width: 0, height: 0,
+          transformStyle: 'preserve-3d',
+          transform: `translateY(${(BASE_D - LID_H) / 2 + 10}px)`,
+        }}>
+
+          {/* ── BASE BOX — 6 faces of a (W × BASE_H × BASE_D) rectangular solid ── */}
+          <div style={{
+            position: 'absolute',
+            left: 0, top: 0, width: 0, height: 0,
+            transformStyle: 'preserve-3d',
+            transform: `translateY(${BASE_H / 2}px) translateZ(${BASE_D / 2}px)`,
+          }}>
+            {/* TOP — keyboard deck */}
+            <div style={{
+              ...FACE_BASE,
+              width: W, height: BASE_D,
+              left: -W / 2, top: -BASE_D / 2,
+              transform: `translateY(${-BASE_H / 2}px) rotateX(90deg)`,
+              background: 'linear-gradient(180deg, #2c2c31 0%, #1f1f24 55%, #16161a 100%)',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 0 40px rgba(0,0,0,0.4)',
+              borderRadius: '4px 4px 6px 6px',
+            }}>
+              {/* Keyboard well */}
+              <div aria-hidden style={{
+                position: 'absolute', top: 26, left: 70, right: 70, height: 130,
+                background: 'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.22) 100%)',
+                borderRadius: 6,
+                boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.7), inset 0 -1px 0 rgba(255,255,255,0.03)',
+              }}>
+                <div style={{
+                  position: 'absolute', inset: 8,
+                  background: 'repeating-linear-gradient(90deg, transparent 0 28px, rgba(255,255,255,0.05) 28px 29px), repeating-linear-gradient(0deg, transparent 0 18px, rgba(255,255,255,0.05) 18px 19px)',
+                  borderRadius: 2,
+                }} />
               </div>
-            )}
+              {/* Trackpad */}
+              <div aria-hidden style={{
+                position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+                width: 220, height: 60,
+                background: 'linear-gradient(180deg, #17171b 0%, #121216 100%)',
+                borderRadius: 5,
+                boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05)',
+              }} />
+              {/* AO from descending lid — at the hinge edge of the deck */}
+              <div
+                className={folding ? 'sd-base-ao' : undefined}
+                aria-hidden
+                style={{
+                  position: 'absolute', left: '4%', right: '4%', top: 0, height: 36,
+                  background: 'radial-gradient(ellipse 60% 100% at 50% 0%, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.18) 70%, transparent 100%)',
+                  opacity: folding ? undefined : 0,
+                  pointerEvents: 'none',
+                  transformOrigin: 'top',
+                }}
+              />
+            </div>
+
+            {/* BOTTOM — underside (faces the desk) */}
+            <div style={{
+              ...FACE_BASE,
+              width: W, height: BASE_D,
+              left: -W / 2, top: -BASE_D / 2,
+              transform: `translateY(${BASE_H / 2}px) rotateX(-90deg)`,
+              background: 'linear-gradient(180deg, #08080a 0%, #050507 100%)',
+            }} />
+
+            {/* FRONT — user-facing edge of chassis */}
+            <div style={{
+              ...FACE_BASE,
+              width: W, height: BASE_H,
+              left: -W / 2, top: -BASE_H / 2,
+              transform: `translateZ(${BASE_D / 2}px)`,
+              background: 'linear-gradient(180deg, #25252a 0%, #16161a 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.6)',
+              borderRadius: '0 0 4px 4px',
+            }} />
+
+            {/* BACK — hinge-side edge */}
+            <div style={{
+              ...FACE_BASE,
+              width: W, height: BASE_H,
+              left: -W / 2, top: -BASE_H / 2,
+              transform: `translateZ(${-BASE_D / 2}px) rotateY(180deg)`,
+              background: 'linear-gradient(180deg, #1a1a1e 0%, #0a0a0c 100%)',
+            }} />
+
+            {/* LEFT side */}
+            <div style={{
+              ...FACE_BASE,
+              width: BASE_D, height: BASE_H,
+              left: -BASE_D / 2, top: -BASE_H / 2,
+              transform: `translateX(${-W / 2}px) rotateY(-90deg)`,
+              background: 'linear-gradient(180deg, #1c1c20 0%, #0e0e12 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.5)',
+            }} />
+
+            {/* RIGHT side */}
+            <div style={{
+              ...FACE_BASE,
+              width: BASE_D, height: BASE_H,
+              left: -BASE_D / 2, top: -BASE_H / 2,
+              transform: `translateX(${W / 2}px) rotateY(90deg)`,
+              background: 'linear-gradient(180deg, #1c1c20 0%, #0e0e12 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.5)',
+            }} />
           </div>
-          {/* Back face: lid exterior (visible at steep angles during rotation) */}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(145deg, #2a2a2e 0%, #1a1a1d 100%)', borderRadius: '14px 14px 0 0', border: '15px solid #3f3f41', borderTop: '20px solid #3f3f41', boxSizing: 'border-box', transform: 'rotateX(180deg) translateZ(2px)', backfaceVisibility: 'visible', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }} />
-        </div>
-        {/* BASE */}
-        <div style={{ position: 'relative', width: 700 }}>
-          <div style={{ width: '100%', height: 10, background: '#2a2a2d', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }} />
-          <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 80, height: 10, background: '#1a1a1d', borderRadius: '0 0 6px 6px' }} />
-          <div style={{ width: '100%', height: 10, background: '#1d1d1f', borderRadius: '0 0 10px 10px' }} />
+
+          {/* ── LID PIVOT — rotates around the hinge (origin point) ── */}
+          <div
+            className={folding ? 'sd-lid-anim' : undefined}
+            style={{
+              position: 'absolute',
+              left: 0, top: 0, width: 0, height: 0,
+              transformStyle: 'preserve-3d',
+              transformOrigin: 'center center',
+            }}
+          >
+            {/* LID BOX — center is LID_H/2 above hinge and LID_D/2 behind hinge,
+                so the bottom-back edge of the lid is exactly at the pivot. */}
+            <div style={{
+              position: 'absolute',
+              left: 0, top: 0, width: 0, height: 0,
+              transformStyle: 'preserve-3d',
+              transform: `translateY(${-LID_H / 2}px) translateZ(${-LID_D / 2}px)`,
+            }}>
+              {/* FRONT — screen */}
+              <div style={{
+                ...FACE_BASE,
+                width: W, height: LID_H,
+                left: -W / 2, top: -LID_H / 2,
+                transform: `translateZ(${LID_D / 2}px)`,
+                background: '#89c9e5',
+                border: '15px solid #3f3f41',
+                borderTop: '20px solid #3f3f41',
+                borderRadius: '14px 14px 0 0',
+                overflow: 'hidden',
+              }}>
+                {children}
+                {folding && (
+                  <div style={{ position: 'absolute', inset: 0, zIndex: 30, animation: 'sd-screen-dim 1.9s linear forwards', pointerEvents: 'none' }} />
+                )}
+                {folding && (
+                  <div style={{ position: 'absolute', inset: 0, zIndex: 31, overflow: 'hidden', pointerEvents: 'none' }}>
+                    <div style={{ position: 'absolute', top: 0, bottom: 0, left: '-60%', width: '55%', background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 45%, rgba(255,255,255,0.45) 55%, transparent 100%)', animation: 'sd-glare-sweep 1.9s linear forwards' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* BACK — lid exterior with K logo */}
+              <div style={{
+                ...FACE_BASE,
+                width: W, height: LID_H,
+                left: -W / 2, top: -LID_H / 2,
+                transform: `translateZ(${-LID_D / 2}px) rotateY(180deg)`,
+                background: 'linear-gradient(140deg, #34343a 0%, #25252a 35%, #1c1c20 70%, #131316 100%)',
+                borderRadius: '14px 14px 0 0',
+                border: '15px solid #3f3f41',
+                borderTop: '20px solid #3f3f41',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.45)',
+                display: 'grid', placeItems: 'center',
+              }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: 12,
+                  background: 'radial-gradient(circle at 35% 30%, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 45%, transparent 70%)',
+                  display: 'grid', placeItems: 'center',
+                  color: 'rgba(255,255,255,0.18)',
+                  fontWeight: 900, fontSize: 22, letterSpacing: '-0.04em',
+                }}>K</div>
+              </div>
+
+              {/* TOP edge */}
+              <div style={{
+                ...FACE_BASE,
+                width: W, height: LID_D,
+                left: -W / 2, top: -LID_D / 2,
+                transform: `translateY(${-LID_H / 2}px) rotateX(90deg)`,
+                background: 'linear-gradient(180deg, #3f3f41 0%, #2a2a2d 100%)',
+              }} />
+
+              {/* BOTTOM edge (at hinge) */}
+              <div style={{
+                ...FACE_BASE,
+                width: W, height: LID_D,
+                left: -W / 2, top: -LID_D / 2,
+                transform: `translateY(${LID_H / 2}px) rotateX(-90deg)`,
+                background: 'linear-gradient(180deg, #0e0e12 0%, #050507 100%)',
+              }} />
+
+              {/* LEFT edge */}
+              <div style={{
+                ...FACE_BASE,
+                width: LID_D, height: LID_H,
+                left: -LID_D / 2, top: -LID_H / 2,
+                transform: `translateX(${-W / 2}px) rotateY(-90deg)`,
+                background: 'linear-gradient(90deg, #3f3f41 0%, #2a2a2d 100%)',
+              }} />
+
+              {/* RIGHT edge */}
+              <div style={{
+                ...FACE_BASE,
+                width: LID_D, height: LID_H,
+                left: -LID_D / 2, top: -LID_H / 2,
+                transform: `translateX(${W / 2}px) rotateY(90deg)`,
+                background: 'linear-gradient(90deg, #2a2a2d 0%, #3f3f41 100%)',
+              }} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -437,7 +797,17 @@ const Dashboard: React.FC<DashboardProps> = ({ perfGlowing, twinGlowing }) => (
    BACKDROP
 ───────────────────────────────────────────────────────────────*/
 const Backdrop: React.FC = () => (
-  <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(15,23,42,0.38)' }} />
+  <div
+    className="sd-backdrop-blur"
+    style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 10,
+      backdropFilter: 'blur(4px)',
+      WebkitBackdropFilter: 'blur(4px)',
+      background: 'rgba(15,23,42,0.35)',
+    }}
+  />
 );
 
 /* ─────────────────────────────────────────────────────────────
@@ -493,30 +863,81 @@ const PERF_ROWS = [
 const ScenePerfPanel: React.FC = () => (
   <>
     <Backdrop />
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 12px' }}>
-      <div className="sd-slide-up" style={{ background: 'white', borderRadius: 12, overflow: 'hidden', width: '60%', boxShadow: '0 16px 50px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
-          <div>
-            <p style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', color: '#1f2937' }}>Performance · Form 3B</p>
-            <p style={{ fontSize: 8, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', marginTop: 1 }}>Quadratics Test</p>
-          </div>
-          <span style={{ fontSize: 7, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', padding: '2px 6px', borderRadius: 3 }}>LATEST</span>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 20,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 12,
+      }}
+    >
+      <div
+        className="sd-modal-lift-perf"
+        style={{
+          background: '#f0f4f8',
+          borderRadius: 12,
+          padding: '14px 18px',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.4)',
+          display: 'flex',
+          flexDirection: 'column',
+          width: '62%',
+          maxHeight: '78%',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', color: '#111', letterSpacing: '0.02em' }}>
+            Performance
+          </p>
+          <span style={{ fontSize: 8, fontWeight: 900, color: '#1d4ed8', background: '#dbeafe', padding: '3px 7px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Quadratics Test
+          </span>
         </div>
-        <div style={{ padding: '6px 14px' }}>
-          {PERF_ROWS.map(st => (
-            <div key={st.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 7px', borderRadius: 6, marginBottom: 3, background: st.f ? '#fef2f2' : 'transparent', border: `1px solid ${st.f ? '#fecaca' : 'transparent'}` }}>
-              <p style={{ flex: 1, fontSize: 10, fontWeight: st.f ? 900 : 500, color: st.f ? '#b91c1c' : '#374151' }}>{st.name}</p>
-              <div style={{ width: 64, background: '#e5e7eb', borderRadius: 99, height: 5, overflow: 'hidden' }}>
-                <div className="sd-grow-bar" style={{ width: st.w, background: st.c, height: 5, borderRadius: 99 }} />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden', flex: 1 }}>
+          {PERF_ROWS.map((st, idx) => (
+            <div
+              key={st.name}
+              className="sd-fade-up"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                paddingBottom: 7,
+                borderBottom: '1px solid #e3e8ee',
+                animationDelay: `${idx * 80}ms`,
+              }}
+            >
+              <p style={{
+                fontSize: 12,
+                fontWeight: st.f ? 900 : 500,
+                color: st.f ? '#dc2626' : '#374151',
+                flexShrink: 0,
+                minWidth: 0,
+                flex: '0 1 auto',
+              }}>
+                {st.name}
+              </p>
+              <div style={{ flex: 1, background: '#e5e7eb', borderRadius: 99, height: 5, overflow: 'hidden', maxWidth: 180 }}>
+                <div className="sd-grow-bar" style={{ width: st.w, background: st.c, height: 5, borderRadius: 99, animationDelay: `${idx * 80 + 100}ms` }} />
               </div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: st.f ? '#b91c1c' : '#374151', minWidth: 26, textAlign: 'right' }}>{st.score}%</span>
+              <span style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: st.f ? '#dc2626' : '#374151',
+                minWidth: 36,
+                textAlign: 'right',
+              }}>
+                {st.score}%
+              </span>
             </div>
           ))}
-        </div>
-        <div style={{ padding: '7px 14px 10px', background: '#f9fafb', borderTop: '1px solid #f3f4f6' }}>
-          <p style={{ fontSize: 9, color: '#6b7280', fontWeight: 600 }}>
-            Class avg: <strong style={{ color: '#1f2937' }}>71%</strong>{' '}
-            <span style={{ color: '#ef4444', fontWeight: 900 }}>· Tapiwa 33pts below</span>
+          <p className="sd-fade-up" style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', marginTop: 4, animationDelay: '450ms' }}>
+            Class avg <strong style={{ color: '#374151' }}>71%</strong> · Tapiwa <strong style={{ color: '#dc2626' }}>33pts below</strong>
           </p>
         </div>
       </div>
@@ -527,61 +948,200 @@ const ScenePerfPanel: React.FC = () => (
 /* ─────────────────────────────────────────────────────────────
    SCENE: Digital twin panel
 ───────────────────────────────────────────────────────────────*/
-const TWIN_SUBS = [
-  { l: 'Algebra',      v: 82, c: '#22c55e', delay: '150ms' },
-  { l: 'Geometry',     v: 64, c: '#3b82f6', delay: '280ms' },
-  { l: 'Trigonometry', v: 71, c: '#3b82f6', delay: '410ms' },
-  { l: 'Statistics',   v: 38, c: '#ef4444', delay: '540ms', low: true },
+const TAPIWA_ATTRS = [
+  { l: 'Real Numbers',   v: 78 },
+  { l: 'Sets',           v: 72 },
+  { l: 'Financial Mat.', v: 65 },
+  { l: 'Graphs',         v: 70 },
+  { l: 'Algebra',        v: 82 },
+  { l: 'Geometry',       v: 64 },
+  { l: 'Statistics',     v: 38 },
 ];
 
 const SceneTwinPanel: React.FC<{ approved?: boolean }> = ({ approved }) => (
   <>
     <Backdrop />
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="sd-scale-in" style={{ background: 'white', borderRadius: 12, overflow: 'hidden', width: '60%', boxShadow: '0 16px 50px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#111', color: 'white', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 900, flexShrink: 0 }}>TM</div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, fontWeight: 900, color: '#111' }}>Tapiwa Moyo</p>
-            <p style={{ fontSize: 8, color: '#9ca3af', textTransform: 'uppercase', fontWeight: 700 }}>Form 3 · Digital Twin · OVR 78</p>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 20,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 12,
+      }}
+    >
+      <div
+        className="sd-modal-lift-twin"
+        style={{
+          background: '#f0f4f8',
+          borderRadius: 12,
+          padding: '14px 18px',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.4)',
+          display: 'flex',
+          flexDirection: 'column',
+          width: '64%',
+          maxHeight: '88%',
+          overflow: 'hidden',
+        }}
+      >
+        <p style={{
+          fontSize: 11,
+          fontWeight: 900,
+          textTransform: 'uppercase',
+          color: '#111',
+          textAlign: 'center',
+          marginBottom: 10,
+          letterSpacing: '0.04em',
+        }}>
+          Student Development
+        </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: '#111', display: 'grid', placeItems: 'center',
+            color: 'white', fontSize: 11, fontWeight: 900, flexShrink: 0,
+          }}>
+            TM
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: 8, color: '#3b82f6', fontWeight: 900, textTransform: 'uppercase' }}>3 Plans</p>
-            <p style={{ fontSize: 8, color: '#10b981', fontWeight: 900, textTransform: 'uppercase', marginTop: 2 }}>Active · Algebra</p>
-          </div>
-        </div>
-        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {TWIN_SUBS.map(s => (
-            <div key={s.l} className="sd-fade-up" style={{ animationDelay: s.delay }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{s.l}</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <p style={{ fontSize: 9, fontWeight: 900, color: s.v < 50 ? '#b91c1c' : s.v < 70 ? '#2563eb' : '#059669' }}>{s.v}%</p>
-                  {s.low && <span style={{ fontSize: 7, fontWeight: 900, color: '#b91c1c', background: '#fef2f2', padding: '1px 5px', borderRadius: 3 }}>LOW</span>}
-                </div>
-              </div>
-              <div style={{ width: '100%', background: '#e5e7eb', borderRadius: 99, height: 4, overflow: 'hidden' }}>
-                <div className="sd-grow-bar" style={{ width: `${s.v}%`, background: s.c, height: 4, borderRadius: 99, animationDelay: s.delay }} />
-              </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#111', lineHeight: 1.1 }}>
+              Moyo <span style={{ fontWeight: 400, color: '#6b7280' }}>Tapiwa</span>
+            </p>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
+              <span style={{ fontSize: 20, fontWeight: 900, lineHeight: 1, color: '#111' }}>78</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af' }}>OVR</span>
             </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <p style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Form 3</p>
+            <p style={{ fontSize: 9, color: '#3b82f6', fontWeight: 900, textTransform: 'uppercase', marginTop: 2 }}>3 Plans</p>
+            <p style={{ fontSize: 9, color: '#10b981', fontWeight: 900, textTransform: 'uppercase' }}>Active · Algebra</p>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontWeight: 700, color: '#9ca3af', marginBottom: 3 }}>
+            <span>Current: 67%</span><span>Potential: 92%</span>
+          </div>
+          <div style={{ background: '#e5e7eb', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+            <div className="sd-grow-bar" style={{ width: '67%', background: '#22c55e', height: 6, borderRadius: 99 }} />
+          </div>
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(7, 1fr)',
+          gridTemplateRows: 'auto auto',
+          alignContent: 'center',
+          gap: '3px 0',
+          marginBottom: 12,
+          padding: '8px 0',
+          borderTop: '1px solid #e3e8ee',
+          borderBottom: '1px solid #e3e8ee',
+        }}>
+          {TAPIWA_ATTRS.map((a, i) => (
+            <p
+              key={`n-${a.l}`}
+              className="sd-fade-up"
+              style={{
+                fontSize: 7,
+                color: '#9ca3af',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                textAlign: 'center',
+                lineHeight: 1.2,
+                wordBreak: 'break-word',
+                margin: 0,
+                animationDelay: `${i * 60}ms`,
+              }}
+            >
+              {a.l}
+            </p>
           ))}
+          {TAPIWA_ATTRS.map((a, i) => {
+            const color = a.v < 50 ? '#ef4444' : a.v < 70 ? '#3b82f6' : '#22c55e';
+            const isWeak = a.v < 50;
+            return (
+              <p
+                key={`v-${a.l}`}
+                className="sd-fade-up"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  color,
+                  textAlign: 'center',
+                  margin: 0,
+                  animationDelay: `${i * 60 + 80}ms`,
+                  textShadow: isWeak ? '0 0 12px rgba(239,68,68,0.4)' : 'none',
+                }}
+              >
+                {a.v}%
+              </p>
+            );
+          })}
         </div>
-        <div className="sd-fade-up" style={{ margin: '0 14px 8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '7px 10px', animationDelay: '750ms' }}>
-          <p style={{ fontSize: 8, fontWeight: 900, color: '#92400e', textTransform: 'uppercase', marginBottom: 2 }}>KundAI detected a gap</p>
-          <p style={{ fontSize: 9, color: '#b45309' }}>Stats 38% — 33pts below class avg. Weak on probability trees.</p>
+
+        <div
+          className="sd-fade-up"
+          style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: 8,
+            padding: '8px 10px',
+            marginBottom: 8,
+            animationDelay: '620ms',
+          }}
+        >
+          <p style={{ fontSize: 9, fontWeight: 900, color: '#92400e', textTransform: 'uppercase', marginBottom: 2, letterSpacing: '0.04em' }}>
+            KundAI detected a gap
+          </p>
+          <p style={{ fontSize: 10, color: '#b45309' }}>
+            Stats 38% — 33pts below class avg. Weak on probability trees.
+          </p>
         </div>
-        <div style={{ margin: '0 14px 8px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '7px 10px' }}>
-          <p style={{ fontSize: 9, fontWeight: 900, color: '#14532d', marginBottom: 4 }}>Plan generated — 14 steps · Statistics focus</p>
+
+        <div
+          className="sd-fade-up"
+          style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: 8,
+            padding: '8px 10px',
+            marginBottom: 10,
+            animationDelay: '780ms',
+          }}
+        >
+          <p style={{ fontSize: 10, fontWeight: 900, color: '#14532d', marginBottom: 5 }}>
+            Plan generated — 14 steps · Statistics focus
+          </p>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {['Probability trees', 'Data interpretation', 'Past papers'].map(t => (
-              <span key={t} style={{ fontSize: 7, fontWeight: 700, background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 99 }}>{t}</span>
+              <span key={t} style={{ fontSize: 8, fontWeight: 700, background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: 99 }}>
+                {t}
+              </span>
             ))}
           </div>
         </div>
-        <div style={{ padding: '0 14px 12px', display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: '7px 0', borderRadius: 7, background: '#f3f4f6', color: '#6b7280', border: 'none' }}>Review Plan</button>
-          <button style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: '7px 0', borderRadius: 7, background: approved ? '#059669' : '#2563eb', color: 'white', border: 'none', transition: 'background .3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            {approved ? '✓ Approved' : <><span>Approve Plan</span><ArrowRight size={11} /></>}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{
+            flex: 1, fontSize: 11, fontWeight: 700, padding: '8px 0',
+            borderRadius: 7, background: '#e5e7eb', color: '#6b7280', border: 'none',
+          }}>
+            Review Plan
+          </button>
+          <button style={{
+            flex: 1, fontSize: 11, fontWeight: 700, padding: '8px 0',
+            borderRadius: 7,
+            background: approved ? '#059669' : '#2563eb',
+            color: 'white', border: 'none',
+            transition: 'background .3s',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          }}>
+            {approved ? '✓ Approved' : <><span>Approve Plan</span><ArrowRight size={12} /></>}
           </button>
         </div>
       </div>
@@ -675,110 +1235,654 @@ const WA_MESSAGES: Omit<WaMessage, 'typed' | 'done'>[] = [
   { id: 6, from: 'kundai',  text: 'Outstanding. Session 1: Probability Trees.\n\nP(Heads) = ½ · P(Tails) = ½\n\nIf P(rain) = 0.4, what is P(no rain)? Reply with your answer. 🎯', time: '10:44 AM' },
 ];
 
+/* ── iOS Keyboard layout ──
+ * Each key carries an x_norm (-1 left → +1 right) and y_norm (-1 top → +1 bottom).
+ * Pressing a key tilts the iPhone in real 3D — rotateY follows x_norm
+ * (press left → right edge rotates toward viewer, exposing the right side),
+ * rotateX follows y_norm (press bottom → bottom edge rotates away, top toward viewer).
+ */
+const KB_ROWS: string[][] = [
+  ['q','w','e','r','t','y','u','i','o','p'],
+  ['a','s','d','f','g','h','j','k','l'],
+  ['z','x','c','v','b','n','m'],
+];
+
+// Tilt magnitudes — tuned to feel weighty but not seasick
+const TILT_RY_MAX = 9;   // degrees on Y axis (left/right keys)
+const TILT_RX_MAX = 6.5; // degrees on X axis (top/bottom row)
+
+interface KeyPress { row: number; col: number; key: string; ts: number; }
+
+type KbMode = 'abc' | 'emoji';
+
+// 6×8 emoji grid Tapiwa would pick from — 🔥 sits in the middle-right
+const EMOJI_GRID: string[][] = [
+  ['😀','😂','🥰','😍','😘','🤔','😎','😅'],
+  ['😢','😭','😡','😱','🤯','🙄','😴','🤤'],
+  ['👍','👎','👏','🙏','💪','🔥','✨','💯'],
+  ['❤️','💛','💚','💙','💜','🎉','🚀','⚡'],
+];
+
+// Locate an emoji in the grid (return null if absent so we can fall back gracefully)
+function findEmojiCoords(emoji: string): { row: number; col: number } | null {
+  for (let r = 0; r < EMOJI_GRID.length; r++) {
+    const c = EMOJI_GRID[r].indexOf(emoji);
+    if (c >= 0) return { row: r, col: c };
+  }
+  return null;
+}
+
+// Detect whether a character is an emoji / symbol (rather than a typeable Latin char)
+function isEmojiLike(ch: string): boolean {
+  // Anything outside basic ASCII is treated as a picker glyph
+  return [...ch].some(cp => (cp.codePointAt(0) ?? 0) > 127);
+}
+
 const PhoneMockup: React.FC<{ started: boolean; onComplete?: () => void }> = ({ started, onComplete }) => {
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [status, setStatus] = useState('Your academic assistant');
   const [showTyping, setShowTyping] = useState(false);
+  const [kbActive, setKbActive] = useState(false);           // keyboard visible
+  const [kbMode, setKbMode] = useState<KbMode>('abc');       // QWERTY or emoji picker
+  const [kbDraft, setKbDraft] = useState('');                // text appearing in the input bar as Tapiwa types
+  const [pressedKey, setPressedKey] = useState<KeyPress | null>(null);
+  const [pressedEmoji, setPressedEmoji] = useState<{ row: number; col: number; ts: number } | null>(null);
+  const [tilt, setTilt] = useState<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
   const seqRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
+  // Find the keyboard coords for a given character
+  const findKeyCoords = (ch: string): { row: number; col: number; key: string } | null => {
+    const lower = ch.toLowerCase();
+    for (let r = 0; r < KB_ROWS.length; r++) {
+      const idx = KB_ROWS[r].indexOf(lower);
+      if (idx >= 0) return { row: r, col: idx, key: KB_ROWS[r][idx] };
+    }
+    if (lower === ' ') return { row: 3, col: 4, key: ' ' };          // space — bottom center
+    if (lower === '!' || lower === '.' || lower === '?' || lower === "'") return { row: 3, col: 7, key: lower }; // right-bottom punctuation key
+    return null;
+  };
+
+  // Normalize a key's (row,col) to (-1..+1) per axis for tilt math
+  const tiltFor = (kp: { row: number; col: number; key: string } | null): { rx: number; ry: number } => {
+    if (!kp) return { rx: 0, ry: 0 };
+    if (kp.row >= KB_ROWS.length) {
+      // bottom row (space/punct) — strong downward tilt
+      const xNorm = kp.col === 4 ? 0 : (kp.col > 4 ? 0.7 : -0.7);
+      return { rx: TILT_RX_MAX, ry: -xNorm * TILT_RY_MAX };
+    }
+    const row = KB_ROWS[kp.row];
+    const mid = (row.length - 1) / 2;
+    const xNorm = (kp.col - mid) / mid;       // -1 .. +1
+    const yNorm = (kp.row / (KB_ROWS.length - 1)) * 2 - 1; // -1 (top row q-p) .. +1 (bottom row z-m)
+    // Press LEFT → right edge toward viewer → rotateY NEGATIVE (in CSS, negative rotateY brings right edge forward)
+    const ry = -xNorm * TILT_RY_MAX;
+    // Press BOTTOM → bottom edge tilts away → rotateX POSITIVE (top toward viewer)
+    const rx = yNorm * TILT_RX_MAX;
+    return { rx, ry };
+  };
+
+  // ── Main scripted sequence ──
   useEffect(() => {
     if (!started || seqRef.current) return;
     seqRef.current = true;
     let cursor = 0;
+    let cancelled = false;
 
-    const typeMsg = (msgId: number, fullText: string, resolve: () => void) => {
+    const sleep = (ms: number) => new Promise<void>(res => setTimeout(() => !cancelled && res(), ms));
+
+    const typeKundai = (msgId: number, fullText: string) => new Promise<void>(resolve => {
+      // Original char-by-char typing into the chat bubble (KundAI side)
       let i = 0;
       const iv = setInterval(() => {
+        if (cancelled) { clearInterval(iv); resolve(); return; }
         i++;
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, typed: fullText.slice(0, i), done: i >= fullText.length } : m));
         if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
         if (i >= fullText.length) { clearInterval(iv); resolve(); }
       }, 16);
+    });
+
+    // Tapiwa typing on the iOS keyboard — each keystroke tilts the phone in real 3D.
+    // Iterating with Array.from() so multi-codepoint emoji (🔥, ❤️) count as one glyph.
+    const typeTapiwaOnKeyboard = async (fullText: string) => {
+      setKbActive(true);
+      setKbMode('abc');
+      setKbDraft('');
+      await sleep(520); // keyboard rise — give it time to settle visually
+
+      const glyphs = Array.from(fullText);
+      for (let i = 0; i < glyphs.length; i++) {
+        if (cancelled) return;
+        const ch = glyphs[i];
+
+        if (isEmojiLike(ch)) {
+          // ── Switch to emoji picker ──
+          // Brief "press the 😊 key" tap on the QWERTY layout first
+          setKbMode('abc');
+          // simulate tapping the globe/emoji switcher (bottom-left area) → tilt
+          setTilt({ rx: TILT_RX_MAX * 0.85, ry: TILT_RY_MAX * 0.55 });
+          await sleep(180);
+          setKbMode('emoji');
+          await sleep(260); // emoji picker transition
+          // Find emoji in grid (fall back to row 2 col 5 — where 🔥 sits — if not found)
+          const ec = findEmojiCoords(ch) ?? { row: 2, col: 5 };
+          // Compute tilt the same way as letter keys: center the grid, normalize, apply
+          const midC = (EMOJI_GRID[0].length - 1) / 2;
+          const xN = (ec.col - midC) / midC;                                  // -1..+1
+          const yN = (ec.row / (EMOJI_GRID.length - 1)) * 2 - 1;              // -1..+1
+          const tiltTarget = { rx: yN * TILT_RX_MAX, ry: -xN * TILT_RY_MAX };
+          setTilt(tiltTarget);
+          setPressedEmoji({ row: ec.row, col: ec.col, ts: Date.now() });
+          await sleep(160); // hover before tap
+          // Tap registers — append the emoji to the draft
+          setKbDraft(prev => prev + ch);
+          await sleep(280); // savour the tap, hold the tilt
+          setTilt({ rx: tiltTarget.rx * 0.4, ry: tiltTarget.ry * 0.4 });
+          setPressedEmoji(null);
+          await sleep(120);
+          // If more chars follow, switch back to QWERTY; otherwise stay in emoji
+          if (i < glyphs.length - 1 && !isEmojiLike(glyphs[i + 1])) {
+            setKbMode('abc');
+            await sleep(220);
+          }
+          continue;
+        }
+
+        // ── Normal letter / punctuation keystroke ──
+        const kp = findKeyCoords(ch);
+        const tiltTarget = tiltFor(kp);
+        setTilt(tiltTarget);
+        if (kp) setPressedKey({ ...kp, ts: Date.now() });
+        setKbDraft(prev => prev + ch);
+
+        // Per-keystroke pacing — real student typing, ~5 chars/sec base with variance
+        let wait = 145 + Math.random() * 95;          // 145–240ms baseline
+        if (ch === ' ') wait += 70;                   // brief breath on space
+        if (/[.!?,]/.test(ch)) wait += 240;           // longer pause after punctuation
+        if (ch.toLowerCase() === 'i' && i > 0 && glyphs[i - 1].toLowerCase() === 'm') wait += 60; // micro-pause mid-word
+        await sleep(wait);
+        // Ease the tilt about a third of the way back — keeps the phone moving but not jittery
+        setTilt({ rx: tiltTarget.rx * 0.32, ry: tiltTarget.ry * 0.32 });
+        await sleep(85);
+      }
+
+      // ── Read-over pause before sending ──
+      setPressedKey(null);
+      setPressedEmoji(null);
+      await sleep(620);
+      // "Send" tap — small forward + right tilt (send button sits bottom-right)
+      setTilt({ rx: TILT_RX_MAX * 0.7, ry: -TILT_RY_MAX * 0.55 });
+      await sleep(220);
+      setTilt({ rx: 0, ry: 0 });
+      setKbMode('abc');
+      setKbDraft('');
+      setKbActive(false);
+      await sleep(320); // keyboard fall
     };
 
-    const runNext = () => {
-      if (cursor >= WA_MESSAGES.length) { setStatus('online'); setShowTyping(false); onComplete?.(); return; }
+    const runNext = async () => {
+      if (cancelled) return;
+      if (cursor >= WA_MESSAGES.length) {
+        setStatus('online'); setShowTyping(false); onComplete?.(); return;
+      }
       const cfg = WA_MESSAGES[cursor++];
-      setStatus('typing...'); setShowTyping(true);
-      setTimeout(() => {
+
+      if (cfg.from === 'tapiwa') {
+        // Tapiwa types on the keyboard with live 3D tilt
+        setStatus('online');
+        setShowTyping(false);
+        await typeTapiwaOnKeyboard(cfg.text);
+        if (cancelled) return;
+        // After "sending", the bubble appears in the chat fully formed
+        setMessages(prev => [...prev, { ...cfg, typed: cfg.text, done: true }]);
+        await sleep(500);
+      } else {
+        // KundAI side: typing indicator + character-by-character bubble fill
+        setStatus('typing...'); setShowTyping(true);
+        await sleep(1100);
+        if (cancelled) return;
         setShowTyping(false);
         setMessages(prev => [...prev, { ...cfg, typed: '', done: false }]);
-        setTimeout(() => new Promise<void>(res => typeMsg(cfg.id, cfg.text, res)).then(() => setTimeout(runNext, cfg.from === 'tapiwa' ? 600 : 800)), 80);
-      }, cfg.from === 'tapiwa' ? 900 : 1300);
+        await sleep(80);
+        await typeKundai(cfg.id, cfg.text);
+        await sleep(700);
+      }
+      runNext();
     };
 
-    setTimeout(runNext, 400);
+    setTimeout(() => { if (!cancelled) runNext(); }, 400);
+    return () => { cancelled = true; };
   }, [started, onComplete]);
 
-  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [messages, showTyping]);
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [messages, showTyping, kbDraft]);
+
+  // Apply tilt as inline transform on the phone frame
+  const tiltTransform = `rotateX(${tilt.rx.toFixed(2)}deg) rotateY(${tilt.ry.toFixed(2)}deg)`;
+
+  // ── iPhone 15 Pro geometry — a real 3D box, not a flat rectangle ──
+  const PHONE_W = 218;
+  const PHONE_H = 442;
+  const PHONE_D = 14;     // physical thickness (the side band the user actually sees on tilt)
+  const FRAME = 4;        // titanium rail thickness on the front bezel
+  const RAD = 38;         // corner radius of the front face
+  const SCREEN_W = PHONE_W - FRAME * 2;
+  const SCREEN_H = PHONE_H - FRAME * 2;
+  const HALF_D = PHONE_D / 2;
+  const HALF_W = PHONE_W / 2;
+  const HALF_H = PHONE_H / 2;
+
+  // Reusable titanium rail gradient — what every side face shows
+  const RAIL_LIGHT = 'linear-gradient(180deg, #4d5057 0%, #9da0a8 18%, #d1d3d8 42%, #6a6d76 60%, #3d4047 100%)';
+  const RAIL_TOP   = 'linear-gradient(90deg, #4d5057 0%, #9da0a8 18%, #d1d3d8 42%, #6a6d76 60%, #3d4047 100%)';
 
   return (
-    /* 3D stage: perspective on outermost, phone body rotates inside */
-    <div className="sd-phone-stage" style={{ fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
-      {/* Motion-blur ghost — blurred copy that fades out first */}
+    /* 3D stage: outer perspective + drop-in animation */
+    <div className="sd-phone-stage" style={{ fontFamily: 'system-ui, sans-serif', position: 'relative', width: PHONE_W + 12, margin: '0 auto' }}>
+      {/* Motion-blur ghost — silhouette trailing above the falling phone */}
       <div className="sd-phone-ghost" aria-hidden>
-        <div style={{ width: 200, margin: '0 auto', height: 390, borderRadius: 24, background: 'linear-gradient(180deg,#2a2a3e 0%,#1a1a2e 100%)', opacity: 0.6 }} />
+        <div style={{ width: PHONE_W, margin: '0 auto', height: PHONE_H, borderRadius: RAD, background: 'linear-gradient(180deg, #2a2a30 0%, #1a1a20 100%)', opacity: 0.55, boxShadow: '0 30px 50px rgba(0,0,0,0.25)' }} />
       </div>
-      {/* Phone body — actual 3D drop-in */}
+      {/* Phone body — drop-in animation wraps the live-tilt frame */}
       <div className="sd-phone-fall-anim" style={{ position: 'relative' }}>
-        <div style={{ width: 200, margin: '0 auto', position: 'relative' }}>
-          <div style={{ background: '#1a1a2e', borderRadius: '24px 24px 0 0', padding: '8px 14px 5px', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: 44, height: 4, borderRadius: 3, background: '#333' }} />
-          </div>
-          <div style={{ background: '#e5ddd5', borderLeft: '2.5px solid #1a1a2e', borderRight: '2.5px solid #1a1a2e', display: 'flex', flexDirection: 'column', height: 360, overflow: 'hidden' }}>
-            <div style={{ background: '#075e54', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#25D366', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 900, color: '#075e54' }}>K</span>
+        {/* Live-tilt frame — receives keystroke-driven rotateX/rotateY */}
+        <div
+          className="sd-phone-frame"
+          style={{
+            width: PHONE_W,
+            height: PHONE_H,
+            margin: '0 auto',
+            position: 'relative',
+            transform: tiltTransform,
+            transformOrigin: '50% 50%',
+            transformStyle: 'preserve-3d',
+          }}
+        >
+          {/* ═══ 3D BOX ═══ All six faces live here. Each face is centered on the cube
+              centre and then translated/rotated to its position. preserve-3d on every
+              ancestor is what makes the sides actually visible when the phone tilts. */}
+          <div style={{ position: 'absolute', inset: 0, transformStyle: 'preserve-3d' }}>
+
+            {/* TOP edge — trimmed away from the corner-radius zones so the rounded
+                front face doesn't reveal sharp rail corners poking through */}
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_W - RAD * 2, height: PHONE_D,
+              transform: `translate(-50%, -50%) rotateX(90deg) translateZ(${HALF_H}px)`,
+              background: RAIL_TOP,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.45)',
+            }}>
+              {/* Mic pinhole */}
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 4, height: 2, background: '#0a0a0c', borderRadius: 1 }} />
+            </div>
+
+            {/* BOTTOM edge — speaker grille + USB-C, trimmed away from corners */}
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_W - RAD * 2, height: PHONE_D,
+              transform: `translate(-50%, -50%) rotateX(-90deg) translateZ(${HALF_H}px)`,
+              background: RAIL_TOP,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.45)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18,
+            }}>
+              {/* Speaker grille (left) */}
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[0,1,2,3,4].map(i => <span key={i} style={{ width: 3, height: 3, borderRadius: '50%', background: '#0a0a0c' }} />)}
               </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: 'white', margin: 0 }}>KundAI</p>
-                <p style={{ fontSize: 8, color: 'rgba(255,255,255,.7)', margin: 0 }}>{status}</p>
+              {/* USB-C port */}
+              <div style={{ width: 22, height: 6, borderRadius: 3, background: '#0a0a0c', boxShadow: 'inset 0 1px 1px rgba(0,0,0,0.8)' }} />
+              {/* Speaker grille (right) */}
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[0,1,2,3,4].map(i => <span key={i} style={{ width: 3, height: 3, borderRadius: '50%', background: '#0a0a0c' }} />)}
               </div>
             </div>
-            <div ref={bodyRef} style={{ flex: 1, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', scrollbarWidth: 'none' }}>
-              <div style={{ textAlign: 'center' }}>
-                <span style={{ fontSize: 8, background: 'rgba(0,0,0,.1)', color: '#555', padding: '2px 8px', borderRadius: 12 }}>Today</span>
+
+            {/* LEFT rail — Action button + Volume up + Volume down sit on this face.
+                Trimmed away from top/bottom corner-radius zones */}
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_D, height: PHONE_H - RAD * 2,
+              transform: `translate(-50%, -50%) rotateY(-90deg) translateZ(${HALF_W}px)`,
+              background: RAIL_LIGHT,
+              boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.30), inset -1px 0 0 rgba(0,0,0,0.40)',
+              transformStyle: 'preserve-3d',
+            }}>
+              {/* Action button — protrudes OUTWARD from this face via translateZ.
+                  Positions are relative to the trimmed rail (which starts RAD=38 down). */}
+              <div style={{
+                position: 'absolute', top: 12, left: '50%',
+                width: 8, height: 18, borderRadius: 1.5,
+                transform: 'translateX(-50%) translateZ(1.5px)',
+                background: 'linear-gradient(180deg, #2a2c32 0%, #6b6e76 50%, #babbc1 100%)',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.5)',
+              }} />
+              {/* Volume up */}
+              <div style={{
+                position: 'absolute', top: 46, left: '50%',
+                width: 8, height: 32, borderRadius: 2,
+                transform: 'translateX(-50%) translateZ(1.5px)',
+                background: 'linear-gradient(180deg, #2a2c32 0%, #6b6e76 50%, #babbc1 100%)',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.5)',
+              }} />
+              {/* Volume down */}
+              <div style={{
+                position: 'absolute', top: 88, left: '50%',
+                width: 8, height: 32, borderRadius: 2,
+                transform: 'translateX(-50%) translateZ(1.5px)',
+                background: 'linear-gradient(180deg, #2a2c32 0%, #6b6e76 50%, #babbc1 100%)',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.5)',
+              }} />
+            </div>
+
+            {/* RIGHT rail — Power button, trimmed away from top/bottom corners */}
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_D, height: PHONE_H - RAD * 2,
+              transform: `translate(-50%, -50%) rotateY(90deg) translateZ(${HALF_W}px)`,
+              background: RAIL_LIGHT,
+              boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.30), inset -1px 0 0 rgba(0,0,0,0.40)',
+              transformStyle: 'preserve-3d',
+            }}>
+              <div style={{
+                position: 'absolute', top: 62, left: '50%',
+                width: 8, height: 54, borderRadius: 2,
+                transform: 'translateX(-50%) translateZ(1.5px)',
+                background: 'linear-gradient(180deg, #2a2c32 0%, #6b6e76 50%, #babbc1 100%)',
+                boxShadow: '0 1px 1px rgba(0,0,0,0.5)',
+              }} />
+            </div>
+
+            {/* BACK face — natural titanium back with camera bump */}
+            <div aria-hidden style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_W, height: PHONE_H, borderRadius: RAD,
+              transform: `translate(-50%, -50%) rotateY(180deg) translateZ(${HALF_D}px)`,
+              background: 'linear-gradient(155deg, #6c6f76 0%, #4a4d54 30%, #3a3d44 60%, #2a2d34 100%)',
+              boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.4), inset 0 0 30px rgba(0,0,0,0.45)',
+              transformStyle: 'preserve-3d',
+            }}>
+              {/* Camera plateau */}
+              <div style={{ position: 'absolute', top: 16, left: 16, width: 68, height: 68, borderRadius: 22, background: 'linear-gradient(145deg, #555861 0%, #34373d 80%)', boxShadow: '0 3px 6px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.10)', transform: 'translateZ(1px)' }}>
+                {[ {t:8,l:8}, {t:8,l:32}, {t:32,l:8} ].map((p, idx) => (
+                  <div key={idx} style={{ position: 'absolute', top: p.t, left: p.l, width: 22, height: 22, borderRadius: '50%', background: 'radial-gradient(circle, #2a3a4a 0%, #0a0d14 60%, #000 100%)', boxShadow: 'inset 0 0 4px rgba(120,170,220,0.4), 0 1px 2px rgba(0,0,0,0.6)' }}>
+                    <div style={{ position: 'absolute', top: 5, left: 5, width: 6, height: 6, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.6) 0%, transparent 70%)' }} />
+                  </div>
+                ))}
+                {/* LiDAR */}
+                <div style={{ position: 'absolute', top: 36, left: 38, width: 14, height: 14, borderRadius: '50%', background: '#1a1a1d', border: '1px solid #2a2d34' }} />
+                {/* Flash */}
+                <div style={{ position: 'absolute', top: 8, left: 50, width: 12, height: 12, borderRadius: '50%', background: 'radial-gradient(circle, #f7f7f0 0%, #d4d4c8 70%)' }} />
               </div>
-              {messages.map(msg => (
-                <div key={msg.id} className="sd-msg-pop" style={{ display: 'flex', justifyContent: msg.from === 'tapiwa' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: '82%' }}>
-                    <div style={{ background: msg.from === 'tapiwa' ? '#dcf8c6' : 'white', borderRadius: msg.from === 'tapiwa' ? '8px 0 8px 8px' : '0 8px 8px 8px', padding: '6px 8px' }}>
-                      <p style={{ fontSize: 10, color: '#111', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
-                        {msg.typed}{!msg.done && <span className="sd-blink-cur" />}
-                      </p>
+              {/* Apple logo */}
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontSize: 38, fontWeight: 100, color: 'rgba(255,255,255,0.12)' }}>K</div>
+              {/* MagSafe ring (subtle) */}
+              <div style={{ position: 'absolute', top: '55%', left: '50%', transform: 'translate(-50%, -50%)', width: 90, height: 90, borderRadius: '50%', border: '0.5px solid rgba(255,255,255,0.04)' }} />
+            </div>
+
+            {/* FRONT face — the titanium chassis + the OLED screen.
+                NOTE: no preserve-3d here. Its children (chassis / screen / island /
+                home indicator) are flat overlays and must stack by source order so
+                the screen paints OVER the titanium. */}
+            <div style={{
+              position: 'absolute', left: '50%', top: '50%',
+              width: PHONE_W, height: PHONE_H,
+              transform: `translate(-50%, -50%) translateZ(${HALF_D}px)`,
+            }}>
+              {/* Titanium chassis */}
+              <div
+                className="sd-titanium"
+                style={{
+                  position: 'absolute', inset: 0, borderRadius: RAD,
+                  boxShadow:
+                    /* outer cast */
+                    '0 22px 38px -10px rgba(0,0,0,0.45), 0 8px 18px -4px rgba(0,0,0,0.30),' +
+                    /* polished edge highlights — fake the rounded titanium edge */
+                    'inset 0 0 0 1px rgba(255,255,255,0.18),' +
+                    'inset 0 1.5px 0 rgba(255,255,255,0.35),' +
+                    'inset 0 -1.5px 0 rgba(0,0,0,0.35),' +
+                    'inset 1.5px 0 0 rgba(255,255,255,0.10),' +
+                    'inset -1.5px 0 0 rgba(0,0,0,0.18)',
+                }}
+              />
+
+              {/* OLED screen — painted over the chassis via source order */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: FRAME, left: FRAME, width: SCREEN_W, height: SCREEN_H,
+                  borderRadius: RAD - FRAME,
+                  background: '#000',
+                  overflow: 'hidden',
+                  boxShadow: 'inset 0 0 0 1px #000, inset 0 0 12px rgba(0,0,0,0.6)',
+                }}
+              >
+            {/* Inner WhatsApp UI */}
+            <div style={{ width: '100%', height: '100%', background: '#e5ddd5', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              {/* iOS status bar */}
+              <div style={{ height: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: '#075e54', color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+                <span>9:41</span>
+                <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+                  {/* signal */}
+                  <span style={{ display: 'inline-flex', gap: 1, alignItems: 'flex-end' }}>
+                    {[3, 5, 7, 9].map(h => <span key={h} style={{ width: 2, height: h, background: 'white', borderRadius: 0.5 }} />)}
+                  </span>
+                  {/* battery */}
+                  <span style={{ display: 'inline-block', width: 16, height: 8, border: '1px solid white', borderRadius: 2, position: 'relative', padding: 1 }}>
+                    <span style={{ display: 'block', width: '78%', height: '100%', background: 'white', borderRadius: 0.5 }} />
+                    <span style={{ position: 'absolute', right: -2, top: 2, width: 1, height: 4, background: 'white', borderRadius: 0.5 }} />
+                  </span>
+                </span>
+              </div>
+              {/* WhatsApp header */}
+              <div style={{ background: '#075e54', padding: '5px 10px 7px', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#25D366', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: '#075e54' }}>K</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'white', margin: 0 }}>KundAI</p>
+                  <p style={{ fontSize: 8, color: 'rgba(255,255,255,.75)', margin: 0 }}>{status}</p>
+                </div>
+              </div>
+              {/* Message body */}
+              <div ref={bodyRef} style={{ flex: 1, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', scrollbarWidth: 'none' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: 8, background: 'rgba(0,0,0,.1)', color: '#555', padding: '2px 8px', borderRadius: 12 }}>Today</span>
+                </div>
+                {messages.map(msg => (
+                  <div key={msg.id} className="sd-msg-pop" style={{ display: 'flex', justifyContent: msg.from === 'tapiwa' ? 'flex-end' : 'flex-start' }}>
+                    <div style={{ maxWidth: '82%' }}>
+                      <div style={{ background: msg.from === 'tapiwa' ? '#dcf8c6' : 'white', borderRadius: msg.from === 'tapiwa' ? '8px 0 8px 8px' : '0 8px 8px 8px', padding: '6px 8px', boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)' }}>
+                        <p style={{ fontSize: 10, color: '#111', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
+                          {msg.typed}{!msg.done && <span className="sd-blink-cur" />}
+                        </p>
+                      </div>
+                      <p style={{ fontSize: 8, color: '#94a3b8', margin: '2px 3px 0', textAlign: msg.from === 'tapiwa' ? 'right' : 'left' }}>{msg.time}</p>
                     </div>
-                    <p style={{ fontSize: 8, color: '#94a3b8', margin: '2px 3px 0', textAlign: msg.from === 'tapiwa' ? 'right' : 'left' }}>{msg.time}</p>
                   </div>
-                </div>
-              ))}
-              {showTyping && (
-                <div className="sd-msg-pop" style={{ display: 'flex' }}>
-                  <div style={{ background: 'white', borderRadius: '0 8px 8px 8px', padding: '7px 10px', display: 'flex', gap: 3, alignItems: 'center' }}>
-                    <span className="sd-typing-dot" /><span className="sd-typing-dot" /><span className="sd-typing-dot" />
+                ))}
+                {showTyping && (
+                  <div className="sd-msg-pop" style={{ display: 'flex' }}>
+                    <div style={{ background: 'white', borderRadius: '0 8px 8px 8px', padding: '7px 10px', display: 'flex', gap: 3, alignItems: 'center', boxShadow: '0 1px 0.5px rgba(0,0,0,0.13)' }}>
+                      <span className="sd-typing-dot" /><span className="sd-typing-dot" /><span className="sd-typing-dot" />
+                    </div>
                   </div>
+                )}
+              </div>
+              {/* Input bar — shows the live draft as Tapiwa types.
+                  Sits in the flex column ABOVE the keyboard so it stays visible. */}
+              <div style={{ background: '#f0f0f0', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, borderTop: '.5px solid #d0d0d0', zIndex: 11, position: 'relative' }}>
+                <div style={{ flex: 1, background: 'white', borderRadius: 16, padding: '4px 10px', minHeight: 18, overflow: 'hidden' }}>
+                  {kbActive && kbDraft ? (
+                    <p style={{ fontSize: 9, color: '#111', margin: 0, lineHeight: 1.3, wordBreak: 'break-word' }}>{kbDraft}<span className="sd-blink-cur" /></p>
+                  ) : (
+                    <p style={{ fontSize: 9, color: '#aaa', margin: 0 }}>Type a message</p>
+                  )}
                 </div>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: kbActive && kbDraft ? '#25D366' : '#c7cad1', display: 'grid', placeItems: 'center', transition: 'background .2s' }}>
+                  {kbActive && kbDraft ? (
+                    <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                  ) : (
+                    <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                  )}
+                </div>
+              </div>
+              {/* iOS keyboard — natural flex item that slides up from below */}
+              {kbActive && (
+                <IOSKeyboard pressedKey={pressedKey} mode={kbMode} pressedEmoji={pressedEmoji} />
               )}
             </div>
-            <div style={{ background: '#f0f0f0', padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, borderTop: '.5px solid #d0d0d0' }}>
-              <div style={{ flex: 1, background: 'white', borderRadius: 16, padding: '4px 10px' }}>
-                <p style={{ fontSize: 9, color: '#aaa', margin: 0 }}>Type a message</p>
-              </div>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#25D366', display: 'grid', placeItems: 'center' }}>
-                <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-              </div>
+
+            {/* Dynamic Island — black pill at the top */}
+            <div aria-hidden style={{
+              position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)',
+              width: 78, height: 18, borderRadius: 10,
+              background: '#000',
+              boxShadow: '0 0 0 0.5px rgba(255,255,255,0.05), inset 0 0 6px rgba(0,0,0,0.6)',
+              zIndex: 5,
+            }}>
+              {/* tiny camera lens */}
+              <div style={{ position: 'absolute', top: 5, right: 12, width: 7, height: 7, borderRadius: '50%', background: 'radial-gradient(circle, #1a3045 0%, #050c14 70%, #000 100%)', boxShadow: 'inset 0 0 2px rgba(60,140,200,0.6)' }} />
             </div>
-          </div>
-          <div style={{ background: '#1a1a2e', borderRadius: '0 0 24px 24px', padding: '6px 14px 10px', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: 60, height: 3, borderRadius: 3, background: '#444' }} />
-          </div>
-          {/* Phone's own drop-shadow — blooms on landing */}
-          <div style={{ position: 'absolute', bottom: -18, left: '10%', width: '80%', height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.28)', filter: 'blur(8px)', animation: 'sd-phone-shadow 1.1s cubic-bezier(.23,1,.32,1) both' }} />
+
+            {/* Subtle screen reflection — fixed sheen, doesn't tilt with phone for a contrast cue */}
+            <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 35%, transparent 65%, rgba(255,255,255,0.04) 100%)' }} />
+              </div>
+
+              {/* Home indicator — sits on the front face, just above the bottom rail */}
+              <div aria-hidden style={{ position: 'absolute', bottom: FRAME + 4, left: '50%', transform: 'translateX(-50%)', width: 70, height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.85)', zIndex: 6 }} />
+            </div>{/* /FRONT face */}
+          </div>{/* /3D BOX */}
+
+          {/* Phone's own drop-shadow — blooms exactly on landing.
+              Sits outside the cube so the floor shadow stays flat (doesn't tilt with rails). */}
+          <div aria-hidden style={{ position: 'absolute', bottom: -26, left: '8%', width: '84%', height: 28, borderRadius: '50%', background: 'rgba(0,0,0,0.32)', filter: 'blur(10px)', animation: 'sd-phone-shadow 1.25s cubic-bezier(.23,1,.32,1) both' }} />
         </div>
       </div>
     </div>
   );
 };
+
+/* ─────────────────────────────────────────────────────────────
+   iOS KEYBOARD — slides up while Tapiwa is typing.
+   Each pressed key flashes; the parent phone tilts via state.
+   Mode 'emoji' renders an emoji picker grid instead of QWERTY.
+───────────────────────────────────────────────────────────────*/
+const IOSKeyboard: React.FC<{
+  pressedKey: KeyPress | null;
+  mode: KbMode;
+  pressedEmoji: { row: number; col: number; ts: number } | null;
+}> = ({ pressedKey, mode, pressedEmoji }) => {
+  return (
+    <div
+      style={{
+        background: '#cfd2d8',
+        padding: '5px 3px 7px',
+        flexShrink: 0,
+        animation: 'sd-kb-rise 0.32s cubic-bezier(.34,1.4,.64,1) both',
+        boxShadow: '0 -1px 0 rgba(0,0,0,0.18)',
+        position: 'relative',
+        zIndex: 10,
+      }}
+    >
+      {mode === 'emoji' ? (
+        <>
+          {/* Top tab strip — recent / smileys / animals / etc. */}
+          <div style={{ display: 'flex', justifyContent: 'space-around', padding: '0 6px 4px', borderBottom: '0.5px solid rgba(0,0,0,0.12)' }}>
+            {['🕐','😀','🐶','🍔','⚽','💡','🔣','🏁'].map((g, idx) => (
+              <span key={idx} style={{ fontSize: 11, opacity: idx === 1 ? 1 : 0.45 }}>{g}</span>
+            ))}
+          </div>
+          {EMOJI_GRID.map((row, rIdx) => (
+            <div key={rIdx} style={{ display: 'flex', justifyContent: 'space-around', padding: '3px 4px' }}>
+              {row.map((emoji, cIdx) => {
+                const isPressed = pressedEmoji && pressedEmoji.row === rIdx && pressedEmoji.col === cIdx;
+                return (
+                  <div
+                    key={cIdx + '-' + (pressedEmoji?.ts ?? 0) + '-' + isPressed}
+                    style={{
+                      width: 20, height: 20, borderRadius: 4,
+                      display: 'grid', placeItems: 'center',
+                      fontSize: 13,
+                      background: isPressed ? 'rgba(149,154,168,0.55)' : 'transparent',
+                      transform: isPressed ? 'scale(1.35)' : 'scale(1)',
+                      transition: 'transform 120ms cubic-bezier(.34,1.4,.64,1), background 120ms',
+                      filter: isPressed ? 'drop-shadow(0 2px 3px rgba(0,0,0,0.35))' : undefined,
+                    }}
+                  >
+                    {emoji}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {/* Bottom bar in emoji mode: ABC | search | backspace */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 4px 0' }}>
+            <KeyCap label="ABC" wide gray />
+            <div style={{ flex: 1, height: 22, borderRadius: 4.5, background: 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', padding: '0 6px', fontSize: 8, color: '#666' }}>🔍 Search Emoji</div>
+            <KeyCap label="⌫" gray />
+          </div>
+        </>
+      ) : (
+        <>
+          {KB_ROWS.map((row, rIdx) => {
+            const isBottomLetters = rIdx === 2;
+            const indent = rIdx === 1 ? 9 : 0;
+            return (
+              <div key={rIdx} style={{ display: 'flex', justifyContent: 'center', gap: 3, marginBottom: 4, paddingLeft: indent, paddingRight: indent }}>
+                {isBottomLetters && <KeyCap label="⇧" wide />}
+                {row.map((ch, cIdx) => {
+                  const isPressed = pressedKey && pressedKey.row === rIdx && pressedKey.col === cIdx;
+                  return <KeyCap key={ch} label={ch.toUpperCase()} pressed={!!isPressed} ts={pressedKey?.ts} />;
+                })}
+                {isBottomLetters && <KeyCap label="⌫" wide />}
+              </div>
+            );
+          })}
+          {/* Bottom row: 123 / emoji / space / return */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 3, paddingLeft: 2, paddingRight: 2 }}>
+            <KeyCap label="123" wide gray />
+            <KeyCap label="🙂" gray />
+            <div
+              style={{
+                flex: 1, height: 22, borderRadius: 4.5,
+                background: pressedKey && pressedKey.row >= KB_ROWS.length ? '#9aa1ad' : 'white',
+                boxShadow: '0 1px 0 rgba(0,0,0,0.28)',
+                display: 'grid', placeItems: 'center',
+                fontSize: 9, fontWeight: 500, color: '#222',
+                transition: 'background 90ms',
+              }}
+            >
+              space
+            </div>
+            <KeyCap label="return" wide gray />
+          </div>
+        </>
+      )}
+      <div style={{ height: 4 }} />
+    </div>
+  );
+};
+
+const KeyCap: React.FC<{ label: string; wide?: boolean; gray?: boolean; pressed?: boolean; ts?: number }> = ({ label, wide, gray, pressed, ts }) => (
+  <div
+    key={ts ?? 0}
+    style={{
+      width: wide ? 22 : 16,
+      height: 22,
+      borderRadius: 4.5,
+      background: gray ? '#a4adbb' : 'white',
+      boxShadow: '0 1px 0 rgba(0,0,0,0.28)',
+      display: 'grid',
+      placeItems: 'center',
+      fontSize: label.length > 1 ? 8 : 10,
+      fontWeight: 500,
+      color: '#222',
+      animation: pressed ? 'sd-key-press 130ms ease-out' : undefined,
+    }}
+  >
+    {label}
+  </div>
+);
 
 /* ─────────────────────────────────────────────────────────────
    FLASH BURST OVERLAY
@@ -860,16 +1964,17 @@ function useSequencer(visible: boolean) {
   const after = useCallback((ms: number, fn: () => void) => { const id = setTimeout(fn, ms); timers.current.push(id); }, []);
 
   const triggerSwap = useCallback(() => {
-    // Stage 1: 3D lid fold — 1550ms (real weight, gravity-accelerated)
+    // Stage 1: 5-phase 3D lid fold — ~1900ms total. We trigger the exit fade
+    // right after the magnetic-seal bounce so the spring settle blends into the sink.
     setSwapPhase('folding');
-    after(1400, () => {
-      // Stage 1b: lid is fully closed — whole laptop exits down
+    after(1750, () => {
+      // Stage 1b: lid fully shut — assembly sinks + fades
       setSwapPhase('exit');
-      after(300, () => {
-        // Stage 2: flash burst at moment of disappearance
+      after(420, () => {
+        // Stage 2: flash burst at the exact moment of disappearance
         setSwapPhase('flash');
-        after(120, () => {
-          // Stage 3: phone drops in with elastic landing — 1100ms
+        after(140, () => {
+          // Stage 3: iPhone drops in with elastic landing — 1250ms
           setSwapPhase('phone-in');
           setScene('phone');
           setPhoneStarted(true);
@@ -979,9 +2084,9 @@ export const StoryDemo: React.FC = () => {
 
   const { scene, swapPhase, phoneStarted, restartKey, twinApproved, handlePhoneComplete } = useSequencer(visible);
 
-  // Laptop is visible during normal laptop scenes AND during the fold (swapPhase folding/flash)
+  // Laptop is visible during normal laptop scenes AND throughout the fold (folding → exit → flash)
   const isLaptopScene = !['phone', 'outcome', 'fading'].includes(scene) && scene !== 'idle';
-  const showLaptopHtml = isLaptopScene || swapPhase === 'folding' || swapPhase === 'flash';
+  const showLaptopHtml = isLaptopScene || swapPhase === 'folding' || swapPhase === 'exit' || swapPhase === 'flash';
   // Phone is visible once swap starts or scene is phone/outcome
   const showPhone = swapPhase === 'phone-in' || swapPhase === 'flash' || scene === 'phone' || scene === 'outcome' || scene === 'fading';
 
@@ -991,7 +2096,7 @@ export const StoryDemo: React.FC = () => {
     <section
       ref={sectionRef}
       id="how"
-      className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70"
+      className="relative bg-white/70 backdrop-blur-sm border-y border-gray-200/70 min-h-[calc(100vh-3.5rem)] flex flex-col scroll-mt-14"
     >
       <style>{STORY_CSS}</style>
 
@@ -1001,82 +2106,96 @@ export const StoryDemo: React.FC = () => {
         style={{ backgroundImage: 'radial-gradient(circle, rgb(148 163 184 / .25) 1px, transparent 1.2px)', backgroundSize: '24px 24px' }}
       />
 
-      <div className="relative max-w-6xl mx-auto px-6 py-20">
+      <div className="relative w-full max-w-6xl mx-auto px-6 py-10 grid grid-cols-3 gap-8 items-stretch flex-1">
 
-        <div className="max-w-2xl mb-14">
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">How it works</p>
-          <h2 className="text-4xl font-black tracking-tighter text-gray-900">From insight to action — instantly.</h2>
-          <p className="mt-3 text-gray-600">Kundai spots a gap, builds a plan, and the student gets the brief — right on their phone.</p>
+        {/* ── LEFT (1/3): header + narration ── */}
+        <div className="col-span-1 flex flex-col">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">How it works</p>
+            <h2 className="text-3xl font-black tracking-tighter text-gray-900">From insight to action — instantly.</h2>
+            <p className="mt-3 text-gray-600 text-sm">Kundai spots a gap, builds a plan, and the student gets the brief — right on their phone.</p>
+          </div>
+
+          {/* Narration slot (vertically centered in remaining space) */}
+          <div className="flex-1 flex flex-col justify-center mt-8">
+            {scene !== 'idle' && (
+              <div className="space-y-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Now showing</p>
+                <p key={scene} className="sd-fade-up text-xl font-bold text-gray-900 tracking-tight leading-snug">
+                  {LABELS[scene]}
+                </p>
+
+                <div className="pt-4 space-y-1.5" aria-hidden>
+                  {STEPS.map((step, idx) => {
+                    const isPast   = activeIdx > idx;
+                    const isActive = activeIdx === idx;
+                    return (
+                      <div key={step.id} className="flex items-center gap-3">
+                        <div
+                          className="rounded-full transition-all"
+                          style={{
+                            width: isActive ? 8 : 6,
+                            height: isActive ? 8 : 6,
+                            background: isActive ? '#2563eb' : isPast ? '#93c5fd' : '#d1d5db',
+                            boxShadow: isActive ? '0 0 0 4px rgba(37,99,235,0.15)' : 'none',
+                          }}
+                        />
+                        <p
+                          className="text-[11px] font-bold uppercase tracking-widest transition-colors"
+                          style={{ color: isActive ? '#111827' : isPast ? '#6b7280' : '#cbd5e1' }}
+                        >
+                          {step.label}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* ── STAGE ── */}
-        {scene !== 'idle' && (
-          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 420 }}>
+        {/* ── RIGHT (2/3): stage ── */}
+        <div className="col-span-2 flex items-center justify-center">
+          {scene !== 'idle' && (
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
 
-            {/* LAPTOP */}
-            {showLaptopHtml && (
-              <div style={{
-                position: showPhone ? 'absolute' : 'relative',
-                width: '100%',
-                opacity: swapPhase === 'flash' ? 0 : 1,
-                transition: swapPhase === 'flash' ? 'opacity 0.08s ease' : 'none',
-              }}>
-                <LaptopShell folding={swapPhase === 'folding'}>
-                  <ScreenContent scene={scene} twinApproved={twinApproved} />
-                </LaptopShell>
-              </div>
-            )}
+              {/* LAPTOP */}
+              {showLaptopHtml && (
+                <div style={{
+                  position: showPhone ? 'absolute' : 'relative',
+                  width: '100%',
+                  height: 360,           // crop to actual visible laptop extent
+                  paddingTop: 50,        // absorb lid that juts above stage bbox
+                  boxSizing: 'border-box',
+                  overflow: 'visible',   // let fold-down animation spill if it needs to
+                  opacity: swapPhase === 'flash' ? 0 : 1,
+                  transition: swapPhase === 'flash' ? 'opacity 0.08s ease' : 'none',
+                }}>
+                  <LaptopShell foldPhase={swapPhase === 'folding' ? 'folding' : swapPhase === 'exit' ? 'exit' : 'idle'}>
+                    <ScreenContent scene={scene} twinApproved={twinApproved} />
+                  </LaptopShell>
+                </div>
+              )}
 
-            {/* FLASH BURST — overlaid at centre of stage */}
-            {swapPhase === 'flash' && <FlashBurst />}
+              {/* FLASH BURST — overlaid at centre of stage */}
+              {swapPhase === 'flash' && <FlashBurst />}
 
-            {/* PHONE */}
-            {showPhone && (
-              <div style={{
-                position: showLaptopHtml ? 'absolute' : 'relative',
-              }}>
-                <PhoneMockup
-                  key={restartKey}
-                  started={phoneStarted}
-                  onComplete={handlePhoneComplete}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP STRIP ── */}
-        {scene !== 'idle' && (
-          <div className="mt-12" aria-hidden>
-            <div className="flex items-start justify-center gap-1">
-              {STEPS.map((step, idx) => {
-                const isPast   = activeIdx > idx;
-                const isActive = activeIdx === idx;
-                return (
-                  <div key={step.id} className="flex flex-col items-center" style={{ minWidth: 56 }}>
-                    <div className="flex items-center w-full">
-                      <div style={{ flex: 1, height: 1, background: idx === 0 ? 'transparent' : (isPast || isActive) ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', transition: 'background .3s' }} />
-                      <div style={{ width: isActive ? 11 : 7, height: isActive ? 11 : 7, borderRadius: '50%', flexShrink: 0, transition: 'all .3s', background: isActive ? 'white' : isPast ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)', boxShadow: isActive ? '0 0 0 4px rgba(255,255,255,0.25)' : 'none' }} />
-                      <div style={{ flex: 1, height: 1, background: idx === STEPS.length - 1 ? 'transparent' : isPast ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', transition: 'background .3s' }} />
-                    </div>
-                    <p style={{ marginTop: 5, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', transition: 'color .3s', color: isActive ? 'white' : isPast ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)' }}>
-                      {step.label}
-                    </p>
-                  </div>
-                );
-              })}
+              {/* PHONE */}
+              {showPhone && (
+                <div style={{
+                  position: showLaptopHtml ? 'absolute' : 'relative',
+                }}>
+                  <PhoneMockup
+                    key={restartKey}
+                    started={phoneStarted}
+                    onComplete={handlePhoneComplete}
+                  />
+                </div>
+              )}
             </div>
-
-            {LABELS[scene] && (
-              <div className="flex justify-center mt-3">
-                <span className="sd-fade-up inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.28)', letterSpacing: '0.07em' }}>
-                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'white', animation: 'sd-blink 1.4s step-end infinite', display: 'inline-block' }} />
-                  {LABELS[scene]}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </section>
   );
