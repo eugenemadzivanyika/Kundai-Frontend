@@ -119,68 +119,6 @@ const STORY_CSS = `
     100% { box-shadow: 0  4px  9px -2px rgba(0,0,0,0.14), 0 1px   3px  0px rgba(0,0,0,0.10); transform:scaleX(0.80); opacity:0.85; }
   }
 
-  /* Continues from sd-laptop-body's end-state (rotateX -12deg, translateY 1px)
-   * so the chassis doesn't snap back when we swap class names. */
-  @keyframes sd-laptop-fadeout {
-    0%   { opacity:1;   transform: rotateX(-12deg) translateY(1px)  scale(1);    filter: blur(0); }
-    55%  { opacity:0.45;transform: rotateX(-12deg) translateY(13px) scale(0.97); filter: blur(1.5px); }
-    100% { opacity:0;   transform: rotateX(-12deg) translateY(26px) scale(0.94); filter: blur(3px); }
-  }
-
-  /*
-   * ═══════════════════════════════════════════════════
-   *  FLASH BURST
-   * ═══════════════════════════════════════════════════
-   */
-  @keyframes sd-flash-burst {
-    0%   { opacity:0;   transform:scale(0.2);  }
-    20%  { opacity:1;   transform:scale(1);    }
-    60%  { opacity:0.7; transform:scale(1.5);  }
-    100% { opacity:0;   transform:scale(2.2);  }
-  }
-  @keyframes sd-flash-core {
-    0%   { opacity:0;   transform:scale(0.1); }
-    15%  { opacity:1;   transform:scale(1);   }
-    45%  { opacity:0.8; transform:scale(1.3); }
-    100% { opacity:0;   transform:scale(1.8); }
-  }
-  @keyframes sd-spark {
-    0%   { opacity:1; transform:var(--spark-t0); }
-    60%  { opacity:0.8; }
-    100% { opacity:0; transform:var(--spark-t1); }
-  }
-
-  /*
-   * ═══════════════════════════════════════════════════
-   *  PHONE ARRIVAL — quartic gravity, mass on landing
-   *  Acceleration with easeInQuart, compress 1.03→0.985
-   *  on impact, two diminishing bounces, then settle.
-   * ═══════════════════════════════════════════════════
-   */
-  @keyframes sd-phone-fall {
-    0%   { opacity:0; transform: translateY(-520px); filter:blur(14px); }
-    12%  { opacity:0.7; filter:blur(6px); }
-    30%  { opacity:1;   filter:blur(1px); }
-    80%  { filter:blur(0); }
-    100% { transform: translateY(0); opacity:1; filter:blur(0); }
-  }
-
-  /* The phone's own cast shadow — blooms as phone approaches landing */
-  @keyframes sd-phone-shadow {
-    0%,60% { opacity:0;    transform: scaleX(0.4) scaleY(0.25) translateY(22px); filter: blur(14px); }
-    85%    { opacity:0.30; transform: scaleX(0.9)  scaleY(0.8)  translateY(4px);  filter: blur(9px); }
-    100%   { opacity:0.32; transform: scaleX(1)    scaleY(1)    translateY(0);    filter: blur(8px); }
-  }
-
-  /* Motion-blur ghost — faint copy trailing above the phone */
-  @keyframes sd-phone-blur-ghost {
-    0%   { opacity:0.55; transform:translateY(-44px) scaleX(0.92) scaleY(1.05); filter:blur(7px); }
-    30%  { opacity:0.30; transform:translateY(-22px) scaleX(0.95) scaleY(1.02); filter:blur(5px); }
-    55%  { opacity:0.12; transform:translateY(-8px)  scaleX(0.98); filter:blur(3px); }
-    80%  { opacity:0.03; transform:translateY(-2px)  scaleX(1);    filter:blur(1px); }
-    100% { opacity:0;    transform:translateY(0);    filter:blur(0); }
-  }
-
   /* iOS keyboard rise / fall */
   @keyframes sd-kb-rise {
     0%   { opacity:0; transform: translateY(110%); }
@@ -218,8 +156,6 @@ const STORY_CSS = `
   .sd-typing-dot:nth-child(3){animation-delay:.4s}
   .sd-msg-pop     { animation: sd-msgPop .22s cubic-bezier(.34,1.4,.64,1) both; }
   .sd-ring-pulse  { animation: sd-ringPulse 1.3s ease infinite; }
-  .sd-flash-el    { animation: sd-flash-burst 0.7s ease-out both; }
-  .sd-flash-core  { animation: sd-flash-core  0.6s ease-out both; }
 
   /* 3D laptop wrapper — perspective lives HERE so children rotate in real 3D */
   .sd-laptop-3d-stage {
@@ -248,26 +184,10 @@ const STORY_CSS = `
   .sd-shadow-anim {
     animation: sd-ground-shadow 1.9s linear forwards;
   }
-  /* Laptop fadeout after lid shuts */
-  .sd-laptop-exit {
-    animation: sd-laptop-fadeout 0.5s cubic-bezier(.55,.06,.68,.19) forwards;
-  }
-
   /* Phone container — perspective for 3D body rotation */
   .sd-phone-stage {
     perspective: 1100px;
     perspective-origin: 50% 55%;
-  }
-  .sd-phone-fall-anim {
-    animation: sd-phone-fall 3s cubic-bezier(0.33, 1, 0.68, 1) both;
-    transform-style: preserve-3d;
-    will-change: transform;
-  }
-  .sd-phone-ghost {
-    animation: sd-phone-blur-ghost 2.4s ease-out both;
-    pointer-events: none;
-    position: absolute;
-    top: 0; left: 0; right: 0;
   }
   /* iPhone titanium frame sheen */
   .sd-titanium {
@@ -453,41 +373,6 @@ const STORY_CSS = `
   /* Activate button press — fires at cursor click moment: 2600ms + 62%×1300ms = 3406ms */
   .sd-btn-activate-press { animation: sd-btn-press 0.35s cubic-bezier(.34,1.4,.64,1) both; animation-delay: 3406ms; }
 
-  /* ── Stage-level toast: orphan pulse when lid seals ── */
-  @keyframes sd-toast-orphan-kf {
-    0%   { transform: scale(1);    filter: drop-shadow(0 4px 10px rgba(15,23,42,0.18)); }
-    38%  { transform: scale(1.07); filter: drop-shadow(0 14px 28px rgba(15,23,42,0.38)); }
-    100% { transform: scale(1.02); filter: drop-shadow(0 10px 22px rgba(15,23,42,0.28)); }
-  }
-  .sd-toast-orphan { animation: sd-toast-orphan-kf 600ms cubic-bezier(.34,1.4,.64,1) forwards; }
-
-  /* Toast body collapses as it morphs into WhatsApp header */
-  @keyframes sd-toast-body-out-kf {
-    0%   { opacity: 1; max-height: 60px; padding-top: 7px; padding-bottom: 7px; }
-    55%  { opacity: 0; max-height: 60px; }
-    100% { opacity: 0; max-height: 0;    padding-top: 0;   padding-bottom: 0; }
-  }
-  .sd-toast-body-out { animation: sd-toast-body-out-kf 420ms cubic-bezier(.5,0,.25,1) forwards; overflow: hidden; }
-
-  /* Phone screen metallic shimmer while screen is off */
-  @keyframes sd-screen-shimmer-kf {
-    0%, 100% { background-position: 0% 50%; }
-    50%      { background-position: 100% 50%; }
-  }
-  .sd-screen-shimmer {
-    background: linear-gradient(135deg, #050507 0%, #0e1015 22%, #1c2030 45%, #0e1015 72%, #050507 100%);
-    background-size: 240% 240%;
-    animation: sd-screen-shimmer-kf 3s ease-in-out infinite;
-  }
-
-  /* Pre-wake glow — blue radial bloom the instant before absorption */
-  @keyframes sd-pre-wake-kf {
-    0%   { opacity: 0; transform: scale(0.35); }
-    55%  { opacity: 0.88; transform: scale(1); }
-    100% { opacity: 0;   transform: scale(1.7); }
-  }
-  .sd-pre-wake { animation: sd-pre-wake-kf 650ms ease-out forwards; }
-
   /* WhatsApp chat body slides up after screen wakes */
   @keyframes sd-chat-reveal-kf {
     from { opacity: 0; transform: translateY(14px); }
@@ -507,7 +392,7 @@ type Scene =
 /* ─────────────────────────────────────────────────────────────
    LAPTOP SHELL
 ───────────────────────────────────────────────────────────────*/
-type FoldPhase = 'idle' | 'folding' | 'exit';
+type FoldPhase = 'idle' | 'folding';
 
 interface LaptopShellProps {
   children: React.ReactNode;
@@ -516,7 +401,6 @@ interface LaptopShellProps {
 
 const LaptopShell: React.FC<LaptopShellProps> = ({ children, foldPhase = 'idle' }) => {
   const folding = foldPhase === 'folding';
-  const exiting = foldPhase === 'exit';
 
   // True 3D box dimensions for both base and lid.
 const W       = 496; 
@@ -542,11 +426,11 @@ const STAGE_H = 432;
       }}
     >
       <div
-        className={folding ? 'sd-laptop-body-anim' : exiting ? 'sd-laptop-exit' : undefined}
+        className={folding ? 'sd-laptop-body-anim' : undefined}
         style={{
           position: 'absolute', inset: 0,
           transformStyle: 'preserve-3d',
-          transform: folding || exiting ? undefined : 'rotateX(-12deg)',
+          transform: folding ? undefined : 'rotateX(-12deg)',
         }}
       >
         {/* Ground shadow — under the chassis on the desk */}
@@ -1338,7 +1222,7 @@ function isEmojiLike(ch: string): boolean {
   return [...ch].some(cp => (cp.codePointAt(0) ?? 0) > 127);
 }
 
-const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: () => void }> = ({ started, preWake, onComplete }) => {
+const PhoneMockup: React.FC<{ started: boolean; onComplete?: () => void }> = ({ started, onComplete }) => {
   const [messages, setMessages] = useState<WaMessage[]>([]);
   const [status, setStatus] = useState('Your academic assistant');
   const [showTyping, setShowTyping] = useState(false);
@@ -1348,8 +1232,6 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
   const [pressedKey, setPressedKey] = useState<KeyPress | null>(null);
   const [pressedEmoji, setPressedEmoji] = useState<{ row: number; col: number; ts: number } | null>(null);
   const [tilt, setTilt] = useState<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
-  const [screenOn, setScreenOn] = useState(false);
-  const seqRef = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Find the keyboard coords for a given character
@@ -1385,9 +1267,7 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
 
   // ── Main scripted sequence ──
   useEffect(() => {
-    if (!started || seqRef.current) return;
-    seqRef.current = true;
-    setScreenOn(true);
+    if (!started) return;
     let cursor = 0;
     let cancelled = false;
 
@@ -1522,21 +1402,26 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
         setMessages(prev => [...prev, { ...cfg, typed: cfg.text, done: true }]);
         await sleep(500);
       } else {
-        // KundAI side: typing indicator + character-by-character bubble fill
-        setStatus('typing...'); setShowTyping(true);
-        await sleep(1100);
-        if (cancelled) return;
-        setShowTyping(false);
+        // KundAI side: brief typing indicator (only between messages — first message starts immediately) + character-by-character bubble fill
+        const isFirst = cursor === 1;
+        if (!isFirst) {
+          setStatus('typing...'); setShowTyping(true);
+          await sleep(700);
+          if (cancelled) return;
+          setShowTyping(false);
+        }
         setMessages(prev => [...prev, { ...cfg, typed: '', done: false }]);
-        await sleep(80);
+        await sleep(60);
         await typeKundai(cfg.id, cfg.text);
         await sleep(700);
       }
       runNext();
     };
 
-    setTimeout(() => { if (!cancelled) runNext(); }, 400);
-    return () => { cancelled = true; };
+    // Defer past StrictMode's mount→cleanup→mount cycle so only the surviving
+    // effect's runNext actually fires (the first one's cancelled flag is set).
+    const startId = setTimeout(() => { if (!cancelled) runNext(); }, 0);
+    return () => { cancelled = true; clearTimeout(startId); };
   }, [started, onComplete]);
 
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [messages, showTyping, kbDraft]);
@@ -1561,14 +1446,9 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
   const RAIL_TOP   = 'linear-gradient(90deg, #4d5057 0%, #9da0a8 18%, #d1d3d8 42%, #6a6d76 60%, #3d4047 100%)';
 
   return (
-    /* 3D stage: outer perspective + drop-in animation */
+    /* 3D stage: outer perspective only — phone appears in place */
     <div className="sd-phone-stage" style={{ fontFamily: 'system-ui, sans-serif', position: 'relative', width: PHONE_W + 12, margin: '0 auto' }}>
-      {/* Motion-blur ghost — silhouette trailing above the falling phone */}
-      <div className="sd-phone-ghost" aria-hidden>
-        <div style={{ width: PHONE_W, margin: '0 auto', height: PHONE_H, borderRadius: RAD, background: 'linear-gradient(180deg, #2a2a30 0%, #1a1a20 100%)', opacity: 0.55, boxShadow: '0 30px 50px rgba(0,0,0,0.25)' }} />
-      </div>
-      {/* Phone body — drop-in animation wraps the live-tilt frame */}
-      <div className="sd-phone-fall-anim" style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }}>
         {/* Live-tilt frame — receives keystroke-driven rotateX/rotateY */}
         <div
           className="sd-phone-frame"
@@ -1740,22 +1620,7 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
                   boxShadow: 'inset 0 0 0 1px #000, inset 0 0 12px rgba(0,0,0,0.6)',
                 }}
               >
-            {/* Dark/metallic screen before the toast is absorbed */}
-            {!screenOn && (
-              <div className="sd-screen-shimmer" style={{ width: '100%', height: '100%', position: 'relative' }}>
-                {preWake && (
-                  <div className="sd-pre-wake" aria-hidden style={{
-                    position: 'absolute',
-                    top: '22%', left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: '75%', height: '45%',
-                    background: 'radial-gradient(circle, rgba(96,165,250,0.52) 0%, rgba(96,165,250,0.18) 40%, transparent 70%)',
-                    pointerEvents: 'none',
-                  }} />
-                )}
-              </div>
-            )}
-            {screenOn && <div className="sd-screen-wake" style={{ width: '100%', height: '100%', background: '#e5ddd5', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <div style={{ width: '100%', height: '100%', background: '#e5ddd5', display: 'flex', flexDirection: 'column', position: 'relative' }}>
               {/* iOS status bar */}
               <div style={{ height: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', background: '#075e54', color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
                 <span>9:41</span>
@@ -1828,7 +1693,7 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
               {kbActive && (
                 <IOSKeyboard pressedKey={pressedKey} mode={kbMode} pressedEmoji={pressedEmoji} />
               )}
-            </div>}
+            </div>
 
             {/* Dynamic Island — black pill at the top */}
             <div aria-hidden style={{
@@ -1850,10 +1715,6 @@ const PhoneMockup: React.FC<{ started: boolean; preWake?: boolean; onComplete?: 
               <div aria-hidden style={{ position: 'absolute', bottom: FRAME + 4, left: '50%', transform: 'translateX(-50%)', width: 70, height: 3, borderRadius: 3, background: 'rgba(255,255,255,0.85)', zIndex: 6 }} />
             </div>{/* /FRONT face */}
           </div>{/* /3D BOX */}
-
-          {/* Phone's own drop-shadow — blooms exactly on landing.
-              Sits outside the cube so the floor shadow stays flat (doesn't tilt with rails). */}
-          <div aria-hidden style={{ position: 'absolute', bottom: -26, left: '8%', width: '84%', height: 28, borderRadius: '50%', background: 'rgba(0,0,0,0.32)', filter: 'blur(10px)', animation: 'sd-phone-shadow 1.25s cubic-bezier(.23,1,.32,1) both' }} />
         </div>
       </div>
     </div>
@@ -1982,66 +1843,6 @@ const KeyCap: React.FC<{ label: string; wide?: boolean; gray?: boolean; pressed?
   </div>
 );
 
-/* ─────────────────────────────────────────────────────────────
-   FLASH BURST OVERLAY
-   Rendered at the exact moment the laptop disappears —
-   a radial white ring expands from centre then fades.
-───────────────────────────────────────────────────────────────*/
-const FlashBurst: React.FC = () => (
-  <div
-    aria-hidden
-    style={{
-      position: 'absolute',
-      inset: 0,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      pointerEvents: 'none',
-      zIndex: 50,
-    }}
-  >
-    {/* outer ring */}
-    <div
-      className="sd-flash-el"
-      style={{
-        position: 'absolute',
-        width: 600,
-        height: 600,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.18) 40%, transparent 70%)',
-      }}
-    />
-    {/* inner bright core */}
-    <div
-      className="sd-flash-el"
-      style={{
-        position: 'absolute',
-        width: 200,
-        height: 200,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 50%, transparent 75%)',
-        animationDelay: '30ms',
-      }}
-    />
-    {/* particle sparks — 8 small dots */}
-    {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => (
-      <div
-        key={deg}
-        className="sd-flash-el"
-        style={{
-          position: 'absolute',
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: 'white',
-          transform: `rotate(${deg}deg) translateY(-120px)`,
-          animationDelay: `${40 + deg * 0.5}ms`,
-          opacity: 0,
-        }}
-      />
-    ))}
-  </div>
-);
 
 /* ─────────────────────────────────────────────────────────────
    STAGE GEOMETRY — fixed coordinate system so toast, laptop,
@@ -2050,21 +1851,13 @@ const FlashBurst: React.FC = () => (
 const ST_W        = 680;   // fixed stage width (px)
 const ST_H        = 500;   // fixed stage height (px)
 const PHONE_TOP   = 76;    // phone top within fixed stage
-const _PHONE_W    = 218;   // matches PhoneMockup PHONE_W
-const _PHONE_FR   = 4;     // matches PhoneMockup FRAME
-const _STATUS_H   = 18;    // matches PhoneMockup status bar height
-// sd-phone-stage wrapper is PHONE_W+12=230, centered in ST_W
-// screen left = (ST_W - 230) / 2 + 6 (margin) + FRAME
-const TOAST_L = Math.round((ST_W - (_PHONE_W + 12)) / 2) + 6 + _PHONE_FR; // 235
-const TOAST_T = PHONE_TOP + _PHONE_FR + _STATUS_H;                          // 98
-const TOAST_W = _PHONE_W - _PHONE_FR * 2;                                   // 210
 
 /* ─────────────────────────────────────────────────────────────
    SEQUENCER HOOK
 ───────────────────────────────────────────────────────────────*/
 
 // Swap sub-states — maps to LaptopShell foldPhase + phone visibility
-type SwapPhase = 'none' | 'folding' | 'exit' | 'flash' | 'phone-in';
+type SwapPhase = 'none' | 'folding' | 'phone-in';
 
 function useSequencer(visible: boolean) {
   const [scene, setScene] = useState<Scene>('idle');
@@ -2072,47 +1865,23 @@ function useSequencer(visible: boolean) {
   const [phoneStarted, setPhoneStarted] = useState(false);
   const [restartKey, setRestartKey] = useState(0);
   const [twinApproved, setTwinApproved] = useState(false);
-  const [showFloatingToast, setShowFloatingToast] = useState(false);
-  const [toastAbsorbing, setToastAbsorbing] = useState(false);
-  const [preWakePhone, setPreWakePhone] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const clearAll = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; }, []);
   const after = useCallback((ms: number, fn: () => void) => { const id = setTimeout(fn, ms); timers.current.push(id); }, []);
 
   const triggerSwap = useCallback(() => {
-    setSwapPhase('folding');
-    // Toast breaks free immediately as the lid begins to fold — stays at laptop position
-    setShowFloatingToast(true);
-    after(1750, () => {
-      // Lid sealed
-      setSwapPhase('exit');
-      after(420, () => {
-        setSwapPhase('flash');
-        after(140, () => {
-          // Phone falls slowly for 3s from above until it touches the notification
-          setSwapPhase('phone-in');
-          setScene('phone');
-          // Pre-wake glow blooms as phone nears the toast (mid-fall)
-          after(1600, () => setPreWakePhone(true));
-          after(2800, () => setPreWakePhone(false));
-          // Phone touches notification at ~3s — header morphs
-          after(2900, () => setToastAbsorbing(true));
-          // Remove toast div once morph animation finishes
-          after(3800, () => setShowFloatingToast(false));
-          // WhatsApp chat body slides up after phone settles
-          after(3200, () => setPhoneStarted(true));
-        });
-      });
+    setSwapPhase('folding');         // laptop folds in place (1.75s keyframe)
+    after(1750, () => {              // fold sealed — laptop disappears instantly, phone takes its place
+      setSwapPhase('phone-in');
+      setScene('phone');
+      setPhoneStarted(true);         // chat sequence starts immediately
     });
-  }, [after, setShowFloatingToast, setToastAbsorbing, setPreWakePhone]);
+  }, [after]);
 
   const runSequence = useCallback(() => {
     clearAll();
     setTwinApproved(false);
-    setShowFloatingToast(false);
-    setToastAbsorbing(false);
-    setPreWakePhone(false);
     setSwapPhase('none');
     setScene('dashboard');
     after(3000,  () => setScene('bell-ping'));        // badge pops onto bell
@@ -2132,6 +1901,44 @@ function useSequencer(visible: boolean) {
     after(400, runSequence);
   }, [visible, runSequence, after]);
 
+  const resetCommon = useCallback(() => {
+    clearAll();
+    setTwinApproved(false);
+    setPhoneStarted(false);
+    setSwapPhase('none');
+  }, [clearAll]);
+
+  const rewindToStep = useCallback((idx: number) => {
+    resetCommon();
+    if (idx === 0) {
+      setScene('dashboard');
+      after(3000,  () => setScene('bell-ping'));
+      after(4200,  () => setScene('cursor-to-bell'));
+      after(5500,  () => setScene('notification'));
+      after(8700,  () => setScene('perf-glow'));
+      after(10100, () => setScene('perf-panel'));
+      after(12300, () => setScene('twin-panel'));
+      after(16300, () => setTwinApproved(true));
+      after(18300, triggerSwap);
+    } else if (idx === 1) {
+      setScene('perf-glow');
+      after(1400, () => setScene('perf-panel'));
+      after(3600, () => setScene('twin-panel'));
+      after(7600, () => setTwinApproved(true));
+      after(9600, triggerSwap);
+    } else if (idx === 2) {
+      setScene('twin-panel');
+      after(4000, () => setTwinApproved(true));
+      after(6000, triggerSwap);
+    } else {
+      // idx === 3: skip straight to the phone transition.
+      setRestartKey(k => k + 1);
+      setScene('twin-panel');
+      setTwinApproved(true);
+      after(200, triggerSwap);
+    }
+  }, [resetCommon, after, triggerSwap]);
+
   const handlePhoneComplete = useCallback(() => {
     after(2000, () => {
       setScene('outcome');
@@ -2150,7 +1957,7 @@ function useSequencer(visible: boolean) {
   }, [after, clearAll, runSequence]);
 
   useEffect(() => () => clearAll(), [clearAll]);
-  return { scene, swapPhase, phoneStarted, restartKey, twinApproved, handlePhoneComplete, showFloatingToast, toastAbsorbing, preWakePhone };
+  return { scene, swapPhase, phoneStarted, restartKey, twinApproved, handlePhoneComplete, rewindToStep };
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -2256,13 +2063,11 @@ export const StoryDemo: React.FC = () => {
     return () => obs.disconnect();
   }, []);
 
-  const { scene, swapPhase, phoneStarted, restartKey, twinApproved, handlePhoneComplete, showFloatingToast, toastAbsorbing, preWakePhone } = useSequencer(visible);
+  const { scene, swapPhase, phoneStarted, restartKey, twinApproved, handlePhoneComplete, rewindToStep } = useSequencer(visible);
 
-  // Laptop is visible during normal laptop scenes AND throughout the fold (folding → exit → flash)
   const isLaptopScene = !['phone', 'outcome', 'fading'].includes(scene) && scene !== 'idle';
-  const showLaptopHtml = isLaptopScene || swapPhase === 'folding' || swapPhase === 'exit' || swapPhase === 'flash';
-  // Phone is visible once swap starts or scene is phone/outcome
-  const showPhone = swapPhase === 'phone-in' || swapPhase === 'flash' || scene === 'phone' || scene === 'outcome' || scene === 'fading';
+  const showLaptopHtml = swapPhase === 'none' ? isLaptopScene : swapPhase === 'folding';
+  const showPhone = swapPhase === 'phone-in' || scene === 'phone' || scene === 'outcome' || scene === 'fading';
 
   const activeNarrationIdx = NARRATION_STEPS.findIndex(s => s.scenes.has(scene));
 
@@ -2298,7 +2103,12 @@ export const StoryDemo: React.FC = () => {
                   const isPast   = activeNarrationIdx > idx;
                   const isActive = activeNarrationIdx === idx;
                   return (
-                    <div key={idx} className="flex gap-4 pb-7 last:pb-0">
+                    <div
+                      key={idx}
+                      className="flex gap-4 pb-7 last:pb-0 group cursor-pointer"
+                      onClick={() => rewindToStep(idx)}
+                      title="Rewind to this step"
+                    >
                       <div className="flex flex-col items-center flex-shrink-0">
                         <div
                           className="rounded-full transition-all duration-300"
@@ -2316,7 +2126,7 @@ export const StoryDemo: React.FC = () => {
                         )}
                       </div>
                       <p
-                        className="text-sm leading-snug transition-all duration-300"
+                        className="text-sm leading-snug transition-all duration-300 group-hover:text-gray-900"
                         style={{
                           color: isActive ? '#111827' : isPast ? '#9ca3af' : '#d1d5db',
                           fontWeight: isActive ? 700 : isPast ? 500 : 400,
@@ -2342,26 +2152,25 @@ export const StoryDemo: React.FC = () => {
               overflow: 'visible',
             }}>
 
-              {/* LAPTOP — absolute at top of fixed stage */}
+              {/* LAPTOP — full-size throughout fold; no corner-park scaling */}
               {showLaptopHtml && (
                 <div style={{
                   position: 'absolute',
-                  top: 0, left: 0, right: 0,
+                  top: 80, left: 0, right: 0,
                   height: 430,
                   paddingTop: 50,
                   boxSizing: 'border-box',
                   overflow: 'visible',
-                  opacity: swapPhase === 'flash' ? 0 : 1,
-                  transition: swapPhase === 'flash' ? 'opacity 0.08s ease' : 'none',
                 }}>
-                  <LaptopShell foldPhase={swapPhase === 'folding' ? 'folding' : swapPhase === 'exit' ? 'exit' : 'idle'}>
-                    <ScreenContent scene={scene} twinApproved={twinApproved} folding={swapPhase === 'folding'} />
+                  <LaptopShell foldPhase={swapPhase === 'folding' ? 'folding' : 'idle'}>
+                    <ScreenContent
+                      scene={scene}
+                      twinApproved={twinApproved}
+                      folding={swapPhase === 'folding'}
+                    />
                   </LaptopShell>
                 </div>
               )}
-
-              {/* FLASH BURST */}
-              {swapPhase === 'flash' && <FlashBurst />}
 
               {/* PHONE — absolute at PHONE_TOP */}
               {showPhone && (
@@ -2369,64 +2178,8 @@ export const StoryDemo: React.FC = () => {
                   <PhoneMockup
                     key={restartKey}
                     started={phoneStarted}
-                    preWake={preWakePhone}
                     onComplete={handlePhoneComplete}
                   />
-                </div>
-              )}
-
-              {/* STAGE-LEVEL TOAST — orphan-pulses when lid seals, morphs into WA header */}
-              {showFloatingToast && (
-                <div
-                  className={!toastAbsorbing ? 'sd-toast-orphan' : undefined}
-                  style={{
-                    position: 'absolute',
-                    left: TOAST_L,
-                    top: TOAST_T,
-                    width: TOAST_W,
-                    zIndex: 45,
-                    borderRadius: toastAbsorbing ? 0 : 10,
-                    overflow: 'hidden',
-                    boxShadow: toastAbsorbing
-                      ? 'none'
-                      : '0 8px 32px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.3)',
-                    transition: 'border-radius 420ms cubic-bezier(.5,0,.25,1), box-shadow 420ms ease-out',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {/* Header — transforms from green plan badge → WhatsApp chat header */}
-                  <div style={{
-                    background: toastAbsorbing ? '#075e54' : '#059669',
-                    padding: toastAbsorbing ? '7px 10px' : '6px 12px',
-                    display: 'flex', alignItems: 'center', gap: toastAbsorbing ? 8 : 5,
-                    transition: 'background 360ms ease, padding 360ms ease, gap 360ms ease',
-                  }}>
-                    <div style={{
-                      width: toastAbsorbing ? 26 : 20,
-                      height: toastAbsorbing ? 26 : 20,
-                      borderRadius: '50%',
-                      background: '#25D366',
-                      color: '#075e54',
-                      display: 'grid', placeItems: 'center',
-                      fontSize: toastAbsorbing ? 11 : 9, fontWeight: 900,
-                      border: '1.5px solid white', flexShrink: 0,
-                      transition: 'width 360ms ease, height 360ms ease, font-size 360ms ease',
-                    }}>K</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, color: 'white', fontSize: 10, fontWeight: 900, lineHeight: 1.1 }}>KundAI</p>
-                      <p style={{ margin: 0, color: 'rgba(255,255,255,.82)', fontSize: 8, fontWeight: 600, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {toastAbsorbing ? 'online' : 'Plan Activated · sending to Tapiwa…'}
-                      </p>
-                    </div>
-                    {!toastAbsorbing && <CheckCircle size={10} color="white" />}
-                  </div>
-                  {/* Body — collapses on absorption */}
-                  <div className={toastAbsorbing ? 'sd-toast-body-out' : undefined}
-                    style={{ background: '#f0fdf4', padding: '7px 12px', overflow: 'hidden' }}>
-                    <p style={{ fontSize: 9, color: '#059669', fontWeight: 700, margin: 0 }}>
-                      14-step Algebra plan · first checkpoint in 3 days
-                    </p>
-                  </div>
                 </div>
               )}
             </div>
