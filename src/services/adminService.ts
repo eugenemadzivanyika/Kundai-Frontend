@@ -1,4 +1,5 @@
 import { fetchData, API_URL } from './apiClient';
+import { tokenStore } from './tokenStore';
 
 export interface AdminSummary {
   totalUsers: number;
@@ -76,7 +77,7 @@ export const adminService = {
 
   // Bulk student upload
   downloadBulkTemplate: async (): Promise<void> => {
-    const token = localStorage.getItem('token');
+    const token = tokenStore.get();
     const response = await fetch(`${API_URL}/admin/students/bulk-template`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -106,7 +107,7 @@ export const adminService = {
     fetchData('/admin/settings', { method: 'PUT', body: JSON.stringify(payload) }),
 
   bulkCreateStudents: async (file: File): Promise<BulkUploadResult> => {
-    const token = localStorage.getItem('token');
+    const token = tokenStore.get();
     const formData = new FormData();
     formData.append('file', file);
     // Do NOT set Content-Type — browser sets it with the multipart boundary

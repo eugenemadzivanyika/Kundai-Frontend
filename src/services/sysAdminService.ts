@@ -138,8 +138,10 @@ export const sysAdminService = {
     fetchData(`${BASE}/schools`, { method: 'POST', body: JSON.stringify(data) }),
   updateSchool: (id: string, data: Partial<School>): Promise<School> =>
     fetchData(`${BASE}/schools/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteSchool: (id: string): Promise<{ message: string }> =>
+  deleteSchool: (id: string): Promise<{ message: string; deactivatedUsers: number }> =>
     fetchData(`${BASE}/schools/${id}`, { method: 'DELETE' }),
+  purgeSchool: (id: string): Promise<{ message: string }> =>
+    fetchData(`${BASE}/schools/${id}/purge`, { method: 'DELETE' }),
 
   // Packages
   getPackages: (): Promise<SubscriptionPackage[]> => fetchData(`${BASE}/packages`),

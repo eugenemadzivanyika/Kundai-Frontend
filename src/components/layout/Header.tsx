@@ -42,6 +42,15 @@ useEffect(() => {
     }
   };
   loadData();
+
+  const interval = setInterval(async () => {
+    try {
+      const count = await notificationService.getUnreadCount();
+      setUnreadCount(count);
+    } catch { /* silent */ }
+  }, 30_000);
+
+  return () => clearInterval(interval);
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
@@ -68,7 +77,7 @@ useEffect(() => {
        {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{unreadCount}</span>}
      </button>
 
-<button onClick={() => { authService.logout(); navigate('/login'); }} className="bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600">
+<button onClick={() => authService.logout()} className="bg-[#ececed] p-2.5 rounded-lg shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600">
        <LogOut size={18} />
      </button>
    </div>

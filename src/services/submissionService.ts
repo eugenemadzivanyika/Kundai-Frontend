@@ -1,4 +1,5 @@
 import { API_URL, fetchData } from './apiClient';
+import { tokenStore } from './tokenStore';
 
 export interface SubmissionReviewQuestionDetail {
   assessmentQuestionId?: string;
@@ -47,9 +48,10 @@ export const submissionService = {
     };
     console.log('[submitAssignment] Sending to backend:', debugPayload);
 
+    const token = tokenStore.get();
     const response = await fetch(`${API_URL}/submissions`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
     const result = await response.json();
@@ -76,9 +78,10 @@ export const submissionService = {
       fd.append('answers', JSON.stringify(rest.answers));
       imageFiles.forEach(f => fd.append('handwrittenImages', f));
 
+      const token = tokenStore.get();
       const response = await fetch(`${API_URL}/submissions`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
       return response.json();

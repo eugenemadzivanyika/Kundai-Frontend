@@ -28,10 +28,7 @@ const SysAdminLayout: React.FC = () => {
   const [notifOpen, setNotifOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
+  const handleLogout = () => { authService.logout(); };
 
   return (
     <div className="min-h-screen bg-slate-950">

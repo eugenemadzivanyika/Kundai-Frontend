@@ -282,6 +282,10 @@ const TypingIndicator: React.FC = () => (
   </div>
 );
 
+// ─── Module-level cache — survives tab switches (component unmount/remount) ───
+const _sessionCache  = new Map<string, AiTutorSession>();
+const _messagesCache = new Map<string, AiTutorMessage[]>();
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const StudentTutor: React.FC<StudentTutorProps> = ({
@@ -317,16 +321,27 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       setMessages([]);
       return;
     }
+
+    const cacheKey = `${studentId}-${selectedSubjectId}-${planId ?? 'none'}`;
+    const cachedSession  = _sessionCache.get(cacheKey);
+    const cachedMessages = cachedSession ? _messagesCache.get(cachedSession.id) : undefined;
+
+    // Restore from cache immediately so the chat isn't blank on tab return
+    if (cachedSession)  setSession(cachedSession);
+    if (cachedMessages) setMessages(cachedMessages);
+
     let active = true;
-    setLoading(true);
+    if (!cachedMessages?.length) setLoading(true);
     setError(null);
 
     (async () => {
       const s = await aiTutorService.getOrCreateSession(studentId, selectedSubjectId, undefined, planId ?? undefined);
       if (!active) return;
+      _sessionCache.set(cacheKey, s);
       setSession(s);
       const msgs = await aiTutorService.listMessages(s.id);
       if (!active) return;
+      _messagesCache.set(s.id, msgs);
       setMessages(msgs);
     })()
       .catch((err: any) => { if (active) setError(err?.message || 'Failed to load session.'); })
@@ -436,6 +451,7 @@ const StudentTutor: React.FC<StudentTutorProps> = ({
       // ── 3. Replace optimistic message + append AI reply with DB truth ──────
       const msgs = await aiTutorService.listMessages(session.id);
       setMessages(msgs);
+      _messagesCache.set(session.id, msgs);
 
       // Safe to release the blob URL now that the real image URL is in state
       if (capturedAttachment) URL.revokeObjectURL(capturedAttachment.previewUrl);

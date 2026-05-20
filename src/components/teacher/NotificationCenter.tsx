@@ -119,6 +119,12 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
   const isPlanAction = (type: string) =>
     type === 'plan_needs_activation' || type === 'plan_completed_by_student';
 
+  const handleViewCoverage = async (notification: Notification) => {
+    if (!notification.read) await handleMarkAsRead(notification._id);
+    onClose();
+    onNavigate?.('/resources?tab=coverage');
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -201,7 +207,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
                             View Plan
                           </button>
                         )}
-                        {!notification.read && !isReviewable(notification.type) && !isPlanAction(notification.type) && (
+                        {notification.type === 'coverage_updated' && (
+                          <button
+                            onClick={() => handleViewCoverage(notification)}
+                            className="text-xs font-semibold px-3 py-1 rounded-full bg-green-600 text-white hover:bg-green-700"
+                          >
+                            View Coverage
+                          </button>
+                        )}
+                        {!notification.read && !isReviewable(notification.type) && !isPlanAction(notification.type) && notification.type !== 'coverage_updated' && (
                           <button
                             onClick={() => handleMarkAsRead(notification._id)}
                             className="text-xs text-gray-500 hover:text-gray-700 underline"

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Plus, Search, Edit2, Trash2, X, CheckCircle, XCircle,
+  Building2, Plus, Search, Edit2, X, CheckCircle, XCircle,
   ChevronRight, ChevronLeft,
 } from 'lucide-react';
 import { sysAdminService, School, SubscriptionPackage } from '../../../services/sysAdminService';
@@ -287,23 +287,23 @@ const SysAdminSchoolsPage: React.FC = () => {
   };
 
   const handleToggleActive = async (s: School) => {
-    try {
-      await sysAdminService.updateSchool(s._id, { active: !s.active });
-      toast.success(`School ${s.active ? 'deactivated' : 'activated'}`);
-      load();
-    } catch {
-      toast.error('Failed to update school');
-    }
-  };
-
-  const handleDelete = async (s: School) => {
-    if (!window.confirm(`Permanently delete "${s.name}"? This cannot be undone.`)) return;
-    try {
-      await sysAdminService.deleteSchool(s._id);
-      toast.success('School deleted');
-      load();
-    } catch {
-      toast.error('Failed to delete school');
+    if (s.active) {
+      if (!window.confirm(`Deactivate "${s.name}"? All users will be signed out and the subscription cancelled. Data is preserved.`)) return;
+      try {
+        const result = await sysAdminService.deleteSchool(s._id);
+        toast.success(`School deactivated. ${result.deactivatedUsers} user(s) signed out.`);
+        load();
+      } catch {
+        toast.error('Failed to deactivate school');
+      }
+    } else {
+      try {
+        await sysAdminService.updateSchool(s._id, { active: true });
+        toast.success('School reactivated');
+        load();
+      } catch {
+        toast.error('Failed to reactivate school');
+      }
     }
   };
 
@@ -445,12 +445,6 @@ const SysAdminSchoolsPage: React.FC = () => {
                             className="text-slate-400 hover:text-white transition-colors p-1 rounded"
                           >
                             <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(s)}
-                            className="text-slate-400 hover:text-red-400 transition-colors p-1 rounded"
-                          >
-                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>

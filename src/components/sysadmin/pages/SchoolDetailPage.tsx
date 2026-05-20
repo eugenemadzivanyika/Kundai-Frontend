@@ -5,7 +5,7 @@ import {
   Users, TrendingUp, Calendar,
   AlertCircle, CheckCircle, Package, RefreshCw,
   GraduationCap, Briefcase, BookOpen, KeyRound, CalendarPlus, X, Plus,
-  ShieldCheck, Sparkles, MessageSquare, ScanLine,
+  ShieldCheck, Sparkles, MessageSquare, ScanLine, Ban, Trash2,
 } from 'lucide-react';
 import { sysAdminService, School, Subscription, SubscriptionPackage, SchoolStats } from '../../../services/sysAdminService';
 import { useToast } from '../../ui/use-toast';
@@ -238,6 +238,8 @@ const SchoolDetailPage: React.FC = () => {
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [resettingPwd, setResettingPwd] = useState(false);
   const [extendingTrial, setExtendingTrial] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [purging, setPurging] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -342,6 +344,41 @@ const SchoolDetailPage: React.FC = () => {
       toast.error(e.message ?? 'Failed to extend trial');
     } finally {
       setExtendingTrial(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!school) return;
+    if (!window.confirm(`Deactivate "${school.name}"?\n\nAll users will be immediately signed out and the subscription cancelled. Data is preserved and the school can be reactivated later.`)) return;
+    setDeactivating(true);
+    try {
+      const result = await sysAdminService.deleteSchool(school._id);
+      toast({ title: 'School deactivated', description: `${result.deactivatedUsers} user(s) signed out. Data preserved.` });
+      const refreshed = await sysAdminService.getSchool(school._id);
+      setSchool(refreshed);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message ?? 'Failed to deactivate school', variant: 'destructive' });
+    } finally {
+      setDeactivating(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    if (!school) return;
+    const confirmed = window.prompt(`This will permanently delete ALL data for "${school.name}" — users, students, submissions, results, and more.\n\nType the school name to confirm:`);
+    if (confirmed?.trim() !== school.name.trim()) {
+      toast({ title: 'Purge cancelled', description: 'School name did not match.', variant: 'destructive' });
+      return;
+    }
+    setPurging(true);
+    try {
+      await sysAdminService.purgeSchool(school._id);
+      toast({ title: 'School permanently deleted' });
+      navigate('/sys-admin/schools');
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message ?? 'Failed to purge school', variant: 'destructive' });
+    } finally {
+      setPurging(false);
     }
   };
 
@@ -481,6 +518,24 @@ const SchoolDetailPage: React.FC = () => {
             >
               <RefreshCw size={13} /> Manage subscription
             </button>
+            {school.active && (
+              <button
+                onClick={handleDeactivate}
+                disabled={deactivating}
+                className="flex items-center gap-1.5 border border-red-600/50 text-red-400 hover:bg-red-600/10 text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+              >
+                <Ban size={13} /> {deactivating ? 'Deactivating…' : 'Deactivate school'}
+              </button>
+            )}
+            {!school.active && (
+              <button
+                onClick={handlePurge}
+                disabled={purging}
+                className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+              >
+                <Trash2 size={13} /> {purging ? 'Purging…' : 'Purge all data'}
+              </button>
+            )}
           </div>
         </div>
       </div>

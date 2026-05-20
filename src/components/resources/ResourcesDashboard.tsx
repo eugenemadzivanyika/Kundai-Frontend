@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import ResourcesView from './ResourcesView';
 import CoverageView from './CoverageView';
 import { AIAssessmentModal } from '../assessments/AIAssessmentModal';
 import { resourceService, courseService, API_URL } from '../../services/api';
 import type { SyllabusAttribute, LinkedFile } from './CoverageView';
 import { LEGEND_ITEMS } from './CoverageView';
+import { tokenStore } from '../../services/tokenStore';
 
 // ── SVG Icon helper ───────────────────────────────────────────────────────────
 const Ico: React.FC<{ d: string | string[]; size?: number; color?: string; className?: string }> = ({
@@ -202,7 +204,7 @@ const UploadModal: React.FC<{
       formData.append('file', file);
       formData.append('courseId', selCourse._id);
 
-      const token = localStorage.getItem('token');
+      const token = tokenStore.get();
       const response = await fetch(`${API_URL}/resources/upload`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -339,12 +341,15 @@ const UploadModal: React.FC<{
 
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 const ResourcesDashboard: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [courses, setCourses] = useState<Course[]>([]);
   const [recentUploads, setRecentUploads] = useState<RecentUpload[]>([]);
   const [selectedClass, setSelectedClass] = useState<Course | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [mainTab, setMainTab] = useState<'courses' | 'coverage'>('courses');
+  const [mainTab, setMainTab] = useState<'courses' | 'coverage'>(
+    searchParams.get('tab') === 'coverage' ? 'coverage' : 'courses'
+  );
   const [analytics, setAnalytics] = useState<Analytics>({
     totalResources: 0, averageDownloads: 0, mostPopularResource: 'N/A', topClassEngagement: 'N/A',
   });

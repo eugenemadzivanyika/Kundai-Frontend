@@ -236,25 +236,29 @@ className="bg-green-500 h-1 rounded-full"
 
 
 
-{/* Attributes Flex Row: Distributes 5 items evenly */}
+{/* Attributes Flex Row: Distributes up to 7 unit masteries evenly */}
 
 <div className="flex justify-between items-center text-center mt-1 pb-1 w-full">
 
-{/* Inside DigitalTwinCard.tsx - Attributes map */}
-{student.attributes?.slice(0, 7).map((attr, index) => (
-  <div key={index} className="flex flex-col items-center flex-1 min-w-0 px-0.5">
-    <p className="text-[10px] text-gray-400 font-bold truncate uppercase tracking-tighter w-full" title={attr.name}>
-      {attr.name}
-    </p>
-    
-    <p className={`text-xs font-black leading-none mt-0.5 ${
-      attr.value > 75 ? 'text-emerald-500' : 
-      attr.value > 40 ? 'text-blue-500' : 'text-rose-500'
-    }`}>
-      {attr.value}%
-    </p>
-  </div>
-))}
+{student.attributes && student.attributes.length > 0 ? (
+  student.attributes.slice(0, 7).map((attr, index) => (
+    <div key={index} className="flex flex-col items-center flex-1 min-w-0 px-0.5">
+      <p className="text-[10px] text-gray-400 font-bold truncate uppercase tracking-tighter w-full" title={attr.name}>
+        {attr.name}
+      </p>
+      <p className={`text-xs font-black leading-none mt-0.5 ${
+        attr.value > 75 ? 'text-emerald-500' :
+        attr.value > 40 ? 'text-blue-500' : 'text-rose-500'
+      }`}>
+        {attr.value}%
+      </p>
+    </div>
+  ))
+) : (
+  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter w-full text-center">
+    No topics synced yet
+  </p>
+)}
 
 </div>
 

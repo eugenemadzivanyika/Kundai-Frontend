@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { authService } from './services/authService';
+import { tokenStore } from './services/tokenStore';
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Dashboard from './components/dashboard/Dashboard';
@@ -60,24 +62,34 @@ function RequireRole({ role, children }: { role: string; children: React.ReactNo
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
+  // On mount: attempt a silent token refresh using the HttpOnly cookie.
+  // This restores auth state after a page reload without exposing the token in localStorage.
   useEffect(() => {
-    const handleStorageChange = () => {
-      setIsAuthenticated(!!localStorage.getItem('token'));
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    authService.tryRefresh().then(ok => {
+      setIsAuthenticated(ok);
+      setAuthChecked(true);
+    });
+  }, []);
+
+  // Keep isAuthenticated in sync with the in-memory token store (e.g. forced logout on 401).
+  useEffect(() => {
+    return tokenStore.subscribe(token => setIsAuthenticated(!!token));
   }, []);
 
   useEffect(() => {
+    if (!authChecked) return;
     const publicPaths = ['/', '/login', '/register'];
     if (!isAuthenticated && !publicPaths.includes(location.pathname)) {
       navigate('/login', { replace: true });
     }
-  }, [isAuthenticated, location.pathname, navigate]);
+  }, [isAuthenticated, authChecked, location.pathname, navigate]);
+
+  if (!authChecked) return null;
 
   const renderStudentDashboard = () => (
     isAuthenticated ? <StudentDashboard /> : <Navigate to="/login" replace />

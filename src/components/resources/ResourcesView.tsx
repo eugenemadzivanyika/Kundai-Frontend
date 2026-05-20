@@ -22,6 +22,7 @@ import ResourceItem from './ResourceItem';
 import UploadModal from './UploadModal';
 import FilePreviewModal from './FilePreviewModal';
 import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
+import { tokenStore } from '../../services/tokenStore';
 
 // Define types for our components
 interface ViewModeToggleProps {
@@ -240,7 +241,7 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
   }, [classId]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = tokenStore.get();
     if (!classId) {
       setIsLoading(false);
       return;
@@ -377,7 +378,7 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = tokenStore.get();
       const response = await axios.post(
         `${API_URL}/api/resources/upload`,
         formData,
@@ -454,7 +455,7 @@ const ResourcesView: React.FC<ResourcesViewProps> = ({
     setPreviewUrl(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = tokenStore.get();
       const response = await axios.get(`${API_URL}/api/resources/download/${resource._id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });

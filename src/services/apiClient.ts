@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { tokenStore } from './tokenStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
@@ -23,7 +24,6 @@ export const parseErrorMessage = (error: any): string => {
     }
     return error.message || 'Server connection failed';
   }
-  // Handle the plain-object shape thrown by fetchData: { response: { data: {...} }, message: '...' }
   if (error && typeof error === 'object' && error.response?.data) {
     const data = error.response.data;
     if (typeof data.message === 'string') return data.message;
@@ -32,45 +32,72 @@ export const parseErrorMessage = (error: any): string => {
   return error instanceof Error ? error.message : 'An unexpected error occurred';
 };
 
-export async function fetchData<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+// Attempt a token refresh using the HttpOnly cookie. Returns the new access token or null.
+let _refreshPromise: Promise<string | null> | null = null;
+async function attemptRefresh(): Promise<string | null> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+    .then(async r => {
+      if (!r.ok) return null;
+      const data = await r.json();
+      if (data.token) {
+        tokenStore.set(data.token);
+        return data.token as string;
+      }
+      return null;
+    })
+    .catch(() => null)
+    .finally(() => { _refreshPromise = null; });
+  return _refreshPromise;
+}
+
+export async function fetchData<T = any>(endpoint: string, options: RequestInit = {}, _isRetry = false): Promise<T> {
+  const token = tokenStore.get();
   const defaultHeaders: HeadersInit = { 'Content-Type': 'application/json' };
 
   if (token) defaultHeaders['Authorization'] = `Bearer ${token}`;
 
-  try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: { ...defaultHeaders, ...options.headers },
-    });
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    credentials: 'include',
+    headers: { ...defaultHeaders, ...options.headers },
+  });
 
-      // Redirect blocked school users to login with a suspension notice
-      if (response.status === 403 && errorBody.code === 'SCHOOL_SUSPENDED') {
-        sessionStorage.setItem('suspension_notice', JSON.stringify({
-          reason: errorBody.reason || '',
-          note:   errorBody.note   || '',
-        }));
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        return undefined as unknown as T;
-      }
-
-      throw { response: { data: errorBody }, message: `HTTP error! status: ${response.status}` };
-    }
-    return response.json();
-  } catch (error) {
-    throw new Error(parseErrorMessage(error));
+  if (response.status === 401 && !_isRetry) {
+    const newToken = await attemptRefresh();
+    if (newToken) return fetchData<T>(endpoint, options, true);
+    // Refresh failed — clear auth state and redirect to login
+    tokenStore.set(null);
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    return undefined as unknown as T;
   }
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+
+    if (response.status === 403 && errorBody.code === 'SCHOOL_SUSPENDED') {
+      sessionStorage.setItem('suspension_notice', JSON.stringify({
+        reason: errorBody.reason || '',
+        note:   errorBody.note   || '',
+      }));
+      tokenStore.set(null);
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return undefined as unknown as T;
+    }
+
+    throw { response: { data: errorBody }, message: `HTTP error! status: ${response.status}` };
+  }
+
+  return response.json();
 }
 
 export { API_URL };
 
-// Converts a server-relative path like /uploads/avatars/foo.jpeg into an
-// absolute URL pointing at the backend origin, so <img src> works from the
-// Vite dev server (different port) or any other host.
 const BACKEND_ORIGIN = API_URL.replace(/\/api$/, '');
 export const resolveAssetUrl = (url?: string | null): string => {
   if (!url) return '';
@@ -78,13 +105,8 @@ export const resolveAssetUrl = (url?: string | null): string => {
   return `${BACKEND_ORIGIN}${url}`;
 };
 
-
-/**
- * Like fetchData but targets the Python AI service instead of the Node API.
- * Includes the JWT token so the AI service can optionally validate requests.
- */
 export async function fetchAiData<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = tokenStore.get();
   const defaultHeaders: HeadersInit = { 'Content-Type': 'application/json' };
   if (token) defaultHeaders['Authorization'] = `Bearer ${token}`;
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, Download, ChevronRight,
-  CheckCircle, XCircle, Edit2, Trash2, X, KeyRound,
+  CheckCircle, XCircle, Edit2, X, KeyRound,
 } from 'lucide-react';
 import { sysAdminService, School, SubscriptionPackage } from '../../../services/sysAdminService';
 import { useToast } from '../../ui/use-toast';
@@ -101,24 +101,23 @@ const SchoolsListPage: React.FC = () => {
 
   const handleToggleActive = async (s: School, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await sysAdminService.updateSchool(s._id, { active: !s.active });
-      toast.success(`School ${s.active ? 'deactivated' : 'activated'}`);
-      load();
-    } catch {
-      toast.error('Failed to update school');
-    }
-  };
-
-  const handleDelete = async (s: School, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm(`Permanently delete "${s.name}"? This cannot be undone.`)) return;
-    try {
-      await sysAdminService.deleteSchool(s._id);
-      toast.success('School deleted');
-      load();
-    } catch {
-      toast.error('Failed to delete school');
+    if (s.active) {
+      if (!window.confirm(`Deactivate "${s.name}"? All users will be signed out and the subscription cancelled. Data is preserved.`)) return;
+      try {
+        const result = await sysAdminService.deleteSchool(s._id);
+        toast.success(`School deactivated. ${result.deactivatedUsers} user(s) signed out.`);
+        load();
+      } catch {
+        toast.error('Failed to deactivate school');
+      }
+    } else {
+      try {
+        await sysAdminService.updateSchool(s._id, { active: true });
+        toast.success('School reactivated');
+        load();
+      } catch {
+        toast.error('Failed to reactivate school');
+      }
     }
   };
 
@@ -268,12 +267,6 @@ const SchoolsListPage: React.FC = () => {
                             className="p-1.5 text-slate-500 hover:text-white rounded transition-colors"
                           >
                             <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(school, e)}
-                            className="p-1.5 text-slate-500 hover:text-red-400 rounded transition-colors"
-                          >
-                            <Trash2 size={14} />
                           </button>
                           <ChevronRight size={14} className="text-slate-600 ml-1" />
                         </div>

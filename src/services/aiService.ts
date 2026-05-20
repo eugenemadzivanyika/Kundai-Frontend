@@ -1,5 +1,6 @@
 import { API_URL, fetchData, fetchAiData } from './api';
 import { Assessment } from '../types';
+import { tokenStore } from './tokenStore';
 
 interface AttributeInput {
   _id: string;
@@ -146,20 +147,20 @@ generateQuestions: async (params: GenerateQuestionsParams): Promise<Assessment> 
    * to be used during generation.
    */
   uploadContextFile: async (file: File, courseId: string) => {
+    const token = tokenStore.get();
     const formData = new FormData();
     formData.append('context_file', file);
     formData.append('courseId', courseId);
 
-    // This hits your Node server, which then forwards to Python
     const response = await fetch(`${API_URL}/assessments/upload-context`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
 
-    return response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || `Upload failed (${response.status})`);
+    return data;
   }
 };
 

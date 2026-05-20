@@ -539,6 +539,7 @@ const StudentPlanView: React.FC<StudentPlanViewProps> = ({
                 <StudentTutor
                   studentId={studentId}
                   selectedSubjectId={selectedSubjectId}
+                  planId={plan.id}
                   activeStep={activeTutorStep}
                   allSteps={allTutorSteps}
                   activeStepIndex={selectedStepIndex}

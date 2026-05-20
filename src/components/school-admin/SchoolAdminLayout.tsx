@@ -190,10 +190,7 @@ const SchoolAdminLayout: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
+  const handleLogout = () => { authService.logout(); };
 
   const activeKey = (() => {
     if (location.pathname === '/admin') return 'dashboard';

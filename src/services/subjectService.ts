@@ -1,4 +1,5 @@
 import { fetchData, API_URL, parseErrorMessage } from './apiClient';
+import { tokenStore } from './tokenStore';
 
 export interface SyllabusFile {
   name: string;
@@ -17,7 +18,7 @@ export interface SubjectResource {
 }
 
 async function uploadFile(endpoint: string, file: File): Promise<any> {
-  const token = localStorage.getItem('token');
+  const token = tokenStore.get();
   const formData = new FormData();
   formData.append('file', file);
 

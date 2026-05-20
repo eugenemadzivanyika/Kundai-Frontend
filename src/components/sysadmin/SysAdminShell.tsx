@@ -99,10 +99,7 @@ const SysAdminShell: React.FC = () => {
     } catch { /* silent */ }
   };
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
+  const handleLogout = () => { authService.logout(); };
 
   const isActive = (path: string) =>
     path === '/sys-admin'

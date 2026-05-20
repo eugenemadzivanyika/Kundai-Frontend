@@ -1,4 +1,5 @@
 import { fetchData, fetchAiData } from './apiClient';
+import { tokenStore } from './tokenStore';
 import type { SubjectNotesDoc } from '../types/subjectNotes';
 
 export async function getSubjectNotes(subjectId: string): Promise<SubjectNotesDoc | null> {
@@ -15,7 +16,7 @@ export async function generateAndPersistSubtopicNotes(
   subtopicName: string,
   level: string,
 ): Promise<{ content: string; sources: Record<string, unknown>[]; grounded_by_rag: boolean }> {
-  const token = localStorage.getItem('token');
+  const token = tokenStore.get();
   const result = await fetchAiData<{
     content: string;
     persisted: boolean;

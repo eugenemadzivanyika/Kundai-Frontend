@@ -26,10 +26,7 @@ const AdminLayout: React.FC = () => {
   const location = useLocation();
   const currentUser = authService.getCurrentUser();
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
+  const handleLogout = () => { authService.logout(); };
 
   return (
     <div className="min-h-screen bg-slate-100">

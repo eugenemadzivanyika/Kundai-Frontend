@@ -1,4 +1,6 @@
-// Client-side Gemini marking is disabled — wired up via backend proxy in Phase 3.
+import { API_URL } from './apiClient';
+import { tokenStore } from './tokenStore';
+
 interface MarkingResult {
   marks: number;
   feedback: string;
@@ -10,8 +12,23 @@ interface MarkingResult {
 }
 
 export const markingService = {
-  async markDocument(_file: File): Promise<MarkingResult> {
-    throw new Error('AI marking is temporarily unavailable. Please use manual marking.');
+  async markDocument(file: File): Promise<MarkingResult> {
+    const token = tokenStore.get();
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await fetch(`${API_URL}/ai/mark-document`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'AI marking failed');
+    }
+    return res.json();
   },
 };
 

@@ -325,9 +325,11 @@ const OcrReviewComponent: React.FC<OcrReviewProps> = ({
     processFiles(ordered);
   }, [processFiles]);
 
-  const initialFilesRef = useRef(initialFiles);
+  const initialFilesRef    = useRef(initialFiles);
+  const initialProcessedRef = useRef(false);
   useEffect(() => {
-    if (!initialFilesRef.current?.length) return;
+    if (initialProcessedRef.current || !initialFilesRef.current?.length) return;
+    initialProcessedRef.current = true;
     if (skipOrderConfirm) {
       processFiles(initialFilesRef.current);
     } else {

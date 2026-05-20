@@ -107,16 +107,10 @@ const devProfiles = await Promise.all(
         avatarUrl: student.user?.avatarUrl || '',
         plans: plans,
         activePlan: activePlanObj ? activePlanObj.title : 'None',
-        // SURGICAL FIX: Map the aggregated unitMasteries instead of flat attributes
-        attributes: devData.unitMasteries && devData.unitMasteries.length > 0
-          ? devData.unitMasteries.map((um: any) => ({
-              name: um.unit,
-              value: um.mastery,
-            }))
-          : [
-              { name: "Syllabus Check", value: 0 },
-              { name: "Introduction", value: 0 }
-            ]
+        attributes: (devData.unitMasteries ?? []).map((um: any) => ({
+          name: um.unit,
+          value: um.mastery,
+        }))
       };
     } catch (err) {
       console.error(`Error processing Digital Twin for ${student.id}:`, err);

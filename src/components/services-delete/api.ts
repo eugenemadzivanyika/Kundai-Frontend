@@ -1,10 +1,11 @@
 import { Student, ChatMessage, Result, Assessment, User } from '../../types/index';
+import { tokenStore } from '../../services/tokenStore';
 
 const API_URL = 'http://localhost:5000/api';
 
 // Helper function for fetch requests
 const fetchData = async (endpoint: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem('token');
+  const token = tokenStore.get();
 
   const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
@@ -40,7 +41,7 @@ export const authService = {
       body: JSON.stringify({ email, password }),
     });
 
-    localStorage.setItem('token', data.token);
+    tokenStore.set(data.token);
     return data;
   },
 
@@ -50,7 +51,7 @@ export const authService = {
       body: JSON.stringify(userData),
     });
 
-    localStorage.setItem('token', data.token);
+    tokenStore.set(data.token);
     return data;
   },
 

@@ -8,6 +8,12 @@ import type {
   OcrAnswerEntry,
 } from './ocr.types';
 import { OCR_ENDPOINT, OCR_BATCH_ENDPOINT } from './ocr.constants';
+import { tokenStore } from '../../services/tokenStore';
+
+function ocrAuthHeaders(): HeadersInit {
+  const token = tokenStore.get();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // ── Region mapping ─────────────────────────────────────────────────────────────
 
@@ -65,7 +71,7 @@ export async function runOcr(file: File): Promise<{ regions: OcrRegion[]; extraP
   const fd = new FormData();
   fd.append('file', file);
 
-  const resp = await fetch(OCR_ENDPOINT, { method: 'POST', body: fd });
+  const resp = await fetch(OCR_ENDPOINT, { method: 'POST', body: fd, headers: ocrAuthHeaders() });
   if (!resp.ok) {
     const msg = await resp.text().catch(() => resp.statusText);
     throw new Error(`OCR failed (${resp.status}): ${msg}`);
@@ -105,7 +111,7 @@ export async function runOcrBatch(
     ));
   }
 
-  const resp = await fetch(OCR_BATCH_ENDPOINT, { method: 'POST', body: fd });
+  const resp = await fetch(OCR_BATCH_ENDPOINT, { method: 'POST', body: fd, headers: ocrAuthHeaders() });
   if (!resp.ok) {
     const msg = await resp.text().catch(() => resp.statusText);
     throw new Error(`OCR batch failed (${resp.status}): ${msg}`);

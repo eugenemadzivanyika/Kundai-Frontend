@@ -1,9 +1,5 @@
-export const getActiveAuthToken = (): string | null => {
-  try {
-    return localStorage.getItem('token');
-  } catch {
-    return null;
-  }
-};
+import { tokenStore } from './tokenStore';
+
+export const getActiveAuthToken = (): string | null => tokenStore.get();
 
 export default getActiveAuthToken;

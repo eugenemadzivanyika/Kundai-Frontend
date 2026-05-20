@@ -1,5 +1,6 @@
 // src/services/profileService.ts
 import { fetchData, API_URL } from './apiClient';
+import { tokenStore } from './tokenStore';
 import type { Profile, ProfileUpdate } from '../types/profile';
 
 export const profileService = {
@@ -15,7 +16,7 @@ export const profileService = {
   },
 
   async uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
-    const token = localStorage.getItem('token');
+    const token = tokenStore.get();
     const formData = new FormData();
     formData.append('avatar', file);
 

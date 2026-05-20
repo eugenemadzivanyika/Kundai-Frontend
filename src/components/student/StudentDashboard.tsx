@@ -615,7 +615,7 @@ const realPlanBySubjectId = useMemo(() => {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  const handleLogout = () => { localStorage.clear(); window.location.href = '/login'; };
+  const handleLogout = () => { authService.logout(); };
 
   const setViewWithTransition = (nextView: NavItemKey, options?: { resetPlanEntry?: boolean }) => {
     if (options?.resetPlanEntry) setPlanEntryStepIndex(null);
