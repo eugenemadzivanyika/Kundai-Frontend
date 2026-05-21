@@ -14,9 +14,14 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   server: {
+    host: '127.0.0.1',
     port: 5173,
+    strictPort: true,
+    allowedHosts: ['kundai.app', 'www.kundai.app', 'localhost'],
     hmr: {
-      port: 5173,
+      host: 'www.kundai.app',
+      protocol: 'wss',
+      clientPort: 443,
     },
   },
 });
