@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { tokenStore } from './tokenStore';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL;
+const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL;
 
 export class ApiError extends Error {
   status: number;
