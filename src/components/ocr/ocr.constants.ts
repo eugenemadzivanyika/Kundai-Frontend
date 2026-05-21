@@ -13,4 +13,7 @@ const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:
 export const OCR_ENDPOINT       = `${AI_SERVICE_URL}/ocr/extract`;
 export const OCR_BATCH_ENDPOINT = `${AI_SERVICE_URL}/ocr/extract-batch`;
 
+export const NODE_API_URL        = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api';
+export const OCR_SESSIONS_ENDPOINT = `${NODE_API_URL}/ocr/sessions`;
+
 export const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

@@ -5,6 +5,9 @@ import { toast } from 'sonner';
 import { HandwritingFilePicker } from './HandwritingFilePicker';
 import OcrReviewComponent from '../ocr/OcrReviewComponent';
 import SubmissionReviewModal from './SubmissionReviewModal';
+import PhonePairingPanel from '../ocr/PhonePairingPanel';
+import { useOcrSession } from '../ocr/useOcrSession';
+import { serverImagesToFiles } from '../ocr/serverImagesToFiles';
 
 import { assessmentService, studentService } from '../../services/api';
 import { submitHandwrittenAnswers } from '../../services/handwritingService';
@@ -248,6 +251,11 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
   const [questions, setQuestions]       = useState<OcrQuestion[]>([]);
   const [resultId, setResultId]         = useState<string | null>(null);
   const [gradeError, setGradeError]     = useState<string | null>(null);
+  const [confirming, setConfirming]     = useState(false);
+
+  // Phone pairing session — started once an assessment is selected
+  const { sessionId, pairToken, pairCode, phoneLive, studentsWithPages, closeSession } =
+    useOcrSession(isOpen ? selectedAssessmentId : null);
 
   // Fetch assessment questions once an assessmentId is known
   const fetchedRef = useRef(false);
@@ -274,12 +282,14 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
   // Reset when closed
   useEffect(() => {
     if (!isOpen) {
+      closeSession();
       setPhase(initialPhase);
       setSelectedAssessmentId(propAssessmentId ?? null);
       setStudentId(propStudentId ?? null);
       setPickedFiles(null);
       setResultId(null);
       setGradeError(null);
+      setConfirming(false);
       fetchedRef.current = false;
     }
   }, [isOpen]);
@@ -287,6 +297,19 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
   const handleStudentSelected = useCallback((student: Student) => {
     setStudentId(student._id);
     setPhase('picking');
+  }, []);
+
+  const handlePhoneConfirm = useCallback(async (pageUrls: string[]) => {
+    setConfirming(true);
+    try {
+      const files = await serverImagesToFiles(pageUrls);
+      setPickedFiles(files);
+      setPhase('reviewing');
+    } catch {
+      toast.error('Failed to fetch phone images — try again');
+    } finally {
+      setConfirming(false);
+    }
   }, []);
 
   const handleFilesSelected = useCallback((files: File[]) => {
@@ -359,8 +382,8 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
           display:       'flex',
           flexDirection: 'column',
           overflow:      'hidden',
-          width:         phase === 'reviewing' ? '100%' : 560,
-          maxWidth:      phase === 'reviewing' ? '100%' : 560,
+          width:         phase === 'reviewing' ? '100%' : (phase === 'picking' && sessionId ? 860 : 560),
+          maxWidth:      phase === 'reviewing' ? '100%' : (phase === 'picking' && sessionId ? 860 : 560),
           height:        phase === 'reviewing' ? '100%' : (['picking', 'selecting', 'selecting_assessment'].includes(phase)) ? 560 : undefined,
           maxHeight:     phase === 'reviewing' ? '100%' : '88vh',
           margin:        phase === 'reviewing' ? 0 : 'auto',
@@ -390,10 +413,30 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
 
         {/* ── Picking ── */}
         {phase === 'picking' && (
-          <HandwritingFilePicker
-            onFilesSelected={handleFilesSelected}
-            onCancel={onClose}
-          />
+          <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+            {/* Drag/drop file picker (always present as fallback) */}
+            <div style={{ flex: 1, minWidth: 0, borderRight: sessionId ? '1px solid #f1f5f9' : 'none' }}>
+              <HandwritingFilePicker
+                onFilesSelected={handleFilesSelected}
+                onCancel={onClose}
+              />
+            </div>
+
+            {/* Phone pairing panel (only shown once session is ready) */}
+            {sessionId && (
+              <div style={{ width: 300, flexShrink: 0, padding: '14px 14px 14px 12px', display: 'flex', flexDirection: 'column', overflowY: 'auto', background: '#fafafa' }}>
+                <PhonePairingPanel
+                  pairToken={pairToken}
+                  pairCode={pairCode}
+                  phoneLive={phoneLive}
+                  studentsWithPages={studentsWithPages}
+                  selectedStudentId={studentId}
+                  onConfirm={handlePhoneConfirm}
+                  confirming={confirming}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── Reviewing ── */}

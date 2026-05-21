@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kundai — Mobile OCR companion</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Caveat:wght@400;700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+    <style>
+      html, body { background: #e2e8f0; font-family: 'Inter Tight', Inter, system-ui, sans-serif; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel" src="design-canvas.jsx" data-presets="react"></script>
+    <script type="text/babel" src="mobile-ocr.jsx" data-presets="react"></script>
+
+    <script type="text/babel" data-presets="react">
+      function App() {
+        const { DesignCanvas, DCSection, DCArtboard, Phone,
+                ScreenPair, ScreenConnected, ScreenNewStudent, ScreenCamera, ScreenPreview,
+                ScreenStudentDone, ScreenGallery, ScreenDone, WebOcrCompanion } = window;
+
+        const dark = (s) => ['ScreenPair','ScreenCamera','ScreenPreview'].includes(s);
+
+        const screens = [
+          { id: 'pair',         label: '1. Pair · Scan QR',                  comp: ScreenPair        },
+          { id: 'connected',    label: '2. Connected · How it works',        comp: ScreenConnected   },
+          { id: 'new-student',  label: '3. Pick student · Roster',           comp: ScreenNewStudent  },
+          { id: 'camera',       label: '4. Shoot · Tapiwa, page 2',          comp: ScreenCamera      },
+          { id: 'preview',      label: '5. Page preview · Auto-crop',        comp: ScreenPreview     },
+          { id: 'student-done', label: '6. Submission saved · Next student', comp: ScreenStudentDone },
+          { id: 'gallery',      label: '7. Batch · Grouped by student',      comp: ScreenGallery     },
+          { id: 'done',         label: '8. Done · Synced',                   comp: ScreenDone        },
+        ];
+
+        return (
+          <DesignCanvas title="Kundai · Mobile OCR companion (Android · S21 Ultra)">
+            <DCSection
+              id="bridge"
+              title="The bridge — phone as webcam"
+              subtitle="Teacher's web screen on the left receives photos in realtime as the phone shoots."
+            >
+              <DCArtboard id="web-receiver" label="Teacher's OCR page on web" width={780} height={600}>
+                <div style={{ padding: 24, height: '100%', boxSizing: 'border-box', background: '#f1f5f9' }}>
+                  <WebOcrCompanion />
+                </div>
+              </DCArtboard>
+            </DCSection>
+
+            <DCSection
+              id="flow"
+              title="The flow — 6 mobile screens"
+              subtitle="Pair → connect to a batch → shoot pages → confirm. Photos stream to the web in real time; OCR runs only when the teacher hits Confirm."
+            >
+              {screens.map(({ id, label, comp: Comp }) => (
+                <DCArtboard key={id} id={id} label={label} width={380} height={800}>
+                  <div style={{ padding: 10 }}>
+                    <Phone dark={dark(Comp.name)}>
+                      <Comp />
+                    </Phone>
+                  </div>
+                </DCArtboard>
+              ))}
+            </DCSection>
+          </DesignCanvas>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>

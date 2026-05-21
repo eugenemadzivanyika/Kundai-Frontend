@@ -47,6 +47,7 @@ import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import TeacherProfilePage from './components/teacher/TeacherProfilePage';
 import ClassDrillDownDashboard from './components/class-drill-down/ClassDrillDownDashboard';
+import { MobileOcrApp } from './components/kundai-mobile/MobileOcrApp';
 
 function AnalyticsPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -83,7 +84,7 @@ function App() {
 
   useEffect(() => {
     if (!authChecked) return;
-    const publicPaths = ['/', '/login', '/register'];
+    const publicPaths = ['/', '/login', '/register', '/m/ocr'];
     if (!isAuthenticated && !publicPaths.includes(location.pathname)) {
       navigate('/login', { replace: true });
     }
@@ -223,6 +224,10 @@ function App() {
             <Route path="teacher/analytics/:classId" element={<AnalyticsPage />} />
           </Route>
         )}
+
+        {/* --- Mobile OCR PWA (no auth shell — phone authenticates via pair token) --- */}
+        <Route path="/m/ocr" element={<MobileOcrApp />} />
+        <Route path="/m/ocr/pair/:pairToken" element={<MobileOcrApp />} />
 
         {/* --- Catch All --- */}
         <Route path="*" element={<NotFound />} />

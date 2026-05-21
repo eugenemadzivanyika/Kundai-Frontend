@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Kundai Mobile OCR — Technical Handoff</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-dark: #1d4ed8;
+    --blue-50: #eff6ff;
+    --blue-100: #dbeafe;
+    --ink: #0f172a;
+    --ink-2: #1e293b;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-500: #64748b;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --green: #16a34a;
+    --green-50: #dcfce7;
+    --green-700: #15803d;
+    --amber: #f59e0b;
+    --amber-50: #fef3c7;
+    --amber-700: #b45309;
+    --rose: #e11d48;
+    --rose-50: #ffe4e6;
+    --rose-700: #be123c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Inter Tight', -apple-system, system-ui, sans-serif;
+    background: var(--slate-100);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* ── Layout ── */
+  .shell { max-width: 1100px; margin: 0 auto; padding: 56px 32px 120px; }
+  @media (max-width: 760px) { .shell { padding: 32px 16px 80px; } }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #fff;
+    border-radius: 24px;
+    padding: 48px 40px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 40px;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 80% 20%, rgba(37,99,235,.4), transparent 50%),
+                radial-gradient(circle at 20% 80%, rgba(34,197,94,.18), transparent 50%);
+    pointer-events: none;
+  }
+  .hero > * { position: relative; }
+  .hero .eyebrow {
+    font-size: 11px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase;
+    color: #93c5fd; margin: 0 0 12px;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 4.5vw, 44px); font-weight: 800; letter-spacing: -0.025em;
+    margin: 0 0 12px; line-height: 1.1;
+  }
+  .hero p { font-size: 16px; color: rgba(255,255,255,.78); max-width: 640px; margin: 0; }
+  .hero-meta {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+    color: #fff; font-size: 12px; font-weight: 600;
+    padding: 5px 11px; border-radius: 100px;
+    backdrop-filter: blur(20px);
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 3px; background: #22c55e; }
+
+  /* ── TOC ── */
+  .toc {
+    background: #fff; border-radius: 16px; padding: 20px 24px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 0 0 1px rgba(15,23,42,.06);
+    margin-bottom: 40px;
+  }
+  .toc h3 {
+    font-size: 10px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--slate-500); margin: 0 0 12px;
+  }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 18px;
+    counter-reset: tocnum;
+  }
+  .toc li { counter-increment: tocnum; }
+  .toc a {
+    display: flex; align-items: baseline; gap: 8px;
+    text-decoration: none; color: var(--ink); font-size: 14px; font-weight: 600;
+    padding: 4px 0;
+  }
+  .toc a::before {
+    content: counter(tocnum, decimal-leading-zero);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 700; color: var(--blue);
+    min-width: 24px;
+  }
+  .toc a:hover { color: var(--blue); }
+
+  /* ── Sections ── */
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  .section-head { margin-bottom: 20px; }
+  .section-head .num {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+    color: var(--blue); letter-spacing: .08em;
+  }
+  .section-head h2 {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.025em;
+    color: var(--ink); margin: 4px 0 6px;
+  }
+  .section-head p { font-size: 15px; color: var(--slate-600); margin: 0; max-width: 720px; }
+
+  .card {
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 0 0 1px rgba(15,23,42,.06);
+  }
+  .card + .card { margin-top: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  h3.card-title {
+    font-size: 16px; font-weight: 800; letter-spacing: -0.01em;
+    color: var(--ink); margin: 0 0 8px;
+  }
+  h4 {
+    font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--slate-500); margin: 20px 0 8px;
+  }
+  p { margin: 0 0 10px; }
+  .muted { color: var(--slate-600); font-size: 14px; }
+  ul.clean { list-style: none; padding: 0; margin: 0 0 12px; }
+  ul.clean li {
+    position: relative; padding-left: 18px; font-size: 14px; color: var(--slate-700);
+    margin-bottom: 6px;
+  }
+  ul.clean li::before {
+    content: ''; position: absolute; left: 4px; top: 8px;
+    width: 5px; height: 5px; border-radius: 3px; background: var(--blue);
+  }
+
+  /* ── Tags / badges ── */
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+    background: var(--blue-50); color: var(--blue);
+  }
+  .tag.green { background: var(--green-50); color: var(--green-700); }
+  .tag.amber { background: var(--amber-50); color: var(--amber-700); }
+  .tag.rose { background: var(--rose-50); color: var(--rose-700); }
+  .tag.slate { background: var(--slate-100); color: var(--slate-600); }
+
+  /* ── Code blocks ── */
+  pre {
+    background: #0f172a; color: #e2e8f0;
+    border-radius: 12px; padding: 16px 18px; overflow-x: auto;
+    font-size: 12.5px; line-height: 1.55; margin: 12px 0;
+  }
+  pre .k { color: #93c5fd; }   /* keyword */
+  pre .s { color: #a7f3d0; }   /* string */
+  pre .c { color: #64748b; font-style: italic; }  /* comment */
+  pre .n { color: #fbbf24; }   /* number/literal */
+  pre .p { color: #f0abfc; }   /* punct/method */
+  pre .v { color: #fda4af; }   /* variable */
+  code.inline {
+    background: var(--slate-100); padding: 1px 6px; border-radius: 4px;
+    font-size: 12px; color: var(--ink-2);
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13.5px;
+    margin: 8px 0 12px;
+  }
+  th, td {
+    text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--slate-200);
+    vertical-align: top;
+  }
+  th {
+    font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--slate-500); background: var(--slate-50);
+  }
+  td code.inline { font-size: 11.5px; }
+  tr:last-child td { border-bottom: 0; }
+
+  /* ── Architecture diagram ── */
+  .arch {
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 0 0 1px rgba(15,23,42,.06);
+  }
+  .arch svg { width: 100%; height: auto; display: block; }
+
+  /* ── Recommendation banner ── */
+  .recommend {
+    background: linear-gradient(135deg, var(--blue-50), #fff);
+    border-left: 3px solid var(--blue);
+    border-radius: 8px; padding: 14px 18px; margin: 12px 0;
+  }
+  .recommend strong { color: var(--blue-dark); }
+
+  .warn {
+    background: var(--amber-50); border-left: 3px solid var(--amber);
+    border-radius: 8px; padding: 12px 16px; font-size: 13px;
+    color: var(--amber-700); margin: 12px 0;
+  }
+
+  /* ── Phase cards ── */
+  .phase {
+    background: #fff; border-radius: 14px; padding: 20px;
+    border-top: 4px solid var(--blue);
+    box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 0 0 1px rgba(15,23,42,.06);
+  }
+  .phase.v1 { border-top-color: var(--green); }
+  .phase.v2 { border-top-color: var(--amber); }
+  .phase .label {
+    font-size: 10px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--blue);
+  }
+  .phase.v1 .label { color: var(--green-700); }
+  .phase.v2 .label { color: var(--amber-700); }
+  .phase h3 { font-size: 18px; font-weight: 800; margin: 4px 0 8px; }
+
+  /* ── Sequence diagram ── */
+  .seq {
+    background: #fff; border-radius: 16px; padding: 24px;
+    box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 0 0 1px rgba(15,23,42,.06);
+    overflow-x: auto;
+  }
+  .seq svg { display: block; min-width: 720px; }
+
+  /* anchors */
+  a.anchor { color: var(--blue); text-decoration: none; font-weight: 600; }
+  a.anchor:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ─── HERO ─── -->
+  <div class="hero">
+    <p class="eyebrow">Engineering handoff · v0.1</p>
+    <h1>Bringing Kundai Mobile OCR to life</h1>
+    <p>How to ship the phone-as-scanner companion alongside the existing teacher marking workflow — opinionated stack, real backend contracts, and a phased path to production.</p>
+    <div class="hero-meta">
+      <span class="pill"><span class="dot"></span>Target device: Samsung S21 Ultra (Android, Chrome)</span>
+      <span class="pill">PWA-first</span>
+      <span class="pill">Hosted in-region</span>
+      <span class="pill">POPIA-aligned</span>
+    </div>
+  </div>
+
+  <!-- ─── TOC ─── -->
+  <nav class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#arch">System architecture</a></li>
+      <li><a href="#stack">Tech stack & rationale</a></li>
+      <li><a href="#mobile">Mobile (S21 Ultra) build</a></li>
+      <li><a href="#web">Web companion build</a></li>
+      <li><a href="#contracts">Backend contracts</a></li>
+      <li><a href="#ocr">OCR + marking pipeline</a></li>
+      <li><a href="#workflow">Fits the teacher's workflow</a></li>
+      <li><a href="#phases">Phased rollout</a></li>
+      <li><a href="#decisions">Open decisions</a></li>
+    </ol>
+  </nav>
+
+  <!-- ─── 1. ARCHITECTURE ─── -->
+  <section id="arch">
+    <div class="section-head">
+      <span class="num">01</span>
+      <h2>System architecture</h2>
+      <p>Four moving parts. The phone is a thin capture client; the web is the orchestration surface; the API broker pairs them; the OCR worker is async.</p>
+    </div>
+
+    <div class="arch">
+      <svg viewBox="0 0 1000 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+            <path d="M0,0 L9,3 L0,6 z" fill="#64748b"/>
+          </marker>
+          <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+            <path d="M0,0 L9,3 L0,6 z" fill="#2563eb"/>
+          </marker>
+        </defs>
+
+        <!-- Phone -->
+        <g transform="translate(40,140)">
+          <rect width="160" height="180" rx="20" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+          <rect x="8" y="8" width="144" height="164" rx="14" fill="#1e293b"/>
+          <text x="80" y="60" text-anchor="middle" fill="#fff" font-family="Inter Tight" font-weight="800" font-size="14">Phone PWA</text>
+          <text x="80" y="80" text-anchor="middle" fill="#94a3b8" font-family="Inter Tight" font-size="11">S21 Ultra · Chrome</text>
+          <text x="80" y="108" text-anchor="middle" fill="#22c55e" font-family="JetBrains Mono" font-size="10">getUserMedia</text>
+          <text x="80" y="124" text-anchor="middle" fill="#22c55e" font-family="JetBrains Mono" font-size="10">canvas crop</text>
+          <text x="80" y="140" text-anchor="middle" fill="#22c55e" font-family="JetBrains Mono" font-size="10">upload</text>
+        </g>
+
+        <!-- Web -->
+        <g transform="translate(40,40)">
+          <rect width="200" height="90" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+          <rect x="0" y="0" width="200" height="22" rx="12" fill="#f8fafc"/>
+          <circle cx="12" cy="11" r="3" fill="#ff5f57"/><circle cx="22" cy="11" r="3" fill="#febc2e"/><circle cx="32" cy="11" r="3" fill="#28c840"/>
+          <text x="100" y="50" text-anchor="middle" fill="#0f172a" font-family="Inter Tight" font-weight="800" font-size="14">Teacher web app</text>
+          <text x="100" y="68" text-anchor="middle" fill="#64748b" font-family="Inter Tight" font-size="11">Marking dashboard</text>
+          <text x="100" y="84" text-anchor="middle" fill="#2563eb" font-family="JetBrains Mono" font-size="10">React · WS client</text>
+        </g>
+
+        <!-- API broker -->
+        <g transform="translate(420,160)">
+          <rect width="200" height="140" rx="14" fill="#2563eb"/>
+          <text x="100" y="36" text-anchor="middle" fill="#fff" font-family="Inter Tight" font-weight="800" font-size="14">API broker</text>
+          <text x="100" y="56" text-anchor="middle" fill="#dbeafe" font-family="Inter Tight" font-size="11">Node.js · Fastify</text>
+          <line x1="20" y1="72" x2="180" y2="72" stroke="rgba(255,255,255,.2)"/>
+          <text x="100" y="92" text-anchor="middle" fill="#fff" font-family="JetBrains Mono" font-size="10">POST /pair</text>
+          <text x="100" y="108" text-anchor="middle" fill="#fff" font-family="JetBrains Mono" font-size="10">WS /session/:id</text>
+          <text x="100" y="124" text-anchor="middle" fill="#fff" font-family="JetBrains Mono" font-size="10">POST /pages</text>
+        </g>
+
+        <!-- Object storage -->
+        <g transform="translate(760,40)">
+          <rect width="200" height="90" rx="12" fill="#0f172a"/>
+          <text x="100" y="40" text-anchor="middle" fill="#fff" font-family="Inter Tight" font-weight="800" font-size="14">Object storage</text>
+          <text x="100" y="60" text-anchor="middle" fill="#94a3b8" font-family="Inter Tight" font-size="11">S3 / MinIO (in-region)</text>
+          <text x="100" y="78" text-anchor="middle" fill="#22c55e" font-family="JetBrains Mono" font-size="10">signed PUT/GET</text>
+        </g>
+
+        <!-- Postgres + Redis -->
+        <g transform="translate(760,160)">
+          <rect width="200" height="60" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+          <text x="100" y="28" text-anchor="middle" fill="#0f172a" font-family="Inter Tight" font-weight="800" font-size="13">Postgres</text>
+          <text x="100" y="46" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="10">batches · pages · users</text>
+        </g>
+        <g transform="translate(760,240)">
+          <rect width="200" height="60" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+          <text x="100" y="28" text-anchor="middle" fill="#0f172a" font-family="Inter Tight" font-weight="800" font-size="13">Redis · BullMQ</text>
+          <text x="100" y="46" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono" font-size="10">OCR job queue</text>
+        </g>
+
+        <!-- OCR worker -->
+        <g transform="translate(420,340)">
+          <rect width="200" height="100" rx="14" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+          <text x="100" y="32" text-anchor="middle" fill="#0f172a" font-family="Inter Tight" font-weight="800" font-size="14">OCR + Mark worker</text>
+          <text x="100" y="50" text-anchor="middle" fill="#64748b" font-family="Inter Tight" font-size="11">Python · async consumer</text>
+          <line x1="20" y1="62" x2="180" y2="62" stroke="#e2e8f0"/>
+          <text x="100" y="80" text-anchor="middle" fill="#2563eb" font-family="JetBrains Mono" font-size="10">Vision LLM call</text>
+          <text x="100" y="94" text-anchor="middle" fill="#2563eb" font-family="JetBrains Mono" font-size="10">rubric scoring</text>
+        </g>
+
+        <!-- Arrows -->
+        <!-- web -> broker -->
+        <path d="M 240,85 C 320,85 380,160 420,200" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+        <text x="295" y="135" fill="#2563eb" font-family="JetBrains Mono" font-size="10">WS pair</text>
+        <!-- phone -> broker -->
+        <path d="M 200,230 C 280,230 360,230 420,230" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+        <text x="285" y="222" fill="#2563eb" font-family="JetBrains Mono" font-size="10">WS + uploads</text>
+        <!-- broker -> storage -->
+        <path d="M 620,200 C 700,200 720,120 760,90" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+        <text x="660" y="135" fill="#64748b" font-family="JetBrains Mono" font-size="10">signed URLs</text>
+        <!-- broker -> db -->
+        <path d="M 620,210 L 760,190" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+        <!-- broker -> redis -->
+        <path d="M 620,240 L 760,260" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+        <text x="660" y="265" fill="#64748b" font-family="JetBrains Mono" font-size="10">enqueue</text>
+        <!-- worker -> redis -->
+        <path d="M 620,360 C 720,360 760,310 820,300" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+        <text x="700" y="345" fill="#64748b" font-family="JetBrains Mono" font-size="10">consume</text>
+        <!-- worker -> storage -->
+        <path d="M 510,340 C 510,200 700,90 760,85" stroke="#64748b" stroke-width="2" fill="none" stroke-dasharray="4,4" marker-end="url(#arrow)"/>
+        <!-- worker -> broker (results) -->
+        <path d="M 480,340 C 480,280 480,290 480,300" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+        <text x="490" y="320" fill="#2563eb" font-family="JetBrains Mono" font-size="10">WS broadcast</text>
+      </svg>
+    </div>
+
+    <div class="grid-3" style="margin-top:16px;">
+      <div class="card">
+        <h3 class="card-title">The transport rule</h3>
+        <p class="muted">Phone never talks to the web app directly. Both connect to the same broker, joined by a session ID. The broker fan-outs WS events to whoever has joined that session.</p>
+      </div>
+      <div class="card">
+        <h3 class="card-title">Why signed URLs</h3>
+        <p class="muted">Image bytes never pass through your API. Phone uploads directly to object storage with a 5-min signed URL. Cheap, fast on flaky networks, scales linearly with storage.</p>
+      </div>
+      <div class="card">
+        <h3 class="card-title">Why async OCR</h3>
+        <p class="muted">A vision-LLM call is 3–8s per page. You cannot block the request. Queue it, return a job ID, push the result over WS when ready.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 2. STACK ─── -->
+  <section id="stack">
+    <div class="section-head">
+      <span class="num">02</span>
+      <h2>Tech stack &amp; rationale</h2>
+      <p>Opinionated choices that match your existing React frontend and "hosted in Africa, POPIA-aligned" promise on the landing page.</p>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Pick</th><th>Why this, not that</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Mobile</strong></td>
+            <td><code class="inline">PWA</code> · React + Vite, installed to home screen</td>
+            <td>S21 Ultra Chrome ships every Web API you need (camera, WS, IndexedDB, Service Worker). No Play Store friction, no native build, same codebase as web. Native (Expo) only if you later need background sync or NFC pairing.</td>
+          </tr>
+          <tr>
+            <td><strong>Web</strong></td>
+            <td><code class="inline">Next.js 14</code> (matches your existing React/TS)</td>
+            <td>Your <code class="inline">LandingPage.tsx</code> and <code class="inline">RegisterPage.tsx</code> are already React/TS. Keep it. SSR for SEO on marketing pages, client islands for the dashboard.</td>
+          </tr>
+          <tr>
+            <td><strong>Realtime transport</strong></td>
+            <td><code class="inline">WebSocket</code> via <code class="inline">Socket.IO</code> or native <code class="inline">ws</code></td>
+            <td>You need bidirectional, low-latency, both sides initiating (phone sends pages, web sends "shoot next page" prompts). SSE is one-way. WebRTC is overkill — you're moving JPEGs, not live video.</td>
+          </tr>
+          <tr>
+            <td><strong>API broker</strong></td>
+            <td><code class="inline">Node 20</code> + <code class="inline">Fastify</code> + <code class="inline">Socket.IO</code></td>
+            <td>Same language as frontend = same team can ship it. Fastify benches ~2× Express. If you prefer Python: FastAPI + Starlette WebSockets.</td>
+          </tr>
+          <tr>
+            <td><strong>Auth</strong></td>
+            <td><code class="inline">Lucia</code> or <code class="inline">Auth.js</code> + short-lived pair tokens</td>
+            <td>Teacher logs in normally. Phone joins via one-time pair code → exchanges for a session JWT scoped to <em>just that batch</em>. Phone never sees the teacher's main session.</td>
+          </tr>
+          <tr>
+            <td><strong>Database</strong></td>
+            <td><code class="inline">Postgres</code> + <code class="inline">Prisma</code></td>
+            <td>Boring. Works. The schema is small (≤10 tables for MVP). Prisma gives you typed queries shared with the frontend.</td>
+          </tr>
+          <tr>
+            <td><strong>Object storage</strong></td>
+            <td><code class="inline">MinIO</code> (self-hosted, in-region) or <code class="inline">Backblaze B2</code></td>
+            <td>You committed to in-region hosting. AWS S3 SA region works but bills in USD. MinIO on your own VPS in Joburg/Cape Town keeps data + costs local.</td>
+          </tr>
+          <tr>
+            <td><strong>Queue</strong></td>
+            <td><code class="inline">Redis</code> + <code class="inline">BullMQ</code></td>
+            <td>You already need Redis for WS scaling and rate limits. BullMQ is the obvious queue.</td>
+          </tr>
+          <tr>
+            <td><strong>OCR + marking</strong></td>
+            <td>Vision LLM: <code class="inline">Claude 3.5 Sonnet</code> or <code class="inline">Gemini 1.5 Pro</code></td>
+            <td>For handwritten student work — especially mixed prose, diagrams, math — vision LLMs decisively beat Tesseract/Document AI. They also score against a rubric in the same call. Use Mathpix only if you have heavy math notation.</td>
+          </tr>
+          <tr>
+            <td><strong>Hosting</strong></td>
+            <td>VPS in Africa: <code class="inline">Afrihost</code>, <code class="inline">Hetzner CPT</code>, or <code class="inline">Liquid Telecom</code></td>
+            <td>Latency from a Harare classroom to Frankfurt is 180–250ms. To Cape Town it's 60–90ms. For a realtime app this matters.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="recommend">
+      <strong>The one-line stack:</strong> React PWA on the phone → Fastify + Socket.IO broker → Postgres + Redis + MinIO → Python worker calling Claude vision → everything on a Cape Town VPS.
+    </div>
+  </section>
+
+  <!-- ─── 3. MOBILE ─── -->
+  <section id="mobile">
+    <div class="section-head">
+      <span class="num">03</span>
+      <h2>Mobile (S21 Ultra) — what to build</h2>
+      <p>It's a PWA. The 8 screens you've mocked map cleanly to routes. Camera, edge detection, and resilient upload are the three non-trivial bits.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 class="card-title">Camera capture</h3>
+        <p class="muted">Use <code class="inline">getUserMedia</code> with <code class="inline">facingMode: 'environment'</code> for the back camera. Stream into a <code class="inline">&lt;video&gt;</code>, then on shutter press, copy a frame to <code class="inline">&lt;canvas&gt;</code> and export JPEG.</p>
+<pre><span class="k">const</span> stream = <span class="k">await</span> navigator.mediaDevices.<span class="p">getUserMedia</span>({
+  video: {
+    <span class="v">facingMode</span>: <span class="s">'environment'</span>,
+    <span class="v">width</span>:  { ideal: <span class="n">3840</span> },
+    <span class="v">height</span>: { ideal: <span class="n">2160</span> },
+  },
+});
+videoEl.srcObject = stream;
+
+<span class="c">// On shutter:</span>
+canvas.width = video.videoWidth;
+canvas.height = video.videoHeight;
+canvas.getContext(<span class="s">'2d'</span>).<span class="p">drawImage</span>(video, <span class="n">0</span>, <span class="n">0</span>);
+canvas.<span class="p">toBlob</span>(blob => uploadPage(blob), <span class="s">'image/jpeg'</span>, <span class="n">0.85</span>);</pre>
+        <p class="muted">S21 Ultra's main sensor goes up to 108MP but Chrome caps at the requested ideal — 4K is the sweet spot for OCR (file ~500KB at 0.85 quality).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Edge detection (the green outline)</h3>
+        <p class="muted">Two practical options:</p>
+        <ul class="clean">
+          <li><strong>jscanify</strong> (~80KB, OpenCV.js wrapper). Detects paper corners every frame, lets you draw the outline. Drop-in.</li>
+          <li><strong>Skip it for MVP.</strong> Just show fixed corner brackets and rely on auto-crop server-side. Most teachers shoot reasonably square already.</li>
+        </ul>
+        <div class="recommend"><strong>Recommend:</strong> Ship MVP without on-device edge detection. Add jscanify in V1 once you have real shot quality data.</div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Resilient upload</h3>
+        <p class="muted">Africa has spotty connectivity. Build for it:</p>
+        <ul class="clean">
+          <li>Queue uploads in IndexedDB the moment the shutter fires — UI shows "uploading" optimistically.</li>
+          <li>Service Worker retries with exponential backoff (1s → 2s → 4s → 8s).</li>
+          <li>Upload directly to MinIO with a signed PUT URL. Bypass your API.</li>
+          <li>If teacher closes the tab mid-upload, finish in the SW background fetch.</li>
+        </ul>
+<pre><span class="c">// IndexedDB outbox pattern</span>
+<span class="k">async function</span> <span class="p">enqueuePage</span>(blob, meta) {
+  <span class="k">const</span> id = <span class="p">crypto.randomUUID</span>();
+  <span class="k">await</span> db.outbox.<span class="p">put</span>({ id, blob, meta, status: <span class="s">'pending'</span> });
+  <span class="p">drainOutbox</span>();  <span class="c">// fire and forget</span>
+  <span class="k">return</span> id;
+}</pre>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Pairing UX</h3>
+        <p class="muted">Two paths, both backed by the same <code class="inline">/pair</code> endpoint:</p>
+        <ul class="clean">
+          <li><strong>QR scan</strong> — fastest. Use <code class="inline">@zxing/browser</code> for the BarcodeDetector fallback. The QR encodes <code class="inline">kundai://pair/&lt;sessionToken&gt;</code>.</li>
+          <li><strong>6-digit code</strong> — for when the QR won't focus. Just calls <code class="inline">POST /pair/code</code>.</li>
+        </ul>
+        <p class="muted">Pair token expires in 60s and is single-use. Once redeemed, phone gets a session JWT scoped to that batch only.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 4. WEB ─── -->
+  <section id="web">
+    <div class="section-head">
+      <span class="num">04</span>
+      <h2>Web companion — what to build</h2>
+      <p>This bolts onto your existing teacher dashboard as a new page: <code class="inline">/ocr/[batchId]</code>. You're not replacing the upload flow, you're <em>adding</em> a phone-as-source option.</p>
+    </div>
+
+    <div class="card">
+      <h4>The page lifecycle</h4>
+      <ol style="padding-left: 20px; margin: 0;">
+        <li><strong>Teacher creates a batch</strong> (Algebra Quiz · Form 3B) from existing flow → gets a <code class="inline">batchId</code>.</li>
+        <li><strong>Page mounts</strong> → calls <code class="inline">POST /sessions</code> with <code class="inline">batchId</code> → receives <code class="inline">sessionId</code> + <code class="inline">pairToken</code> + <code class="inline">pairCode</code>.</li>
+        <li><strong>Renders QR</strong> of <code class="inline">kundai://pair/&lt;pairToken&gt;</code> + the 6-digit code.</li>
+        <li><strong>Opens WS</strong> to <code class="inline">/ws/session/&lt;sessionId&gt;</code> and waits.</li>
+        <li><strong>Phone pairs</strong> → WS emits <code class="inline">phone:joined</code> → UI flips to "PHONE LIVE".</li>
+        <li><strong>Phone shoots</strong> → each page emits <code class="inline">page:uploaded</code> → thumbnail appears in real time.</li>
+        <li><strong>Phone hits Done per student</strong> → emits <code class="inline">submission:saved</code> → groups pages under that student.</li>
+        <li><strong>Teacher hits "Confirm &amp; start OCR"</strong> → server enqueues OCR jobs → results stream back via <code class="inline">page:ocr_done</code>.</li>
+      </ol>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 class="card-title">WS client (React hook)</h3>
+<pre><span class="k">function</span> <span class="p">useOcrSession</span>(sessionId) {
+  <span class="k">const</span> [pages, setPages] = <span class="p">useState</span>([]);
+  <span class="k">const</span> [phoneLive, setPhoneLive] = <span class="p">useState</span>(<span class="k">false</span>);
+
+  <span class="p">useEffect</span>(() => {
+    <span class="k">const</span> ws = <span class="k">new</span> <span class="p">WebSocket</span>(<span class="s">`wss://api.kundai.ac.zw/ws/session/</span><span class="v">${sessionId}</span><span class="s">`</span>);
+    ws.onmessage = (e) => {
+      <span class="k">const</span> ev = <span class="p">JSON.parse</span>(e.data);
+      <span class="k">switch</span> (ev.type) {
+        <span class="k">case</span> <span class="s">'phone:joined'</span>:    <span class="p">setPhoneLive</span>(<span class="k">true</span>); <span class="k">break</span>;
+        <span class="k">case</span> <span class="s">'page:uploaded'</span>:   setPages(p => [...p, ev.page]); <span class="k">break</span>;
+        <span class="k">case</span> <span class="s">'page:ocr_done'</span>:   <span class="p">updatePage</span>(ev.pageId, ev.result); <span class="k">break</span>;
+      }
+    };
+    <span class="k">return</span> () => ws.<span class="p">close</span>();
+  }, [sessionId]);
+
+  <span class="k">return</span> { pages, phoneLive };
+}</pre>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Hooking into existing marking</h3>
+        <p class="muted">Your dashboard already has a marking surface (see "AI-assisted marking" in the landing copy). The OCR page <em>feeds it</em>:</p>
+        <ul class="clean">
+          <li>Pages are stored against the existing <code class="inline">submissions</code> table.</li>
+          <li>Once OCR returns the structured rubric scoring, it lands in your existing <code class="inline">marks</code> table as <code class="inline">source: 'ocr_pending_review'</code>.</li>
+          <li>Teacher then opens the normal marking view to confirm/adjust before publishing to students.</li>
+        </ul>
+        <p class="muted">Net effect: zero changes to the post-marking flow. The phone is just a new ingress.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 5. BACKEND CONTRACTS ─── -->
+  <section id="contracts">
+    <div class="section-head">
+      <span class="num">05</span>
+      <h2>Backend contracts</h2>
+      <p>Minimum surface area. Six REST endpoints, six WS event types. Everything else is internal.</p>
+    </div>
+
+    <div class="card">
+      <h4>REST endpoints</h4>
+      <table>
+        <thead><tr><th>Method · Path</th><th>Auth</th><th>Body / Returns</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code class="inline">POST /sessions</code><br/><span class="tag">Web → API</span></td>
+            <td>Teacher JWT</td>
+            <td><strong>Body:</strong> <code class="inline">{ batchId }</code><br/><strong>Returns:</strong> <code class="inline">{ sessionId, pairToken, pairCode, expiresAt }</code></td>
+          </tr>
+          <tr>
+            <td><code class="inline">POST /pair</code><br/><span class="tag green">Phone → API</span></td>
+            <td>None (token in body)</td>
+            <td><strong>Body:</strong> <code class="inline">{ pairToken }</code> or <code class="inline">{ pairCode }</code><br/><strong>Returns:</strong> <code class="inline">{ sessionId, phoneJwt, batch }</code> — phoneJwt scoped to this session only</td>
+          </tr>
+          <tr>
+            <td><code class="inline">POST /sessions/:id/pages/upload-url</code><br/><span class="tag green">Phone → API</span></td>
+            <td>Phone JWT</td>
+            <td><strong>Body:</strong> <code class="inline">{ studentId?, pageIndex, mime }</code><br/><strong>Returns:</strong> <code class="inline">{ pageId, putUrl, expiresIn }</code></td>
+          </tr>
+          <tr>
+            <td><code class="inline">PUT &lt;putUrl&gt;</code><br/><span class="tag slate">Phone → MinIO</span></td>
+            <td>Signed URL</td>
+            <td>Raw JPEG bytes. Direct to object storage, ~500KB.</td>
+          </tr>
+          <tr>
+            <td><code class="inline">POST /sessions/:id/pages/:pageId/commit</code><br/><span class="tag green">Phone → API</span></td>
+            <td>Phone JWT</td>
+            <td>Signals upload complete. Server fans out <code class="inline">page:uploaded</code> over WS.</td>
+          </tr>
+          <tr>
+            <td><code class="inline">POST /sessions/:id/confirm</code><br/><span class="tag">Web → API</span></td>
+            <td>Teacher JWT</td>
+            <td>Locks the session, enqueues OCR jobs for every uncommitted page. Returns <code class="inline">{ jobCount, estSeconds }</code>.</td>
+          </tr>
+          <tr>
+            <td><code class="inline">DELETE /sessions/:id</code><br/><span class="tag">Web → API</span></td>
+            <td>Teacher JWT</td>
+            <td>Disconnect phone, revoke phoneJwt.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h4>WebSocket events · <code class="inline">/ws/session/:id</code></h4>
+      <p class="muted">All events are <code class="inline">{ type, ...payload }</code>. Server broadcasts to every socket joined to that session ID.</p>
+      <table>
+        <thead><tr><th>Event</th><th>Direction</th><th>Payload</th></tr></thead>
+        <tbody>
+          <tr><td><code class="inline">phone:joined</code></td><td>Server → Web</td><td><code class="inline">{ device, pairedAt }</code></td></tr>
+          <tr><td><code class="inline">phone:left</code></td><td>Server → Web</td><td><code class="inline">{ reason }</code></td></tr>
+          <tr><td><code class="inline">student:selected</code></td><td>Phone → Server → Web</td><td><code class="inline">{ studentId, name }</code></td></tr>
+          <tr><td><code class="inline">page:uploaded</code></td><td>Server → Web</td><td><code class="inline">{ pageId, studentId, index, thumbUrl }</code></td></tr>
+          <tr><td><code class="inline">submission:saved</code></td><td>Phone → Server → Web</td><td><code class="inline">{ studentId, pageIds, pageCount }</code></td></tr>
+          <tr><td><code class="inline">page:ocr_done</code></td><td>Worker → Server → Web</td><td><code class="inline">{ pageId, transcription, rubricScores, confidence }</code></td></tr>
+          <tr><td><code class="inline">batch:complete</code></td><td>Server → Web</td><td><code class="inline">{ batchId, totalPages, durationMs }</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h4>Postgres schema (the new tables)</h4>
+<pre><span class="k">CREATE TABLE</span> ocr_sessions (
+  id            <span class="k">uuid PRIMARY KEY</span>,
+  batch_id      <span class="k">uuid REFERENCES</span> batches(id),
+  teacher_id    <span class="k">uuid REFERENCES</span> users(id),
+  pair_token    <span class="k">text UNIQUE</span>,        <span class="c">-- random, expires 60s</span>
+  pair_code     <span class="k">text</span>,               <span class="c">-- 6 digits, e.g. '47K92X'</span>
+  expires_at    <span class="k">timestamptz</span>,
+  phone_paired_at <span class="k">timestamptz</span>,
+  status        <span class="k">text</span>                <span class="c">-- pending|live|confirmed|done</span>
+);
+
+<span class="k">CREATE TABLE</span> ocr_pages (
+  id            <span class="k">uuid PRIMARY KEY</span>,
+  session_id    <span class="k">uuid REFERENCES</span> ocr_sessions(id),
+  student_id    <span class="k">uuid REFERENCES</span> students(id),
+  page_index    <span class="k">int</span>,
+  storage_key   <span class="k">text</span>,               <span class="c">-- s3://kundai/.../page.jpg</span>
+  uploaded_at   <span class="k">timestamptz</span>,
+  ocr_status    <span class="k">text</span>,               <span class="c">-- queued|running|done|failed</span>
+  ocr_result    <span class="k">jsonb</span>,              <span class="c">-- transcription + scores</span>
+  confidence    <span class="k">float</span>
+);</pre>
+    </div>
+  </section>
+
+  <!-- ─── 6. OCR PIPELINE ─── -->
+  <section id="ocr">
+    <div class="section-head">
+      <span class="num">06</span>
+      <h2>OCR + marking pipeline</h2>
+      <p>The actual hard problem. Don't reach for Tesseract — student handwriting (especially mixed math + prose) destroys it. Use a vision LLM with a structured-output prompt.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">Why vision LLM, not classical OCR</h3>
+      <table>
+        <thead><tr><th></th><th>Tesseract / Document AI</th><th>Vision LLM (Claude/Gemini)</th></tr></thead>
+        <tbody>
+          <tr><td>Printed text</td><td>Excellent</td><td>Excellent</td></tr>
+          <tr><td>Neat handwriting</td><td>40–60% accuracy</td><td>92–96% accuracy</td></tr>
+          <tr><td>Scrappy handwriting</td><td>~20%</td><td>80–88%</td></tr>
+          <tr><td>Math notation (x² + 5x)</td><td>Fails</td><td>Handles inline LaTeX</td></tr>
+          <tr><td>Rubric-aware scoring</td><td>Separate step</td><td>Same call</td></tr>
+          <tr><td>Cost per page</td><td>$0.001</td><td>$0.005–0.02</td></tr>
+          <tr><td>Latency</td><td>~500ms</td><td>3–8s</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">At Kundai's scale (say 200 schools × 25 teachers × 30 students/quiz × 3 pages × 2 quizzes/week ≈ 900k pages/week), $0.01/page = $9k/week — well within margin if pricing is $0.45–0.85/student/month.</p>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">The worker job</h3>
+<pre><span class="c"># Pseudo-Python — runs in BullMQ consumer</span>
+<span class="k">async def</span> <span class="p">process_page</span>(page_id):
+    page = <span class="k">await</span> db.get_page(page_id)
+    rubric = <span class="k">await</span> db.get_rubric(page.session.batch.assessment_id)
+
+    image_bytes = <span class="k">await</span> storage.get(page.storage_key)
+
+    response = <span class="k">await</span> anthropic.messages.<span class="p">create</span>(
+        model=<span class="s">"claude-3-5-sonnet-20241022"</span>,
+        max_tokens=<span class="n">2048</span>,
+        messages=[{
+            <span class="s">"role"</span>: <span class="s">"user"</span>,
+            <span class="s">"content"</span>: [
+                {<span class="s">"type"</span>: <span class="s">"image"</span>, <span class="s">"source"</span>: {
+                    <span class="s">"type"</span>: <span class="s">"base64"</span>, <span class="s">"media_type"</span>: <span class="s">"image/jpeg"</span>,
+                    <span class="s">"data"</span>: base64(image_bytes)
+                }},
+                {<span class="s">"type"</span>: <span class="s">"text"</span>, <span class="s">"text"</span>: PROMPT.<span class="p">format</span>(rubric=rubric)}
+            ]
+        }]
+    )
+
+    result = <span class="p">parse_json</span>(response.content[<span class="n">0</span>].text)
+    <span class="k">await</span> db.<span class="p">save_ocr_result</span>(page_id, result)
+    <span class="k">await</span> ws.<span class="p">broadcast</span>(page.session_id, {
+        <span class="s">"type"</span>: <span class="s">"page:ocr_done"</span>,
+        <span class="s">"pageId"</span>: page_id,
+        <span class="s">"transcription"</span>: result[<span class="s">"transcription"</span>],
+        <span class="s">"rubricScores"</span>: result[<span class="s">"scores"</span>],
+        <span class="s">"confidence"</span>: result[<span class="s">"confidence"</span>],
+    })</pre>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">The prompt (structure-of)</h3>
+<pre>You are marking a student's handwritten work for the assessment below.
+
+<span class="v">RUBRIC:</span>
+{rubric_json}
+
+Return ONLY valid JSON:
+{
+  "transcription": "<the student's full answer, line by line>",
+  "questions": [
+    {
+      "question_id": "q1",
+      "student_answer": "<their working>",
+      "correct": true | false,
+      "marks_awarded": <number>,
+      "marks_available": <number>,
+      "feedback": "<one-sentence feedback for the student>"
+    }
+  ],
+  "confidence": <0..1 — how confident you are in the transcription>,
+  "needs_review": <true if anything illegible or ambiguous>
+}</pre>
+      <div class="warn"><strong>Critical:</strong> always pair LLM output with a confidence threshold. Anything below 0.85 routes to "needs teacher review" before publishing to the student. Teachers retain final authority — that's both pedagogically right and legally safer.</div>
+    </div>
+  </section>
+
+  <!-- ─── 7. WORKFLOW ─── -->
+  <section id="workflow">
+    <div class="section-head">
+      <span class="num">07</span>
+      <h2>How it fits the teacher's existing workflow</h2>
+      <p>The phone path doesn't replace anything — it's a new way to <em>get paper into the system</em>. After OCR, work flows through your existing marking review screens unchanged.</p>
+    </div>
+
+    <div class="seq">
+      <svg viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="seq-arrow" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+            <path d="M0,0 L7,2.5 L0,5 z" fill="#2563eb"/>
+          </marker>
+        </defs>
+        <!-- Lanes -->
+        <g font-family="Inter Tight" font-weight="800" font-size="13" fill="#0f172a">
+          <text x="80"  y="30" text-anchor="middle">Teacher (web)</text>
+          <text x="260" y="30" text-anchor="middle">Phone PWA</text>
+          <text x="440" y="30" text-anchor="middle">Broker</text>
+          <text x="620" y="30" text-anchor="middle">OCR worker</text>
+          <text x="800" y="30" text-anchor="middle">Existing marking</text>
+        </g>
+        <g stroke="#e2e8f0" stroke-dasharray="3,3">
+          <line x1="80"  y1="42" x2="80"  y2="450"/>
+          <line x1="260" y1="42" x2="260" y2="450"/>
+          <line x1="440" y1="42" x2="440" y2="450"/>
+          <line x1="620" y1="42" x2="620" y2="450"/>
+          <line x1="800" y1="42" x2="800" y2="450"/>
+        </g>
+
+        <!-- Steps -->
+        <g font-family="JetBrains Mono" font-size="10" fill="#2563eb">
+          <!-- 1 -->
+          <line x1="80" y1="80" x2="436" y2="80" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="258" y="74" text-anchor="middle">create batch (existing) → sessionId</text>
+          <!-- 2 -->
+          <line x1="440" y1="115" x2="84" y2="115" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="258" y="109" text-anchor="middle">{ pairToken, pairCode }</text>
+          <!-- 3 -->
+          <line x1="80" y1="150" x2="256" y2="150" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2,2"/>
+          <text x="170" y="144" text-anchor="middle" fill="#64748b">QR shown on screen</text>
+          <!-- 4 -->
+          <line x1="260" y1="185" x2="436" y2="185" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="348" y="179" text-anchor="middle">POST /pair → phoneJwt</text>
+          <!-- 5 -->
+          <line x1="440" y1="220" x2="84" y2="220" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="258" y="214" text-anchor="middle">ws: phone:joined</text>
+          <!-- 6 -->
+          <line x1="260" y1="260" x2="436" y2="260" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="348" y="254" text-anchor="middle">upload pages × N</text>
+          <!-- 7 -->
+          <line x1="440" y1="295" x2="84" y2="295" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="258" y="289" text-anchor="middle">ws: page:uploaded (thumbnails)</text>
+          <!-- 8 -->
+          <line x1="80" y1="330" x2="436" y2="330" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="258" y="324" text-anchor="middle">Confirm &amp; start OCR</text>
+          <!-- 9 -->
+          <line x1="440" y1="365" x2="616" y2="365" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="528" y="359" text-anchor="middle">enqueue jobs</text>
+          <!-- 10 -->
+          <line x1="620" y1="400" x2="796" y2="400" stroke="#2563eb" stroke-width="1.5" marker-end="url(#seq-arrow)"/>
+          <text x="710" y="394" text-anchor="middle">structured marks</text>
+          <!-- 11 -->
+          <line x1="800" y1="435" x2="84" y2="435" stroke="#16a34a" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+          <text x="442" y="429" text-anchor="middle" fill="#16a34a">teacher reviews in normal marking UI</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="grid-3" style="margin-top:16px;">
+      <div class="card">
+        <h3 class="card-title">What stays the same</h3>
+        <ul class="clean">
+          <li>Batch / assessment creation</li>
+          <li>Roster management</li>
+          <li>Rubric / marking scheme editor</li>
+          <li>Mark review &amp; publish to students</li>
+          <li>Analytics dashboards</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="card-title">What's new</h3>
+        <ul class="clean">
+          <li><code class="inline">/ocr/[batchId]</code> page</li>
+          <li>The phone PWA itself</li>
+          <li>Pair token + WS broker</li>
+          <li>Async OCR worker</li>
+          <li>"Needs review" filter on marks list</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="card-title">What this replaces</h3>
+        <p class="muted">Nothing, optionally. If teachers currently scan to a flatbed → upload PDF → wait for OCR, the phone path is just faster. Keep the file-upload zone as the fallback (shown in <code class="inline">WebOcrCompanion</code> already).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 8. PHASES ─── -->
+  <section id="phases">
+    <div class="section-head">
+      <span class="num">08</span>
+      <h2>Phased rollout</h2>
+      <p>Don't ship all 8 screens day one. Three phases, each independently usable.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="phase">
+        <span class="label">Phase 0 · MVP — 3 weeks</span>
+        <h3>Just get paper in</h3>
+        <ul class="clean">
+          <li>Phone screens: Pair, Camera, Done</li>
+          <li>No per-student tagging — bulk upload</li>
+          <li>No live thumbnails — show after Confirm</li>
+          <li>No on-device edge detection</li>
+          <li>OCR runs synchronously on a small queue</li>
+        </ul>
+        <p class="muted" style="margin-top:8px;">Goal: prove the phone-as-scanner path beats whatever they do today (probably WhatsApp).</p>
+      </div>
+
+      <div class="phase v1">
+        <span class="label">Phase 1 · V1 — 4 weeks</span>
+        <h3>Realtime + roster</h3>
+        <ul class="clean">
+          <li>All 8 mocked screens</li>
+          <li>Live WS thumbnails on web</li>
+          <li>Per-student tagging on phone</li>
+          <li>OCR worker with BullMQ + Claude vision</li>
+          <li>"Needs review" routing for low-confidence pages</li>
+        </ul>
+        <p class="muted" style="margin-top:8px;">Goal: full happy path from "open phone" to "marks in dashboard" in ≤10 min per class.</p>
+      </div>
+
+      <div class="phase v2">
+        <span class="label">Phase 2 · V2 — ongoing</span>
+        <h3>Polish &amp; offline</h3>
+        <ul class="clean">
+          <li>jscanify edge detection + auto-crop</li>
+          <li>Service Worker offline outbox</li>
+          <li>Multi-phone per batch (TA + teacher)</li>
+          <li>Native Android via Capacitor if needed</li>
+          <li>Fine-tuned OCR model on collected data</li>
+        </ul>
+        <p class="muted" style="margin-top:8px;">Goal: works in a rural classroom with one bar of signal.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 9. DECISIONS ─── -->
+  <section id="decisions">
+    <div class="section-head">
+      <span class="num">09</span>
+      <h2>Open decisions — call these before sprint 1</h2>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead><tr><th>Question</th><th>Why it matters now</th><th>My lean</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Hosting region: Cape Town vs Joburg vs Frankfurt?</td>
+            <td>Affects WS latency and POPIA story</td>
+            <td>Cape Town (Hetzner). Lowest latency for Southern Africa, EU-adjacent compliance.</td>
+          </tr>
+          <tr>
+            <td>Vision LLM vendor: Anthropic, Google, OpenAI?</td>
+            <td>Pricing + handwriting quality + Africa availability</td>
+            <td>Anthropic (Claude 3.5 Sonnet) primary, Gemini Flash as cheaper fallback for low-stakes pages.</td>
+          </tr>
+          <tr>
+            <td>PWA-only or also native Android?</td>
+            <td>Native unlocks better camera control and background sync</td>
+            <td>PWA for 6 months. Revisit if real users hit limits.</td>
+          </tr>
+          <tr>
+            <td>Per-page price ceiling?</td>
+            <td>Determines whether you can afford Claude 3.5 vs Haiku</td>
+            <td>Cap at $0.012/page. Use Haiku for transcription, Sonnet only for marking calls.</td>
+          </tr>
+          <tr>
+            <td>Who labels "needs review" pages?</td>
+            <td>Affects UX of marking dashboard</td>
+            <td>Threshold-based (conf &lt; 0.85), shown as a filter on existing marks list.</td>
+          </tr>
+          <tr>
+            <td>Pair token TTL?</td>
+            <td>Shorter = safer, longer = less re-pairing</td>
+            <td>60s for the QR, then phone holds a 4-hour session JWT.</td>
+          </tr>
+          <tr>
+            <td>What's a "batch" lifecycle?</td>
+            <td>Affects DB schema and how teachers reopen sessions</td>
+            <td>Batch = assessment instance. Session = one phone-pairing within that batch. Many sessions per batch allowed.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="recommend" style="margin-top:24px;">
+      <strong>Next concrete step:</strong> spike a 3-day prototype on a single Cape Town VPS — Fastify + Socket.IO + MinIO + a Python worker calling Claude on a fixed test image. If the round-trip is &lt;6s end-to-end with the S21 Ultra on classroom 4G, ship Phase 0. If not, the bottleneck is almost certainly the upload — switch to <code class="inline">image/avif</code> at 0.7 quality and re-measure.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

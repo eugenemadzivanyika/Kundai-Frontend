@@ -7,7 +7,7 @@ import type {
   OcrQuestion,
   OcrAnswerEntry,
 } from './ocr.types';
-import { OCR_ENDPOINT, OCR_BATCH_ENDPOINT } from './ocr.constants';
+import { OCR_ENDPOINT, OCR_BATCH_ENDPOINT, OCR_SESSIONS_ENDPOINT } from './ocr.constants';
 import { tokenStore } from '../../services/tokenStore';
 
 function ocrAuthHeaders(): HeadersInit {
@@ -94,6 +94,32 @@ export async function runOcr(file: File): Promise<{ regions: OcrRegion[]; extraP
  * maps each answer block directly to a question ID and returns an `answers`
  * array alongside the per-file page transcriptions.
  */
+// ── OCR Session API ────────────────────────────────────────────────────────────
+
+export async function createOcrSession(assessmentId: string): Promise<{
+  sessionId: string; pairToken: string; pairCode: string; expiresAt: string;
+}> {
+  const resp = await fetch(OCR_SESSIONS_ENDPOINT, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...ocrAuthHeaders() },
+    body:    JSON.stringify({ assessmentId }),
+  });
+  if (!resp.ok) {
+    const msg = await resp.text().catch(() => resp.statusText);
+    throw new Error(`Failed to create OCR session: ${msg}`);
+  }
+  return resp.json();
+}
+
+export async function closeOcrSession(sessionId: string): Promise<void> {
+  await fetch(`${OCR_SESSIONS_ENDPOINT}/${sessionId}`, {
+    method:  'DELETE',
+    headers: ocrAuthHeaders(),
+  });
+}
+
+// ── Batch OCR ──────────────────────────────────────────────────────────────────
+
 export async function runOcrBatch(
   files: File[],
   questions?: OcrQuestion[],
