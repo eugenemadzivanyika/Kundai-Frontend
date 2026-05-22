@@ -36,7 +36,6 @@ jobs:
           target: "/tmp/kundai-frontend-build/"
           rm: true
           strip_components: 1
-
       - name: Swap into /var/www/html and reload nginx
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -48,10 +47,10 @@ jobs:
             BUILD_ID=$(date +%Y%m%d-%H%M%S)
             sudo mkdir -p /var/www/releases/$BUILD_ID
             sudo cp -r /tmp/kundai-frontend-build/* /var/www/releases/$BUILD_ID/
+            sudo chown -R deploy:www-data /var/www/releases/$BUILD_ID
             sudo ln -sfn /var/www/releases/$BUILD_ID /var/www/html-new
             sudo mv -Tf /var/www/html-new /var/www/html
-            sudo chown -R deploy:www-data /var/www/releases/$BUILD_ID
             ls -1t /var/www/releases | tail -n +6 | xargs -I {} sudo rm -rf /var/www/releases/{}
-            sudo nginx -s reload
+            sudo nginx -t && sudo nginx -s reload
             rm -rf /tmp/kundai-frontend-build
-            echo "Deployed $BUILD_ID"
+             echo "Deployed $BUILD_ID"
