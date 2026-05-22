@@ -84,8 +84,9 @@ function App() {
 
   useEffect(() => {
     if (!authChecked) return;
-    const publicPaths = ['/', '/login', '/register', '/m/ocr'];
-    if (!isAuthenticated && !publicPaths.includes(location.pathname)) {
+    const publicPaths = ['/', '/login', '/register'];
+    const isPublic = publicPaths.includes(location.pathname) || location.pathname.startsWith('/m/ocr');
+    if (!isAuthenticated && !isPublic) {
       navigate('/login', { replace: true });
     }
   }, [isAuthenticated, authChecked, location.pathname, navigate]);
