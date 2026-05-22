@@ -255,7 +255,7 @@ const HandwritingMarkModal: React.FC<HandwritingMarkModalProps> = ({
 
   // Phone pairing session — started once an assessment is selected
   const { sessionId, pairToken, pairCode, phoneLive, studentsWithPages, closeSession } =
-    useOcrSession(isOpen ? selectedAssessmentId : null);
+    useOcrSession(isOpen && phase === 'picking' ? selectedAssessmentId : null);
 
   // Fetch assessment questions once an assessmentId is known
   const fetchedRef = useRef(false);
