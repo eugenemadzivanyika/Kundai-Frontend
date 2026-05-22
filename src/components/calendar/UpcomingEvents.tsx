@@ -361,7 +361,7 @@ const UpcomingEvents: React.FC<UpcomingEventsProps> = ({
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center gap-2">
                         <Badge className={`text-xs ${getEventTypeColor(event.type)}`}>
-                          {event.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {(event.type ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </Badge>
                         
                         {(() => {

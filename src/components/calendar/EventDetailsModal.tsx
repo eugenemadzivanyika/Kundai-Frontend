@@ -123,7 +123,7 @@ const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                 {event.title}
               </h1>
               <Badge className={`${getEventTypeColor(event.type)} border`}>
-                {event.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                {(event.type ?? '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
               </Badge>
             </div>
             

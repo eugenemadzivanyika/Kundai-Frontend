@@ -796,7 +796,7 @@ function RecentReportsTab({ reports, loading, error, onDelete, downloadUrl }: an
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-1)' }}>{r.name}</div>
                   <div style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'monospace' }}>{r.id}</div>
                 </td>
-                <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--ink-2)' }}>{r.typeId.replace(/-/g, ' ')}</td>
+                <td style={{ padding: '10px 14px', fontSize: 12, color: 'var(--ink-2)' }}>{(r.typeId ?? '').replace(/-/g, ' ')}</td>
                 <td style={{ padding: '10px 14px' }}>
                   <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmtDate(r.generatedAt)}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>{fmtTime(r.generatedAt)}</div>
@@ -868,7 +868,7 @@ function ScheduledTab({ schedules, loading, error, onToggle, onRunNow, onDelete 
                     <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '1px 6px', borderRadius: 3, border: '1px solid', ...(s.enabled ? { color: 'var(--forest)', background: 'var(--forest-soft)', borderColor: 'color-mix(in srgb, var(--forest) 25%, transparent)' } : { color: 'var(--ink-3)', background: 'var(--paper-shade)', borderColor: 'var(--rule)' }) }}>
                       {s.enabled ? 'Active' : 'Paused'}
                     </span>
-                    <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>· {s.typeId.replace(/-/g, ' ')}</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>· {(s.typeId ?? '').replace(/-/g, ' ')}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
                     <div>
