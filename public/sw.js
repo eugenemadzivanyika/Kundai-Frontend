@@ -5,9 +5,14 @@
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
-// Pass through all fetches — cache strategy is intentionally none for now
-// (Phase 6 offline outbox uses IndexedDB, not the cache API).
-self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+// Only intercept same-origin requests. Cross-origin fetches (e.g. API calls to
+// the backend) must go directly to the network so that CORS headers and
+// credentials cookies are handled correctly by the browser, not the SW.
+self.addEventListener('fetch', e => {
+  if (new URL(e.request.url).origin !== self.location.origin) return;
+  // No caching strategy yet — just pass through (Phase 6 offline outbox uses IndexedDB).
+  e.respondWith(fetch(e.request));
+});
 
 // ── Background Sync ───────────────────────────────────────────────────────────
 // When connectivity is restored and the browser fires the 'sync' event, tell
