@@ -1,4 +1,5 @@
 import { RosterEntry } from '../mobile-ocr.api';
+import { API_ORIGIN } from '../../../config/env';
 
 interface PageEntry { pageId: string; thumbUrl: string; }
 
@@ -12,8 +13,7 @@ interface Props {
 }
 
 const BLUE = '#2563eb';
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api';
-const FILE_BASE = API_URL.replace('/api', '');
+const FILE_BASE = API_ORIGIN;
 
 export function StudentDoneScreen({ student, pages, totalStudents, submittedCount, onNextStudent, onViewGallery }: Props) {
   const initials = student ? student.name.split(' ').map(n => n[0]).join('') : '?';

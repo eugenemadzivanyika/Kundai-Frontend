@@ -1,3 +1,5 @@
+import { API_ORIGIN } from '../../../config/env';
+
 interface PageEntry { pageId: string; thumbUrl: string; synced: boolean; }
 interface StudentEntry { studentId: string | null; name: string; pages: PageEntry[]; }
 
@@ -11,8 +13,7 @@ interface Props {
 }
 
 const BLUE = '#2563eb';
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api';
-const FILE_BASE = API_URL.replace('/api', '');
+const FILE_BASE = API_ORIGIN;
 
 export function GalleryScreen({ assessmentName, studentEntries, totalStudents, onNextStudent, onDone, onBack }: Props) {
   const submitted = studentEntries.length;

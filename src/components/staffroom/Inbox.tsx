@@ -6,8 +6,9 @@ import { chatService } from '../../services/chatService';
 import { studentService } from '../../services/studentService';
 import { authService } from '../../services/authService';
 import { io, Socket } from 'socket.io-client';
+import { API_ORIGIN } from '../../config/env';
 
-const SOCKET_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
+const SOCKET_URL = API_ORIGIN;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface QuickReply {

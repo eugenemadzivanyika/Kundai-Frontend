@@ -22,7 +22,8 @@ const PhonePairingPanel: React.FC<PhonePairingPanelProps> = ({
   useEffect(() => {
     if (!pairToken || !canvasRef.current) return;
     setQrReady(false);
-    const url = `${window.location.origin}/m/ocr/pair/${pairToken}`;
+    const origin = import.meta.env.VITE_PUBLIC_URL || window.location.origin;
+    const url = `${origin}/m/ocr/pair/${pairToken}`;
     QRCode.toCanvas(canvasRef.current, url, { width: 136, margin: 1 }, (err) => {
       if (!err) setQrReady(true);
     });

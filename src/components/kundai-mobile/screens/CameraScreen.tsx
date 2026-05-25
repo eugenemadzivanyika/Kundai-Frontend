@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { RosterEntry } from '../mobile-ocr.api';
 import { useCamera } from '../hooks/useCamera';
 import { useEdgeDetection, type Point } from '../hooks/useEdgeDetection';
@@ -18,6 +18,7 @@ export function CameraScreen({ student, pageIndex, onCapture, onSaveDone, onBack
   const { videoRef, ready, error, capture } = useCamera();
   const { corners, cvLoaded } = useEdgeDetection(videoRef);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   // Draw the green quad polygon on the overlay canvas each frame
   useEffect(() => {
@@ -73,10 +74,13 @@ export function CameraScreen({ student, pageIndex, onCapture, onSaveDone, onBack
   }, [corners, videoRef]);
 
   async function handleShutter() {
+    setCaptureError(null);
     try {
       const blob = await capture();
       onCapture(blob, corners);
-    } catch { /* stay on camera */ }
+    } catch (err) {
+      setCaptureError(err instanceof Error ? err.message : 'Capture failed');
+    }
   }
 
   const initials = student ? student.name.split(' ').map(n => n[0]).join('') : '?';
@@ -86,6 +90,7 @@ export function CameraScreen({ student, pageIndex, onCapture, onSaveDone, onBack
       <video
         ref={videoRef}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        autoPlay
         muted
         playsInline
       />
@@ -122,9 +127,9 @@ export function CameraScreen({ student, pageIndex, onCapture, onSaveDone, onBack
           <p style={{ color: 'rgba(255,255,255,.7)', fontSize: 14 }}>Opening camera…</p>
         </div>
       )}
-      {error && (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', zIndex: 5 }}>
-          <p style={{ color: '#f87171', fontSize: 14, textAlign: 'center', padding: 20 }}>{error}</p>
+      {(error || captureError) && (
+        <div style={{ position: 'absolute', bottom: 160, left: 16, right: 16, background: 'rgba(239,68,68,.9)', borderRadius: 12, padding: '10px 14px', zIndex: 20 }}>
+          <p style={{ color: '#fff', fontSize: 13, margin: 0, textAlign: 'center' }}>{error || captureError}</p>
         </div>
       )}
 

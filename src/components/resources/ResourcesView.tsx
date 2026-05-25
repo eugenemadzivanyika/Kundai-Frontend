@@ -23,6 +23,7 @@ import UploadModal from './UploadModal';
 import FilePreviewModal from './FilePreviewModal';
 import OcrReviewComponent, { CompiledSubmission } from '../ocr/OcrReviewComponent';
 import { tokenStore } from '../../services/tokenStore';
+import { API_ORIGIN } from '../../config/env';
 
 // Define types for our components
 interface ViewModeToggleProps {
@@ -102,7 +103,7 @@ interface ResourcesViewProps {
   onUploadSuccess?: () => void;
 }
 
-const API_URL = 'http://localhost:5000';
+const API_URL = API_ORIGIN;
 
 const ResourcesView: React.FC<ResourcesViewProps> = ({
   classId,

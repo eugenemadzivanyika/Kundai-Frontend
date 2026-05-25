@@ -171,7 +171,7 @@ in the Faculty of Computer Engineering Informatics and Communications
 
 at the University of Zimbabwe
 
-**Supervisor:** Mr T Rupere
+**Supervisor:** Mr M Munyaradzi
 
 **June 2024**
 

@@ -1,7 +1,6 @@
 import { Student, ChatMessage, Result, Assessment, User } from '../../types/index';
 import { tokenStore } from '../../services/tokenStore';
-
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../../config/env';
 
 // Helper function for fetch requests
 const fetchData = async (endpoint: string, options: RequestInit = {}) => {

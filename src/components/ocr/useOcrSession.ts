@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { tokenStore } from '../../services/tokenStore';
 import { createOcrSession, closeOcrSession } from './ocr.api';
+import { API_ORIGIN } from '../../config/env';
 
-const SOCKET_URL = ((import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api').replace('/api', '');
+const SOCKET_URL = API_ORIGIN;
 
 export interface StudentPageEntry {
   studentId: string;

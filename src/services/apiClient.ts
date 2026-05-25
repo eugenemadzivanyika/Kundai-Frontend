@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { tokenStore } from './tokenStore';
-
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api';
-const AI_SERVICE_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined) || 'http://localhost:8000';
+import { API_URL, AI_SERVICE_URL, API_ORIGIN } from '../config/env';
 
 export class ApiError extends Error {
   status: number;
@@ -98,11 +96,10 @@ export async function fetchData<T = any>(endpoint: string, options: RequestInit 
 
 export { API_URL };
 
-const BACKEND_ORIGIN = API_URL.replace(/\/api$/, '');
 export const resolveAssetUrl = (url?: string | null): string => {
   if (!url) return '';
   if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
-  return `${BACKEND_ORIGIN}${url}`;
+  return `${API_ORIGIN}${url}`;
 };
 
 export async function fetchAiData<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {

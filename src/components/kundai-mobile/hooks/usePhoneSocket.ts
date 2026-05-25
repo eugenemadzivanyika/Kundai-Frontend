@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { API_ORIGIN } from '../../../config/env';
 
-const SOCKET_URL = ((import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api').replace('/api', '');
+const SOCKET_URL = API_ORIGIN;
 
 export function usePhoneSocket(sessionId: string | null, phoneJwt: string | null) {
   const socketRef = useRef<Socket | null>(null);

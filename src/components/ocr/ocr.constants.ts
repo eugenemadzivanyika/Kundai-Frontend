@@ -1,4 +1,5 @@
 // ── OCR Review — Constants ────────────────────────────────────────────────────
+import { API_URL, AI_SERVICE_URL } from '../../config/env';
 
 export const PALETTE = [
   { fill: 'rgba(59,130,246,0.15)',  border: '#3b82f6', text: '#1d4ed8', bg: '#eff6ff',  border2: '#bfdbfe' },
@@ -9,11 +10,10 @@ export const PALETTE = [
   { fill: 'rgba(20,184,166,0.15)', border: '#14b8a6', text: '#0f766e', bg: '#f0fdfa',  border2: '#99f6e4' },
 ];
 
-const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:8000';
 export const OCR_ENDPOINT       = `${AI_SERVICE_URL}/ocr/extract`;
 export const OCR_BATCH_ENDPOINT = `${AI_SERVICE_URL}/ocr/extract-batch`;
 
-export const NODE_API_URL        = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:5000/api';
+export const NODE_API_URL          = API_URL;
 export const OCR_SESSIONS_ENDPOINT = `${NODE_API_URL}/ocr/sessions`;
 
 export const uid = () => `id-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
